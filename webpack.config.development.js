@@ -10,6 +10,6 @@ module.exports = merge(common, {
     },
     devServer: {
         contentBase: './dist',
-        host: 'sbmaxx-dev.sas.yp-c.yandex.net'
+        host: process.env.DEV_HOST || '0.0.0.0'
     }
 });
