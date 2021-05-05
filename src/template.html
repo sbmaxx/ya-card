@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html class="ua_js_no">
+<head>
+    <meta charset="utf-8">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= htmlWebpackPlugin.options.cards[0].name %></title>
+    <meta name="description" content="<%= htmlWebpackPlugin.options.cards[0].position %>, <%= htmlWebpackPlugin.options.cards[0].company.name %>">
+    <meta property="og:title" content="<%= htmlWebpackPlugin.options.cards[0].name %>">
+    <meta property="og:description" content="<%= htmlWebpackPlugin.options.cards[0].position %>, <%= htmlWebpackPlugin.options.cards[0].company.name %>">
+    <meta property="og:image" content="https://yastatic.net/s3/home-static/_/37/37a02b5dc7a51abac55d8a5b6c865f0e.png">
+    <meta property="og:type" content="profile">
+    <link rel="shortcut icon" href="https://yastatic.net/s3/home-static/_/f0/f0597b6727cc67dceebc4e3a87caf571.png">
+    <script>(function(e,c){e[c]=e[c].replace(/(ua_js_)no/g,"$1yes");})(document.documentElement,"className");(function(){/Android|iPhone/i.test(navigator.userAgent)&&(document.documentElement.className += ' mobile')})();</script>
+</head>
+<body class="page">
+    <div id="root"></div>
+    <% if (htmlWebpackPlugin.options.inject === false) { %>
+        <% htmlWebpackPlugin.files.css.filter(file => file.includes('inline')).forEach(function(file) { %>
+            <style>
+            <%= compilation.assets[file.substr(htmlWebpackPlugin.files.publicPath.length)].source() %>
+            </style>
+        <% }) %>
+        <% htmlWebpackPlugin.files.js.filter(file => file.includes('inline')).forEach(function(file) { %>
+            <script>
+            <%= compilation.assets[file.substr(htmlWebpackPlugin.files.publicPath.length)].source() %>
+            </script>
+        <% }) %>
+    <% } %>
+</body>
+</html>
