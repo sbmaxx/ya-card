@@ -34,6 +34,29 @@ function rawNumber(strNumber) {
     return strNumber.replace(/\(|\)|\s|-/g, '');
 }
 
+function CardJSONLD({ address, company, contact, name, position }) {
+    const data = {
+        "@context": "http://schema.org/",
+        "@type": "Person",
+        "name": name,
+        "url": contact.site,
+        "jobTitle": position,
+        "worksFor": {
+            "@type": "Organization",
+            "name": company.name
+        },
+        "address": {
+            "@type": "PostalAddress",
+            "streetAddress": address['street-address'],
+            "addressLocality": address.city,
+            "postalCode": address.zip,
+            "addressCountry": address.country
+        }
+    };
+
+    return <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(data)}}/>;
+}
+
 class CardSide extends React.Component {
     render() {
         const { address, company, contact, lang, name, position, index } = this.props;
@@ -127,6 +150,7 @@ class Card extends React.Component {
                 >
                 { this.props.cards.map((card, i) => <CardSide key={card.lang} {...card} index={i}/>) }
             </div>
+            { this.props.cards.map((card, i) => <CardJSONLD key={card.lang} {...card} index={i}/>) }
             { this.props.cards.length > 1 && <CardSwitch langs={this.props.cards.map(c => c.lang)}/> }
             </>
         );
