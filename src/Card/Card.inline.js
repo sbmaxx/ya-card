@@ -167,7 +167,7 @@ var Card = (function() {
     }
 
     function getMetaViewport() {
-        return document.querySelector('meta[name=\"viewport\"]');
+        return document.querySelector('meta[name="viewport"]');
     }
 
     function setInitialScale(scale) {

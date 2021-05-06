@@ -14,7 +14,7 @@ const I18N = {
 };
 
 function CardLink({ href, children, itemProp }) {
-    return <a href={href} itemProp={itemProp} target="_blank" rel="noopener" className="card__link">{children}</a>;
+    return <a href={href} itemProp={itemProp} target="_blank" rel="noopener noreferrer" className="card__link">{children}</a>;
 }
 
 function CardSwitch({ langs }) {
@@ -27,11 +27,11 @@ function CardSwitch({ langs }) {
                     data-lang={lang}
                     key={lang}>{lang}</a>)}
         </div>
-    )
+    );
 }
 
 function rawNumber(strNumber) {
-    return strNumber.replace(/\(|\)|\s|\-/g, '');
+    return strNumber.replace(/\(|\)|\s|-/g, '');
 }
 
 class CardSide extends React.Component {
@@ -43,7 +43,7 @@ class CardSide extends React.Component {
                 data-lang={lang}
                 itemScope itemType="http://data-vocabulary.org/Person">
                 <div className="card__content card__rectangle">
-                    <a className="card__logo" target="_blank" rel="noopener" href={company.site}><span itemProp="affiliation">{company.name}</span></a>
+                    <a className="card__logo" target="_blank" rel="noopener noreferrer" href={company.site}><span itemProp="affiliation">{company.name}</span></a>
                     <div className="card__text">
                         <div className="card__title">
                             <h1 className="card__name" itemProp="name">{name}</h1>
@@ -100,7 +100,7 @@ class CardSide extends React.Component {
                     </div>
                 </div>
             </div>
-        )
+        );
     }
 }
 
@@ -127,218 +127,8 @@ class Card extends React.Component {
                 { this.props.cards.map((card, i) => <CardSide key={card.lang} {...card} index={i}/>) }
                 { this.props.cards.length > 1 && <CardSwitch langs={this.props.cards.map(c => c.lang)}/> }
             </div>
-        )
+        );
     }
-}
-
-function AppLegacy(data) {
-    return (
-        <div
-            className="card i-bem card_animation card_visible"
-            data-bem='{"card":{"titles":{"ru":"Роман Рождественский","en":"Roman Rozhdestvenskiy"},"favicons":{"ru":"https://yastatic.net/s3/home-static/_/f0/f0597b6727cc67dceebc4e3a87caf571.png","en":"https://yastatic.net/s3/home-static/_/7c/7ccfee6f1e81b14c5bef535d1ad7b7e0.png"}}}'
-        >
-            <div
-                className="card__side card__side_lang_ru card__side_state_opened card__layout"
-                data-lang="ru"
-                itemScope=""
-                itemType="http://data-vocabulary.org/Person"
-            >
-                <div className="card__content card__rectangle">
-                    <div className="card__logo"></div>
-                    <div className="card__text">
-                        <div className="card__title">
-                            <h1 className="card__name" itemProp="name">
-                                Роман Рождественский
-                            </h1>
-                            <div className="card__position" itemProp="title">
-                                Руководитель отдела поисковых интерфейсов
-                            </div>
-                        </div>
-                        <div
-                            className="card__address"
-                            itemProp="address"
-                            itemScope=""
-                            itemType="http://data-vocabulary.org/Address"
-                        >
-                            <span className="card__city" itemProp="locality">
-                                Москва
-                            </span>
-                            ,{" "}
-                            <span className="card__zip" itemProp="postal-code">
-                                119021
-                            </span>
-                            ,{" "}
-                            <span
-                                className="card__country"
-                                itemProp="country-name"
-                            >
-                                Россия
-                            </span>
-                            ,{" "}
-                            <span
-                                className="card__street-address"
-                                itemProp="street-address"
-                            >
-                                ул. Льва Толстого, д. 16
-                            </span>
-                        </div>
-                        <div className="card__contact">
-                            <div className="card__tel card__tel_type_work">
-                                тел.:{" "}
-                                <a className="card__phone-link">
-                                    +7 (495) 739-70-00
-                                </a>
-                                , доб. 6598
-                            </div>
-                            <div className="card__gap"></div>
-                            <div className="card__email">
-                                <a
-                                    className="card__link"
-                                    href="mailto:sbmaxx@yandex-team.ru"
-                                >
-                                    sbmaxx@yandex-team.ru
-                                </a>
-                            </div>
-                            <div className="card__site">
-                                <a
-                                    className="card__link"
-                                    href="https://rozhdestvenskiy.ru"
-                                    itemProp="url"
-                                >
-                                    rozhdestvenskiy.ru
-                                </a>
-                            </div>
-                            <div className="card__gap"></div>
-                            <div className="card__telegram">
-                                telegram:{" "}
-                                <a
-                                    className="card__link"
-                                    href="https://t.me/sbmaxx"
-                                >
-                                    <span itemProp="nickname">sbmaxx</span>
-                                </a>
-                            </div>
-                            <div className="card__github">
-                                <a
-                                    className="card__link"
-                                    href="https://github.com/sbmaxx"
-                                >
-                                    github.com/sbmaxx
-                                </a>
-                            </div>
-                        </div>
-                        <div className="card__extra"></div>
-                    </div>
-                </div>
-            </div>
-            <div
-                className="card__side card__side_lang_en card__side_state_closed card__layout"
-                data-lang="en"
-                itemScope=""
-                itemType="http://data-vocabulary.org/Person"
-            >
-                <div className="card__content card__rectangle">
-                    <div className="card__logo"></div>
-                    <div className="card__text">
-                        <div className="card__title">
-                            <h1 className="card__name" itemProp="name">
-                                Roman Rozhdestvenskiy
-                            </h1>
-                            <div className="card__position" itemProp="title">
-                                Head of search interfaces department
-                            </div>
-                        </div>
-                        <div
-                            className="card__address"
-                            itemProp="address"
-                            itemScope=""
-                            itemType="http://data-vocabulary.org/Address"
-                        >
-                            <span className="card__city" itemProp="locality">
-                                Moscow
-                            </span>
-                            ,{" "}
-                            <span className="card__zip" itemProp="postal-code">
-                                119021
-                            </span>
-                            ,{" "}
-                            <span
-                                className="card__country"
-                                itemProp="country-name"
-                            >
-                                Russia
-                            </span>
-                            ,{" "}
-                            <span
-                                className="card__street-address"
-                                itemProp="street-address"
-                            >
-                                16, Leo Tolstoy St.
-                            </span>
-                        </div>
-                        <div className="card__contact">
-                            <div className="card__tel card__tel_type_work">
-                                tel.{" "}
-                                <a className="card__phone-link">
-                                    +7 (495) 739-70-00
-                                </a>{" "}
-                                ext. 6598
-                            </div>
-                            <div className="card__gap"></div>
-                            <div className="card__email">
-                                <a
-                                    className="card__link"
-                                    href="mailto:sbmaxx@yandex-team.ru"
-                                >
-                                    sbmaxx@yandex-team.ru
-                                </a>
-                            </div>
-                            <div className="card__site">
-                                <a
-                                    className="card__link"
-                                    href="https://rozhdestvenskiy.ru/#en"
-                                    itemProp="url"
-                                >
-                                    rozhdestvenskiy.ru/#en
-                                </a>
-                            </div>
-                            <div className="card__gap"></div>
-                            <div className="card__telegram">
-                                telegram:{" "}
-                                <a
-                                    className="card__link"
-                                    href="https://t.me/sbmaxx"
-                                >
-                                    <span itemProp="nickname">sbmaxx</span>
-                                </a>
-                            </div>
-                            <div className="card__github">
-                                <a
-                                    className="card__link"
-                                    href="https://github.com/sbmaxx"
-                                >
-                                    github.com/sbmaxx
-                                </a>
-                            </div>
-                        </div>
-                        <div className="card__extra"></div>
-                    </div>
-                </div>
-            </div>
-            <div className="card__switch">
-                <a
-                    className="card__link card__link_disabled_yes"
-                    href="#ru"
-                    data-lang="ru"
-                >
-                    ru
-                </a>
-                <a className="card__link" href="#en" data-lang="en">
-                    en
-                </a>
-            </div>
-        </div>
-    );
 }
 
 export default Card;

@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "stylelint src/**/*.css",
+    "test": "stylelint src/**/*.css && eslint --ext .jsx,.js src/",
     "build": "NODE_ENV=production webpack --config webpack.config.production.js && node renderToStaticHtml.js",
     "start": "NODE_ENV=development webpack serve --config webpack.config.development.js",
     "postinstall": "cp example.js data.js",
@@ -20,6 +20,8 @@
     "babel-loader": "^8.2.2",
     "css-loader": "^5.2.4",
     "css-minimizer-webpack-plugin": "^2.0.0",
+    "eslint": "^7.25.0",
+    "eslint-plugin-react": "^7.23.2",
     "extract-css-chunks-webpack-plugin": "^4.9.0",
     "file-loader": "^6.2.0",
     "html-webpack-plugin": "^5.3.1",

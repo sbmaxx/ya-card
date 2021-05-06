@@ -7,4 +7,4 @@ import Data from '../data.js';
 
 export function render() {
     return ReactDOMServer.renderToStaticMarkup(<CardReact {...Data}/>);
-};
+}
