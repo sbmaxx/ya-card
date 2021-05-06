@@ -18,8 +18,6 @@
             </script>
         <% }) %>
     <% } %>
-    </head>
-<body class="page">
     <% if (htmlWebpackPlugin.options.inject === false) { %>
         <% htmlWebpackPlugin.files.css.filter(file => file.includes('inline')).forEach(function(file) { %>
             <style>
@@ -27,6 +25,8 @@
             </style>
         <% }) %>
     <% } %>
+    </head>
+<body class="page">
     <div id="root"></div>
     <% if (htmlWebpackPlugin.options.inject === false) { %>
         <% Object.keys(compilation.assets).filter(file => file.includes('.body.')).forEach(function(file) { %>
