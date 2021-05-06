@@ -105,11 +105,9 @@
 .card__switch {
     border-radius: 15% 0 0 0;
     z-index: 10;
-    padding: 15px;
     background: #fff;
     bottom: 0;
     right: 0;
-    font-size: 18px;
     position: absolute;
 }
 
@@ -128,8 +126,16 @@
     color: #d00;
 }
 
+.card__switch .card__link {
+    display: inline-block;
+    padding: 12px;
+    font-size: 18px;
+    width: 48px;
+    box-sizing: border-box;
+}
+
 .card__switch .card__link + .card__link {
-    margin-left: 30px;
+    border-left: 1px solid #ededed;
 }
 
 .card__link_disabled_yes {
