@@ -233,6 +233,7 @@
     .card__side {
         -webkit-transform: rotateY(-180deg);
         transform: rotateY(-180deg);
+        filter: drop-shadow(4px 4px 10px rgb(0 0 0 / 20%));
     }
 
     .card__side_state_closed {
