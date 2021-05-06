@@ -1,10 +1,6 @@
 module.exports = {
     plugins: [
-      [
-        "postcss-preset-env",
-        {
-          // Options
-        },
-      ],
+        require('postcss-preset-env'),
+        require('postcss-url')({ url: 'inline', optimizeSvgEncode: true })
     ],
-  };
+};

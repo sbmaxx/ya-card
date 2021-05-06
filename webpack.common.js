@@ -44,14 +44,19 @@ module.exports = {
             {
                 test: /\.css$/,
                 use: [
-                  {
-                    loader: ExtractCssChunks.loader,
-                    options: {
-                      hmr: !isProduction,
+                    {
+                        loader: ExtractCssChunks.loader,
+                        options: {
+                            hmr: !isProduction,
+                        },
                     },
-                  },
-                  'css-loader',
-                  "postcss-loader"
+                    {
+                        loader: 'css-loader',
+                        options: {
+                            importLoaders: 1,
+                        }
+                    },
+                    "postcss-loader"
                 ],
             },
         ],

@@ -3,6 +3,7 @@ import ReactDom from 'react-dom';
 
 import CardReact from './Card/Card.jsx';
 
+import './Page/Page.css';
 import './Card/Card.css';
 import './Card/Card.inline.js';
 import './Page/js_detection.inline.js';
