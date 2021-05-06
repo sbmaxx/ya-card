@@ -1,6 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const ExtractCssChunks = require('extract-css-chunks-webpack-plugin');
+
 const data = require('./data.js');
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -9,7 +10,6 @@ module.exports = {
         filename: '[name].js',
         chunkFilename: '[id].js',
         path: path.resolve(__dirname, 'dist'),
-        libraryTarget: 'commonjs2'
     },
     plugins: [
         new HtmlWebpackPlugin({
@@ -30,6 +30,10 @@ module.exports = {
     },
     module: {
         rules: [
+            {
+                resourceQuery: /inject=(head|body)/,
+                type: 'asset/resource',
+            },
             {
                 test: /\.(js|jsx)$/,
                 exclude: /node_modules/,

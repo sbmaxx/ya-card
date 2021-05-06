@@ -1,12 +1,25 @@
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common');
 
+const CssMinimizerPlugin = require('css-minimizer-webpack-plugin');
+const TerserPlugin = require("terser-webpack-plugin");
+
 const client = merge(common, {
     mode: 'production',
     devtool: false,
     target: 'web',
     entry: {
         inline: './src/inline.js'
+    },
+    output: {
+        assetModuleFilename: (pathData) => {
+            const inject = pathData.filename.includes('inject=head') ? 'head' : 'body';
+            return `inline/[name].${inject}[ext]`;
+        }
+    },
+    optimization: {
+        minimize: true,
+        minimizer: [new CssMinimizerPlugin, new TerserPlugin()]
     }
 });
 
@@ -16,6 +29,9 @@ const server = merge(common, {
     optimization: {
         minimize: false,
         concatenateModules: false,
+    },
+    output: {
+        libraryTarget: 'commonjs2'
     },
     target: 'node',
     entry: {
