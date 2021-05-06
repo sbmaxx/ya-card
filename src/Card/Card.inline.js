@@ -57,6 +57,7 @@ var Card = (function() {
             this
                 ._changeTitle(lang)
                 ._changeFavicon(lang)
+                ._changeHtmlLang(lang)
                 ._switchSide(lang)
                 ._changeUrl(lang);
         },
@@ -68,6 +69,11 @@ var Card = (function() {
 
         _changeFavicon: function(lang) {
             document.querySelector('link[rel="shortcut icon"]').setAttribute('href', this.params.favicons[lang]);
+            return this;
+        },
+
+        _changeHtmlLang: function(lang) {
+            document.documentElement.setAttribute('lang', lang);
             return this;
         },
 
