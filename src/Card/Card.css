@@ -220,6 +220,7 @@
     .card, .card__side {
         width: 320px;
         height: 100%;
+        height: calc(100% - 20px);
         top: 20px;
     }
 
