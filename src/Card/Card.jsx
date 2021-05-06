@@ -120,13 +120,15 @@ class Card extends React.Component {
         });
 
         return (
+            <>
             <div
                 className="card"
                 data-bem={JSON.stringify(data)}
                 >
                 { this.props.cards.map((card, i) => <CardSide key={card.lang} {...card} index={i}/>) }
-                { this.props.cards.length > 1 && <CardSwitch langs={this.props.cards.map(c => c.lang)}/> }
             </div>
+            { this.props.cards.length > 1 && <CardSwitch langs={this.props.cards.map(c => c.lang)}/> }
+            </>
         );
     }
 }

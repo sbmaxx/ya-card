@@ -14,7 +14,7 @@ var Card = (function() {
             this.params = JSON.parse(this.card.dataset.bem).card;
 
             this.sides = toArray.call(this.card.querySelectorAll('.card__side')).map(fillLang);
-            this.links = toArray.call(this.card.querySelectorAll('.card__switch .card__link')).map(fillLang);
+            this.links = toArray.call(document.querySelectorAll('.card__switch .card__link')).map(fillLang);
 
             // trying to fix google's markup tool
             removeClass(this.sides[1].elem, modSideOpened);
@@ -144,7 +144,7 @@ var Card = (function() {
     }
 }());
 
-(function() {
+false && (function() {
     var card, screen, isLandscape;
 
     card = {
