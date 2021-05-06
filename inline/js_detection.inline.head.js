@@ -1,1 +1,0 @@
-!function(e,n){e[n]=e[n].replace(/(ua_js_)no/g,"$1yes")}(document.documentElement,"className");
