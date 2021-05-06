@@ -10,6 +10,7 @@ body, html {
     padding: 0;
     color: #000;
     background: #ededed;
+    overflow: hidden;
 }
 
 @font-face {
