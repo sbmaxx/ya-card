@@ -1,29 +1,19 @@
-body,html {
-    height: 100%
+body, html {
+    height: 100%;
 }
 
 .page {
-    font: 12px/1.3 'Yandex Sans Text Web',sans-serif;
+    font: 12px/1.3 'Yandex Sans Text Web', sans-serif;
     position: relative;
     width: 100%;
     margin: 0;
     padding: 0;
     color: #000;
-    background: #EDEDED
+    background: #ededed;
 }
 
 .card,.card__rectangle,.card__side,.card__switch,.card__text {
-    position: absolute
-}
-
-.ua_js_yes .card {
-    opacity: 0;
-    -webkit-transition: opacity .4s ease-in-out;
-    transition: opacity .4s ease-in-out
-}
-
-.ua_js_yes .card_visible {
-    opacity: 1
+    position: absolute;
 }
 
 .card {
@@ -35,27 +25,44 @@ body,html {
     bottom: 0;
     right: 0;
     -webkit-perspective: 1000px;
-    perspective: 1000px
+    perspective: 1000px;
+}
+
+.ua_js_yes .card {
+    opacity: 0;
+    -webkit-transition: opacity 0.4s ease-in-out;
+    transition: opacity 0.4s ease-in-out;
+}
+
+.ua_js_yes .card_visible {
+    opacity: 1;
 }
 
 .card__text {
     top: 30px;
     left: 165px;
-    width: 300px
+    width: 300px;
 }
 
 .card__side {
     width: 553px;
     height: 300px;
     top: 0;
-    left: 0
+    left: 0;
+    z-index: 1;
+    -webkit-transform-style: preserve-3d;
+    transform-style: preserve-3d;
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+    -webkit-transform: rotateX(-180deg);
+    transform: rotateX(-180deg);
 }
 
 .card__rectangle {
     z-index: 2;
     width: 465px;
     height: 300px;
-    background: #fff
+    background: #fff;
 }
 
 .card__side::after {
@@ -63,103 +70,103 @@ body,html {
     left: 100%;
     margin-left: -88px;
     position: absolute;
-    border-color: rgba(255,255,255,0) rgba(255,255,255,0) rgba(255,255,255,0) #fff;
+    border-color: rgba(255, 255, 255, 0) rgba(255, 255, 255, 0) rgba(255, 255, 255, 0) #fff;
     border-style: solid;
     border-width: 150px 0 150px 80px;
     width: 0;
     height: 0;
     -webkit-transform: rotate(0);
     transform: rotate(0);
-    z-index: 3
+    z-index: 3;
 }
 
 .card__title {
     height: 98px;
-    margin-bottom: 10px
+    margin-bottom: 10px;
 }
 
 .card__gap {
-    height: 10px
+    height: 10px;
 }
 
 .card__name {
     font-size: 25px;
     margin: 0;
-    font-weight: 400
+    font-weight: 400;
 }
 
 .card__position {
     font-size: 13px;
-    font-weight: 400
-}
-
-.card__side {
-    z-index: 1;
-    -webkit-transform-style: preserve-3d;
-    transform-style: preserve-3d;
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-    -webkit-transform: rotateX(-180deg);
-    transform: rotateX(-180deg)
-}
-
-.card_animation .card__side_state_closed,.card_animation .card__side_state_opened {
-    -webkit-transition: all .4s ease-in-out;
-    transition: all .4s ease-in-out
+    font-weight: 400;
 }
 
 .card__side_state_closed {
     -webkit-transform: rotateX(180deg);
-    transform: rotateX(180deg)
+    transform: rotateX(180deg);
 }
 
 .card__side_state_opened {
     z-index: 2;
     -webkit-transform: rotateX(0);
-    transform: rotateX(0)
+    transform: rotateX(0);
+}
+
+.card_animation .card__side_state_closed,.card_animation .card__side_state_opened {
+    -webkit-transition: all 0.4s ease-in-out;
+    transition: all 0.4s ease-in-out;
 }
 
 .card__switch {
     z-index: 10;
     top: 310px;
     right: 88px;
-    font-size: 14px
+    font-size: 14px;
+}
+
+.card__phone-link {
+    color: #000;
+    text-decoration: none;
+    cursor: default;
+}
+
+.card__link, .mobile .card__phone-link {
+    text-decoration: none;
+    color: #4183c4;
 }
 
 .card__switch .card__link {
-    margin-left: 10px
+    margin-left: 10px;
 }
 
-.card__link,.mobile .card__phone-link {
-    text-decoration: none;
-    color: #4183c4
+.card__link:hover {
+    color: #d00;
 }
 
-.card__link:hover,.mobile .card__phone-link:hover {
-    color: #d00
-}
-
-.card__link_disabled_yes,.card__phone-link {
+.card__link_disabled_yes {
     color: #000;
     text-decoration: none;
-    cursor: default
+    cursor: default;
 }
 
-.card__link_disabled_yes:visited,.card__phone-link:visited {
-    color: #000
+.card__link_disabled_yes:visited, .card__phone-link:visited {
+    color: #000;
 }
 
-.card__link_disabled_yes:hover,.card__phone-link:hover {
-    text-decoration: none
+.card__link_disabled_yes:hover, .card__phone-link:hover {
+    text-decoration: none;
 }
 
-@media only screen and (min-device-width: 320px) and (max-device-width:768px) {
+.mobile .card__phone-link:hover {
+    color: #d00;
+}
+
+@media only screen and (min-device-width: 320px) and (max-device-width: 768px) {
     .card__switch {
-        font-size:40px
+        font-size: 40px;
     }
 
     .card__switch .card__link {
-        margin-left: 30px
+        margin-left: 30px;
     }
 }
 
@@ -168,18 +175,18 @@ body,html {
     font-family: 'Yandex Sans Text Web';
     font-weight: 400;
     font-style: normal;
-    font-stretch: normal
+    font-stretch: normal;
 }
 
 .card__logo {
     position: absolute;
     left: 27px;
-    border: 0
+    border: 0;
 }
 
 .card__logo span {
     position: absolute;
-    left: -9999px
+    left: -9999px;
 }
 
 .card__side_lang_ru .card__logo {
@@ -187,7 +194,7 @@ body,html {
     height: 42px;
     top: 129px;
     background-image: url("data:image/svg+xml,%3C%3Fxml version='1.0' encoding='utf-8'%3F%3E%3Csvg version='1.1' id='Yandex_Logo' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' viewBox='0 0 367 106' style='enable-background:new 0 0 367 106;' xml:space='preserve'%3E%3Cstyle type='text/css'%3E .st0%7Bfill:%23FC3F1D;%7D%0A%3C/style%3E%3Cpath id='Name' d='M349.9,92.3c7.2,0,12.3-1.3,16.1-4.1V75.5c-3.9,2.7-8.6,4.4-15.2,4.4c-11.1,0-15.7-8.6-15.7-22.2 c0-14.3,5.6-21.6,15.8-21.6c6,0,11.9,2.1,15,4.1V27c-3.3-1.8-9-3.1-16.8-3.1c-19.9,0-30.2,14.3-30.2,34.3 C319,80.1,329.1,92.3,349.9,92.3z M252.6,86.5V73.8c-4.8,3.3-13,6.2-20.5,6.2c-11.4,0-15.7-5.4-16.4-16.4h37.6v-8.2 c0-22.9-10.1-31.5-25.6-31.5c-19,0-28,14.5-28,34.4c0,22.9,11.3,34,31.1,34C240.7,92.3,248,89.6,252.6,86.5z M109.9,25.1v26H89.1 v-26H73.5V91h15.6V63.5h20.8V91h15.6V25.1H109.9z M195.8,78.6h-6.9V25.1h-45.4v5.6c0,16.1-1,36.9-6.5,47.9H132V106h14.4V91h34.9v15 h14.4V78.6z M302.3,91H320l-25-35.5l22-30.4h-15.7l-22,30.4V25.1h-15.6V91h15.6V58.6L302.3,91z M227.3,36.1 c7.7,0,10.1,6.4,10.1,14.7v1.3h-21.7C216.1,41.6,219.9,36.1,227.3,36.1z M173.3,78.6h-22c4.3-9.9,5.5-27.9,5.5-39.3v-2h16.5V78.6z' /%3E%3Cpath id='Glyph' class='st0' d='M60.5,91H44.6V12.3h-7.1c-13,0-19.8,6.5-19.8,16.2c0,11,4.7,16.1,14.4,22.6l8,5.4L17.1,91H0 l20.7-30.8C8.8,51.7,2.1,43.4,2.1,29.4C2.1,11.9,14.3,0,37.4,0h23V91z'/%3E%3C/svg%3E%0A");
-    background-size: 110px 42px
+    background-size: 110px 42px;
 }
 
 .card__side_lang_en .card__logo {
@@ -195,5 +202,5 @@ body,html {
     height: 42px;
     top: 127px;
     background-image: url("data:image/svg+xml,%3C%3Fxml version='1.0' encoding='utf-8'%3F%3E%3Csvg version='1.1' id='Yandex_logtype' xmlns='http://www.w3.org/2000/svg' xmlns:xlink='http://www.w3.org/1999/xlink' x='0px' y='0px' viewBox='0 0 378 91' style='enable-background:new 0 0 378 91;' xml:space='preserve'%3E%3Cstyle type='text/css'%3E .st0%7Bfill:%23FC3F1D;%7D%0A%3C/style%3E%3Cpath id='Name' d='M218.2,90.9c7.2,0,13.1-3.4,17.3-9.7l0.8,8.4h14.2V0h-15.3v32.4c-3.8-5.8-9.6-8.9-16.3-8.9 c-14.8,0-25.2,12.5-25.2,34.2C193.7,79,203.8,90.9,218.2,90.9z M312.6,85.3V72.8c-4.8,3.2-12.8,6.1-20.3,6.1 c-11.2,0-15.5-5.3-16.1-16.1h37v-8.2c0-22.6-9.9-31.1-25.3-31.1c-18.7,0-27.6,14.3-27.6,33.9c0,22.6,11.1,33.5,30.7,33.5 C300.8,90.9,308,88.4,312.6,85.3z M147.3,43.1c2.9-3.5,7.3-6.4,12.9-6.4c5.4,0,7.8,2.3,7.8,7.2v45.8h15.3V42.3 c0-12.9-5.1-18.6-17.7-18.6c-9.1,0-14.6,3.4-17.7,6.4h-0.8l-0.4-5.4h-15v64.9h15.3L147.3,43.1L147.3,43.1z M119.4,45.4 c0-15.7-8-21.7-24.3-21.7c-10.1,0-18.2,4.3-22.8,7.6v13.3c4.9-4,12.4-8.6,21-8.6c7.3,0,10.7,2.6,10.7,9.6v4.1h-2.4 c-23.5,0-33.9,7.6-33.9,21.2c0,12.5,8,19.7,19.9,19.7c9,0,12.9-3,15.9-6.1h0.6c0.1,1.7,0.6,3.8,1.1,5.1h15 c-0.5-5.3-0.8-10.6-0.8-15.9L119.4,45.4L119.4,45.4z M359.7,89.7h17.3l-21.2-33.4l18.3-31.4h-15.3l-11.1,19.6l-12.4-19.6h-17.4 l19.6,31.1l-20.4,33.8h15.6l13-21.9L359.7,89.7z M222.8,35.6c8.3,0,12.4,6.6,12.4,21.5c0,15.1-4.4,21.7-13,21.7 c-8.4,0-12.5-6.4-12.5-21.2C209.6,42.3,214,35.6,222.8,35.6z M287.7,35.6c7.6,0,9.9,6.3,9.9,14.4v1.3h-21.4 C276.5,41,280.3,35.6,287.7,35.6z M104.1,74.2c-1.9,2.9-5.6,5.1-11,5.1c-6.4,0-9.7-3.7-9.7-9.4c0-7.5,5.3-10.1,18.4-10.1h2.2V74.2z' /%3E%3Cpath id='Glyph' class='st0' d='M45,74.4v15.2H29.4V64L0,0h16.3l22.9,50C43.6,59.6,45,62.9,45,74.4z M74.3,0L55.2,43.3H39.3L58.5,0 H74.3z'/%3E%3C/svg%3E%0A");
-    background-size: 110px 42px
+    background-size: 110px 42px;
 }
