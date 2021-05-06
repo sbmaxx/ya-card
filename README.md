@@ -1,8 +1,9 @@
 # ya-card
 
-![ya-card example](https://raw.githubusercontent.com/sbmaxx/ya-card/main/example.png)
+![ya-card example](https://raw.githubusercontent.com/sbmaxx/ya-card/main/vcard-horizontal.png)
+![ya-card example](https://raw.githubusercontent.com/sbmaxx/ya-card/main/vcard-vertical.png)
 
-Визитная карточка по <s>БЭМ</s> как продолжение проекта [bem-vcard-enb](https://github.com/bem-vcard-enb)
+Визитная карточка <s>по БЭМ</s> как продолжение проекта [bem-vcard-enb](https://github.com/bem-vcard-enb)
 * react
 * webpack
 * магия
