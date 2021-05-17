@@ -51,6 +51,7 @@
     height: 300px;
     background: #fff;
     clip-path: polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%);
+    -webkit-transform: translate3d(0, 0, 0);
 }
 
 .card__title {
