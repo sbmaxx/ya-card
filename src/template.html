@@ -12,12 +12,12 @@
     <meta property="og:type" content="profile">
     <link rel="shortcut icon" href="https://yastatic.net/s3/home-static/_/f0/f0597b6727cc67dceebc4e3a87caf571.png">
     <% if (htmlWebpackPlugin.options.inject === false) { %>
+        <script>
         <% Object.keys(compilation.assets).filter(file => file.includes('.head.')).forEach(function(file) { %>
-            <script>
             <%= compilation.assets[file.substr(htmlWebpackPlugin.files.publicPath.length)].source() %>
-            </script>
         <% }) %>
-    <% } %>
+        </script>
+        <% } %>
     <% if (htmlWebpackPlugin.options.inject === false) { %>
         <% htmlWebpackPlugin.files.css.filter(file => file.includes('inline')).forEach(function(file) { %>
             <style>
@@ -29,11 +29,11 @@
 <body class="page">
     <div id="root"></div>
     <% if (htmlWebpackPlugin.options.inject === false) { %>
+        <script>
         <% Object.keys(compilation.assets).filter(file => file.includes('.body.')).forEach(function(file) { %>
-            <script>
             <%= compilation.assets[file.substr(htmlWebpackPlugin.files.publicPath.length)].source() %>
-            </script>
         <% }) %>
+    </script>
     <% } %>
 </body>
 </html>

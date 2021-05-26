@@ -9,11 +9,11 @@ module.exports = {
                 country: 'Россия',
                 city: 'Москва',
                 zip: '119021',
-                'street-address': 'ул. Льва Толстого, д. 16'
+                'street-address': 'ул. Льва Толстого, 16'
             },
             company: {
                 name: 'Яндекс',
-                site: 'https://yandex.ru'
+                site: 'https://yandex.ru/company'
             },
             contact: {
                 work: '+7 495 739-70-00',
@@ -30,7 +30,7 @@ module.exports = {
         {
             lang: 'en',
             name: 'Ivan Ivanov',
-            position: 'UI Developer',
+            position: 'Frontend Developer',
             address: {
                 country: 'Russia',
                 city: 'Moscow',
@@ -39,7 +39,7 @@ module.exports = {
             },
             company: {
                 name: 'Yandex',
-                site: 'https://yandex.com'
+                site: 'https://yandex.com/company'
             },
             contact: {
                 work: '+7 495 739-70-00',
