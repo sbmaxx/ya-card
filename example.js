@@ -35,7 +35,7 @@ module.exports = {
                 country: 'Russia',
                 city: 'Moscow',
                 zip: '119021',
-                'street-address': '16, Leo Tolstoy St.'
+                'street-address': 'Ulitsa Lva Tolstogo 16'
             },
             company: {
                 name: 'Yandex',
