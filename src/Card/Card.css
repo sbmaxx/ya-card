@@ -1,4 +1,32 @@
-.card,.card__rectangle,.card__side,.card__switch,.card__text {
+@media (prefers-color-scheme: dark) {
+    body {
+        --card-color: #f0f6fc;
+        --card-bg-color: #161b22;
+        --link-primary-color: #8ab4f8;
+        --link-secondary-color: #e8eaed;
+        --link-hover-color: #d00;
+        --color-separator: #30363d;
+        --shadow: rgb(255 255 255 / 20%);
+    }
+
+    .card__logo {
+        filter: grayscale() invert() brightness(2);
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    body {
+        --card-color: #000;
+        --card-bg-color: #ededed;
+        --link-primary-color: #0d44a0;
+        --link-secondary-color: #000;
+        --link-hover-color: #d00;
+        --color-separator: #ededed;
+        --shadow: rgb(0 0 0 / 20%);
+    }
+}
+
+.card, .card__rectangle, .card__side, .card__switch, .card__text {
     position: absolute;
 }
 
@@ -12,6 +40,7 @@
     right: 0;
     -webkit-perspective: 1000px;
     perspective: 1000px;
+    color: var(--card-color);
 }
 
 .ua_js_yes .card {
@@ -42,14 +71,14 @@
     backface-visibility: hidden;
     -webkit-transform: rotateX(-180deg);
     transform: rotateX(-180deg);
-    filter: drop-shadow(4px 4px 10px rgb(0 0 0 / 20%));
+    filter: drop-shadow(4px 4px 10px var(--shadow));
 }
 
 .card__rectangle {
     z-index: 2;
     width: 545px;
     height: 300px;
-    background: #fff;
+    background: var(--card-bg-color);
     clip-path: polygon(0 0, 86% 0, 100% 50%, 86% 100%, 0 100%);
     -webkit-transform: translate3d(0, 0, 0);
 }
@@ -85,7 +114,7 @@
     transform: rotateX(0);
 }
 
-.card_animation .card__side_state_closed,.card_animation .card__side_state_opened {
+.card_animation .card__side_state_closed, .card_animation .card__side_state_opened {
     -webkit-transition: all 0.4s ease-in-out;
     transition: all 0.4s ease-in-out;
 }
@@ -93,25 +122,25 @@
 .card__switch {
     border-radius: 15% 0 0 0;
     z-index: 10;
-    background: #fff;
+    background: var(--card-bg-color);
     bottom: 0;
     right: 0;
     position: absolute;
 }
 
 .card__phone-link {
-    color: #000;
+    color: var(--link-secondary-color);
     text-decoration: none;
     cursor: default;
 }
 
 .card__link, .mobile .card__phone-link {
     text-decoration: none;
-    color: #0d44a0;
+    color: var(--link-primary-color);
 }
 
 .card__link:hover {
-    color: #d00;
+    color: var(--link-hover-color);
 }
 
 .card__switch .card__link {
@@ -123,17 +152,17 @@
 }
 
 .card__switch .card__link + .card__link {
-    border-left: 1px solid #ededed;
+    border-left: 1px solid var(--color-separator);
 }
 
 .card__link_disabled_yes {
-    color: #000;
+    color: var(--link-secondary-color);
     text-decoration: none;
     cursor: default;
 }
 
 .card__link_disabled_yes:visited, .card__phone-link:visited {
-    color: #000;
+    color: var(--link-secondary-color);
 }
 
 .card__link_disabled_yes:hover, .card__phone-link:hover {
@@ -141,7 +170,7 @@
 }
 
 .mobile .card__phone-link:hover {
-    color: #d00;
+    color: var(--link-hover-color);
 }
 
 .card__logo {

@@ -1,3 +1,17 @@
+@media (prefers-color-scheme: dark) {
+    body {
+        --page-color: #999da2;
+        --page-bg-color: #202124;
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    body {
+        --page-color: #000;
+        --page-bg-color: #ededed;
+    }
+}
+
 body, html {
     height: 100%;
 }
@@ -8,8 +22,8 @@ body, html {
     width: 100%;
     margin: 0;
     padding: 0;
-    color: #000;
-    background: #ededed;
+    color: var(--page-color);
+    background: var(--page-bg-color);
     overflow: hidden;
 }
 
