@@ -1,12 +1,12 @@
 @media (prefers-color-scheme: dark) {
     body {
         --card-color: #f0f6fc;
-        --card-bg-color: #161b22;
+        --card-bg-color: #1d1e20;
         --link-primary-color: #8ab4f8;
         --link-secondary-color: #e8eaed;
         --link-hover-color: #d00;
-        --color-separator: #30363d;
-        --shadow: rgb(255 255 255 / 20%);
+        --separator-color: #30363d;
+        --shadow: rgb(0 0 0 / 50%);
     }
 
     .card__logo {
@@ -21,7 +21,7 @@
         --link-primary-color: #0d44a0;
         --link-secondary-color: #000;
         --link-hover-color: #d00;
-        --color-separator: #ededed;
+        --separator-color: #ededed;
         --shadow: rgb(0 0 0 / 20%);
     }
 }
@@ -152,7 +152,7 @@
 }
 
 .card__switch .card__link + .card__link {
-    border-left: 1px solid var(--color-separator);
+    border-left: 1px solid var(--separator-color);
 }
 
 .card__link_disabled_yes {
