@@ -1,8 +1,12 @@
 # ya-card
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/sbmaxx/ya-card/main/vcard-horizontal.png" />
-  <img src="https://raw.githubusercontent.com/sbmaxx/ya-card/main/vcard-vertical.png" />
+  <img src="./ya-card-dark-vertical.jpg" width="300" /><img src="./ya-card-white-vertical.jpg" width="300" />
+</p>
+
+<p align="center">
+  <img src="./ya-card-dark-horizontal.jpg" width="400" />
+  <img src="./ya-card-white-horizontal.jpg" width="400" />
 </p>
 
 Визитная карточка <s>по БЭМ</s> как продолжение проекта [bem-vcard-enb](https://github.com/bem-vcard-enb)
@@ -14,6 +18,7 @@
 * plain javascript на клиенте;
 * нет внешних запросов;
 * корректная поддержка различных разрешений на мобильных устройствах;
+* поддержка тёмной темы;
 * поддержка [Person microdata](http://www.data-vocabulary.org/Person).
 
 ## Development
