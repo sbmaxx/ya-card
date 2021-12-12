@@ -1,12 +1,10 @@
 # ya-card
 
 <p align="center">
-  <img src="./ya-card-dark-vertical.jpg" width="300" /><img src="./ya-card-white-vertical.jpg" width="300" />
+  <img src="./ya-card-horizontal.jpg"/>
 </p>
-
 <p align="center">
-  <img src="./ya-card-dark-horizontal.jpg" width="400" />
-  <img src="./ya-card-white-horizontal.jpg" width="400" />
+  <img src="./ya-card-vertical.jpg"/>
 </p>
 
 Визитная карточка <s>по БЭМ</s> как продолжение проекта [bem-vcard-enb](https://github.com/bem-vcard-enb)
