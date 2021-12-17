@@ -1,7 +1,7 @@
 @media (prefers-color-scheme: dark) {
     body {
         --card-color: #f0f6fc;
-        --card-bg-color: ##0a0b0b;
+        --card-bg-color: #0a0b0b;
         --link-primary-color: #8ab4f8;
         --link-secondary-color: #e8eaed;
         --link-hover-color: #d00;
