@@ -17,7 +17,7 @@
 @media (prefers-color-scheme: light) {
     body {
         --card-color: #000;
-        --card-bg-color: #ededed;
+        --card-bg-color: #fff;
         --link-primary-color: #0d44a0;
         --link-secondary-color: #000;
         --link-hover-color: #d00;
