@@ -108,7 +108,7 @@ class CardSide extends React.Component {
                             </div>}
 
                             {contact.site && <div className="card__site">
-                                <CardLink href={contact.site} itemProp="url">{contact.site}</CardLink>
+                                <CardLink href={contact.site} itemProp="url">{contact.site.replace(/^https?:\/\//, '')}</CardLink>
                             </div>}
 
                             {(contact.email || contact.site) && <div className="card__gap"></div>}
@@ -118,6 +118,10 @@ class CardSide extends React.Component {
 
                             {contact.github && <div className="card__github">
                                 <CardLink href={`https://github.com/${contact.github}`}>github.com/{contact.github}</CardLink>
+                            </div>}
+
+                            {contact.twitter && <div className="card__twitter">
+                                <CardLink href={`https://twitter.com/${contact.twitter}`}>twitter.com/{contact.twitter}</CardLink>
                             </div>}
                         </div>
                     </div>
