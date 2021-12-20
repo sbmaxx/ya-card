@@ -21,11 +21,11 @@ function CardSwitch({ langs }) {
     return (
         <div
             className="card__switch">
-                {langs.map((lang, i) => <a
-                    className={`card__link ${i === 0 ? 'card__link_disabled_yes' : ''}`}
-                    href={`#${lang}`}
-                    data-lang={lang}
-                    key={lang}>{lang}</a>)}
+            {langs.map((lang, i) => <a
+                className={`card__link ${i === 0 ? 'card__link_disabled_yes' : ''}`}
+                href={`#${lang}`}
+                data-lang={lang}
+                key={lang}>{lang}</a>)}
         </div>
     );
 }
@@ -54,7 +54,7 @@ function CardJSONLD({ address, company, contact, name, position }) {
         }
     };
 
-    return <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(data)}}/>;
+    return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data) }} />;
 }
 
 class CardSide extends React.Component {
@@ -92,10 +92,10 @@ class CardSide extends React.Component {
                             )}
                         </div>
                         <div className="card__contact">
-                            {(contact.work && !contact.workExt) &&<div className="card__tel card__tel_type_work">{I18N[lang].tel} <a className="card__phone-link"
+                            {(contact.work && !contact.workExt) && <div className="card__tel card__tel_type_work">{I18N[lang].tel} <a className="card__phone-link"
                                 href={`tel:${rawNumber(contact.work)}`}>{contact.work}</a></div>}
 
-                            {(contact.work && contact.workExt) &&<div className="card__tel card__tel_type_work">{I18N[lang].tel} <a className="card__phone-link"
+                            {(contact.work && contact.workExt) && <div className="card__tel card__tel_type_work">{I18N[lang].tel} <a className="card__phone-link"
                                 href={`tel:${rawNumber(contact.work)},${contact.workExt}`}>{contact.work}</a>, {I18N[lang].ext} {contact.workExt}</div>}
 
                             {contact.cell && <div className="card__tel card__tel_type_cell">{I18N[lang].cell} <a className="card__phone-link"
@@ -108,7 +108,7 @@ class CardSide extends React.Component {
                             </div>}
 
                             {contact.site && <div className="card__site">
-                                <CardLink href={contact.site} itemProp="url">{contact.site}</CardLink>
+                                <CardLink href={contact.site} itemProp="url">{contact.site.replace(/^https?:\/\//, '')}</CardLink>
                             </div>}
 
                             {(contact.email || contact.site) && <div className="card__gap"></div>}
@@ -144,14 +144,14 @@ class Card extends React.Component {
 
         return (
             <>
-            <div
-                className="card"
-                data-bem={JSON.stringify(data)}
+                <div
+                    className="card"
+                    data-bem={JSON.stringify(data)}
                 >
-                { this.props.cards.map((card, i) => <CardSide key={card.lang} {...card} index={i}/>) }
-            </div>
-            { this.props.cards.map((card, i) => <CardJSONLD key={card.lang} {...card} index={i}/>) }
-            { this.props.cards.length > 1 && <CardSwitch langs={this.props.cards.map(c => c.lang)}/> }
+                    {this.props.cards.map((card, i) => <CardSide key={card.lang} {...card} index={i} />)}
+                </div>
+                {this.props.cards.map((card, i) => <CardJSONLD key={card.lang} {...card} index={i} />)}
+                {this.props.cards.length > 1 && <CardSwitch langs={this.props.cards.map(c => c.lang)} />}
             </>
         );
     }
