@@ -1,16 +1,16 @@
 @media (prefers-color-scheme: dark) {
     body {
-        --card-color: #f0f6fc;
-        --card-bg-color: #0a0b0b;
+        --card-color: rgba(255, 255, 255, 0.75);
+        --card-bg-color: #18181a;
         --link-primary-color: #8ab4f8;
-        --link-secondary-color: #e8eaed;
-        --link-hover-color: #d00;
+        --link-secondary-color: rgba(255, 255, 255, 0.75);
+        --link-hover-color: #fff;
         --separator-color: #30363d;
         --shadow: rgb(0 0 0 / 50%);
     }
 
     .card__logo {
-        filter: grayscale() invert() brightness(2);
+        filter: grayscale() invert() brightness(2) opacity(0.75);
     }
 }
 

@@ -6,8 +6,7 @@ import CardReact from './Card/Card.jsx';
 import './Page/Page.css';
 import './Card/Card.css';
 import './Card/Card.inline.js';
-import './Page/js_detection.inline.js';
-import './Page/mobile_detection.inline.js';
+import './Page/Page.inline.js';
 
 import Data from '../data.js';
 
