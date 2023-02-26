@@ -119,6 +119,10 @@ class CardSide extends React.Component {
                             {contact.github && <div className="card__github">
                                 <CardLink href={`https://github.com/${contact.github}`}>github.com/{contact.github}</CardLink>
                             </div>}
+
+                            {contact.twitter && <div className="card__twitter">
+                                <CardLink href={`https://twitter.com/${contact.twitter}`}>twitter.com/{contact.twitter}</CardLink>
+                            </div>}
                         </div>
                     </div>
                 </div>
