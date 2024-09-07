@@ -2,7 +2,7 @@
     body {
         --card-color: rgba(255, 255, 255, 0.75);
         --card-bg-color: #18181a;
-        --link-primary-color: #8ab4f8;
+        --link-primary-color: rgba(255, 255, 255, 0.75);
         --link-secondary-color: rgba(255, 255, 255, 0.75);
         --link-hover-color: #fff;
         --separator-color: #30363d;
@@ -18,7 +18,7 @@
     body {
         --card-color: #000;
         --card-bg-color: #fff;
-        --link-primary-color: #0d44a0;
+        --link-primary-color: #000;
         --link-secondary-color: #000;
         --link-hover-color: #d00;
         --separator-color: #ededed;
