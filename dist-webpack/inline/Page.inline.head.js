@@ -1,0 +1,1 @@
+!function(e,n){e[n]=e[n].replace(/(ua_js_)no/g,"$1yes"),/Android|iPhone/i.test(navigator.userAgent)&&(e[n]+=" mobile")}(document.documentElement,"className");
