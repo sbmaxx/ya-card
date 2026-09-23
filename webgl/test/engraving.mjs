@@ -117,11 +117,17 @@ try {
         square.getContext('2d').fillRect(32, 32, 64, 64);
         const synthetic = createEngravingMap({ canvas: square, width: 32, height: 32, titleRelief: [.1, .1, .9, .9], logoRelief: [0, 0, .05, .05] });
         const sample = (x, y) => [...synthetic.data.slice((y * 128 + x) * 4, (y * 128 + x) * 4 + 4)];
-        const raised = createEngravingMap({ canvas: square, width: 32, height: 32, titleRelief: [0, 0, .05, .05], logoRelief: [.1, .1, .9, .9] });
+        const raised = createEngravingMap({ canvas: square, width: 32, height: 32, titleRelief: [0, 0, .05, .05], logoRelief: [.1, .1, .9, .9] }, {
+            name: { depth: .30, bevel: .6, raised: false },
+            logo: { depth: .25, bevel: .85, raised: true }
+        });
+        const logoCut = createEngravingMap({ canvas: square, width: 32, height: 32, titleRelief: [0, 0, .05, .05], logoRelief: [.1, .1, .9, .9] });
         const raisedSample = (x, y) => [...raised.data.slice((y * 128 + x) * 4, (y * 128 + x) * 4 + 4)];
+        const logoSample = (x, y) => [...logoCut.data.slice((y * 128 + x) * 4, (y * 128 + x) * 4 + 4)];
         return { rebuildMs, dimensions, maps, init, afterFrames, afterDestroy, basisReports, filters, error,
             synthetic: { left: sample(32, 64), right: sample(95, 64), top: sample(64, 32), bottom: sample(64, 95), middle: sample(64, 64), empty: sample(10, 10),
-                raisedLeft: raisedSample(32, 64), raisedRight: raisedSample(95, 64), raisedTop: raisedSample(64, 32), raisedBottom: raisedSample(64, 95) } };
+                raisedLeft: raisedSample(32, 64), raisedRight: raisedSample(95, 64), raisedTop: raisedSample(64, 32), raisedBottom: raisedSample(64, 95),
+                logoLeft: logoSample(32, 64), logoRight: logoSample(95, 64), logoTop: logoSample(64, 32), logoBottom: logoSample(64, 95) } };
     });
     const shading = await page.evaluate(async () => {
         const { CardRenderer } = await import('./renderer.js');
@@ -201,6 +207,9 @@ try {
     assert.ok(result.synthetic.raisedLeft[0] < 128 && result.synthetic.raisedRight[0] > 128
         && result.synthetic.raisedTop[1] < 128 && result.synthetic.raisedBottom[1] > 128,
         'positive logo stamp normals face away from the raised mark');
+    assert.ok(result.synthetic.logoLeft[0] > 128 && result.synthetic.logoRight[0] < 128
+        && result.synthetic.logoTop[1] > 128 && result.synthetic.logoBottom[1] < 128,
+        'selected logo profile is a recess, independently of the raised study');
     assert.ok(shading.reports.every(report => report.changed > 100), 'normals affect actual GPU pixels');
     assert.ok(shading.changingResponse > 100, 'bevel shading follows the moving light');
     console.log(JSON.stringify({ dimensions: result.dimensions, rebuildMs: result.rebuildMs, maps: result.maps, shading }, null, 2));

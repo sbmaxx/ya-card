@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-09`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-10`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 64156 |
-| index.html.gz | 28325 |
-| index.html.br | 25057 |
+| index.html | 65133 |
+| index.html.gz | 28687 |
+| index.html.br | 25420 |
 
 HTML SHA-256:
-`1dcda768c88ce1db363600ec2a15f9ca75a6f9fd54ff7ec72b8506ffc0694f45`.
+`52b551d93a5db43a5ea73bae5c4c85bb09f40d490c45f86f5754fe707da5a559`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-09/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-10/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -66,21 +66,21 @@ against the local artifact after publication.
 
 ## Desktop stack layout
 
-Current release uses a left-aligned desktop stack: 145px logo, 20px name,
+The desktop-stack release introduced a left-aligned stack: 145px logo, 20px name,
 13px role, then email and Telegram. The desktop website row is hidden; mobile
 layout retains email/Telegram/site. A quick desktop RU/EN/mobile render and native
 Tab/resize check passed; no separate judge was used, per the user's new workflow.
 
 ## Metallic-logo update
 
-The current release gives the unchanged Yandex/Яндекс outlines a monochrome,
+The metallic-logo release gave the unchanged Yandex/Яндекс outlines a monochrome,
 raised metallic finish. The red paint is removed from the card logo only;
 name engraving, layout, contacts and official favicons are preserved. Quick
 built desktop/mobile RU/EN renders and the relief fixture passed.
 
 ## Compact desktop typography
 
-Desktop now follows the compact business-card reference: common left edge x56,
+The compact-typography release follows the business-card reference: common left edge x56,
 logo y42, name baseline130, role152, email188 and Telegram206. Existing metallic
 logo/materials and mobile constants are preserved. Implementation-agent browser
 and contact checks passed; no additional judge/audit was run.
@@ -92,3 +92,14 @@ offset computed from the logo top and the last line's actual glyph descent,
 producing balanced top/bottom margins in both layouts. The logo's metallic face
 is slightly darker for readability; its metallic bevel remains. Basic built
 browser checks and RU/EN desktop/mobile screenshots passed before publication.
+
+## Visual round with preserved baseline
+
+Before this round, the exact production source and build were preserved as
+commit `077eba6`, tag `ya-card-balanced-baseline-2026-09-24`, and local
+`snapshots/2026-09-24-balanced-baseline/`. This release's rollback script also
+restores those production bytes. The selected darker recessed-metal logo,
+21px desktop name with finer relief, and smooth rounded-rim normals were chosen
+from three controlled visual studies. Details: `design/2026-09-24-visual-round.md`.
+No agents were used in this round.
+The final public Brotli response matches the local artifact byte-for-byte.

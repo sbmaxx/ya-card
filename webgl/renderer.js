@@ -1,5 +1,6 @@
 import { cards, logos } from './data.js';
 import { createEngravingMap } from './engraving.js';
+import { art } from './art-direction.js';
 
 const HALF_THICKNESS = 0.055;
 const BEVEL = 0.018;
@@ -147,15 +148,17 @@ void main() {
         vec3 cutMetal = mix(floorInk * 0.58, litWall, wallExposure);
         float logoRegion = step(uLogoRect.x, vUV.x) * step(uLogoRect.y, vUV.y)
                          * step(vUV.x, uLogoRect.z) * step(vUV.y, uLogoRect.w);
-        vec3 stampedFace = metalLighting(normal, view, light) * 0.72 + uMetalTone * 0.02;
+        vec3 stampedFace = metalLighting(normal, view, light) * ${art.logo.face.toFixed(3)} + uMetalTone * 0.018;
+        stampedFace += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
+        stampedFace *= ${art.logo.raised ? '1.0' : '(1.0 - 0.14 * relief.b)'};
         vec3 stampedWall = mix(stampedFace * 0.64,
                                metalLighting(facetNormal, view, light) * (1.02 + 0.12 * facetLight),
                                smoothstep(-0.16, 0.13, facetLight - max(dot(normal, light), 0.0)));
-        float stampedBevel = smoothstep(0.035, 0.30, slope) * 0.76 * resolved;
+        float stampedBevel = smoothstep(0.035, 0.30, slope) * ${art.logo.wall.toFixed(3)} * resolved;
         vec3 stampedMetal = mix(stampedFace, stampedWall, stampedBevel);
         inkColor = mix(paint, mix(floorInk, cutMetal, wall), engraved);
-        // The monochrome mark is a low positive stamp. Its shallow bevels
-        // catch the same moving softbox as the plate without a painted outline.
+        // The chosen monochrome relief catches the same moving softbox as the
+        // plate. Coverage is preserved, so no exterior outline is introduced.
         inkColor = mix(inkColor, stampedMetal, engraved * logoRegion);
     }
     // Preserve the original glyph coverage: the bevel cannot create an outer halo.
@@ -266,8 +269,8 @@ function roundedOutline(width, height, vertical) {
         const r = .055;
         const start = [p[0] + (previous[0] - p[0]) * r / a, p[1] + (previous[1] - p[1]) * r / a];
         const end = [p[0] + (next[0] - p[0]) * r / b, p[1] + (next[1] - p[1]) * r / b];
-        for (let step = 0; step <= 5; step++) {
-            const t = step / 5, u = 1 - t;
+        for (let step = 0; step <= 8; step++) {
+            const t = step / 8, u = 1 - t;
             result.push([u * u * start[0] + 2 * u * t * p[0] + t * t * end[0], u * u * start[1] + 2 * u * t * p[1] + t * t * end[1]]);
         }
     });
@@ -276,6 +279,17 @@ function roundedOutline(width, height, vertical) {
 
 function geometry(width, height, vertical) {
     const outline = roundedOutline(width, height, vertical);
+    // Average adjacent contour normals so the rounded rim reflects smoothly.
+    const rimNormals = outline.map((point, i) => {
+        const previous = outline[(i + outline.length - 1) % outline.length];
+        const next = outline[(i + 1) % outline.length];
+        const before = Math.hypot(point[0] - previous[0], point[1] - previous[1]);
+        const after = Math.hypot(next[0] - point[0], next[1] - point[1]);
+        const nx = -(point[1] - previous[1]) / before - (next[1] - point[1]) / after;
+        const ny = (point[0] - previous[0]) / before + (next[0] - point[0]) / after;
+        const length = Math.hypot(nx, ny);
+        return [nx / length, ny / length];
+    });
     const faces = [[], [], []];
     const depth = HALF_THICKNESS;
     const inset = point => [point[0] * (1 - BEVEL * 2 / width), point[1] * (1 - BEVEL * 2 / height)];
@@ -289,12 +303,11 @@ function geometry(width, height, vertical) {
         const ai = inset(a), bi = inset(b);
         for (const p of [[0, 0], bi, ai]) vertex(faces[0], ...p, depth, 0, 0, 1);
         for (const p of [[0, 0], ai, bi]) vertex(faces[1], ...p, -depth, 0, 0, -1, true);
-        const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy);
-        const nx = -dy / len, ny = dx / len;
+        const normalA = rimNormals[i], normalB = rimNormals[(i + 1) % outline.length];
         function ring(topA, topB, topZ, bottomA, bottomB, bottomZ, nz) {
             const length = Math.hypot(1, nz);
-            for (const [p, z] of [[topA, topZ], [topB, topZ], [bottomA, bottomZ], [bottomA, bottomZ], [topB, topZ], [bottomB, bottomZ]]) {
-                vertex(faces[2], ...p, z, nx / length, ny / length, nz / length);
+            for (const [p, z, n] of [[topA, topZ, normalA], [topB, topZ, normalB], [bottomA, bottomZ, normalA], [bottomA, bottomZ, normalA], [topB, topZ, normalB], [bottomB, bottomZ, normalB]]) {
+                vertex(faces[2], ...p, z, n[0] / length, n[1] / length, nz / length);
             }
         }
         ring(ai, bi, depth, a, b, depth - BEVEL, 1);
@@ -363,7 +376,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRelief = text(data.name, vertical ? 187 : 130, vertical ? 22 : 20, finish.ink, undefined, 500);
+    const titleRelief = text(data.name, vertical ? 187 : 130, vertical ? 22 : art.nameSize, finish.ink, undefined, 500);
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
     text(data.position, vertical ? 212 : 152, vertical ? 12 : 13, finish.secondary);

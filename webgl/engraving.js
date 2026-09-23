@@ -1,16 +1,17 @@
 // Build a shallow recessed profile once per layout. RG stores the tangent-space
 // normal, B the cavity depth, A the original coverage of the engraved glyphs.
 // Ordinary text is never included. No image readback or map generation per frame.
-export function createEngravingMap(surface) {
+import { art } from './art-direction.js';
+
+export function createEngravingMap(surface, profiles = art) {
     const { canvas, width, height, titleRelief, logoRelief } = surface;
     const map = new Uint8Array(canvas.width * canvas.height * 4);
     for (let i = 0; i < map.length; i += 4) { map[i] = 128; map[i + 1] = 128; }
     const pixelX = width / canvas.width, pixelY = height / canvas.height;
     const diagonal = Math.hypot(pixelX, pixelY);
-    const bevel = .72, titleDepth = .38, logoDepth = .30;
     const context = canvas.getContext('2d');
-    for (const [rect, raised] of [[titleRelief, false], [logoRelief, true]]) {
-        const depth = raised ? logoDepth : titleDepth;
+    for (const [rect, profile] of [[titleRelief, profiles.name], [logoRelief, profiles.logo]]) {
+        const { depth, bevel, raised } = profile;
         const x0 = Math.max(0, Math.floor(rect[0] * canvas.width));
         const y0 = Math.max(0, Math.floor(rect[1] * canvas.height));
         const w = Math.min(canvas.width, Math.ceil(rect[2] * canvas.width)) - x0;

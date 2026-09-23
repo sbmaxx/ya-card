@@ -47,7 +47,7 @@ h1 { font-size: 25px; font-weight: 500; }
   .brand { top: 68px; display: block; width: fit-content; }
   .logo { display: block; width: 145px; }
   .identity { top: 134px; }
-  h1 { margin: 0; font-size: 20px; line-height: 24px; font-weight: 500; }
+  h1 { margin: 0; font-size: 21px; line-height: 24px; font-weight: 500; }
   .position, .details { font-size: 13px; line-height: 18px; }
   .position { margin: 0; }
   .details { top: 201px; }
