@@ -80,6 +80,10 @@ function panel(center, roll, size, color) {
     const up = up0.map((value, i) => -right0[i] * sr + value * cr);
     return { c, right, up, size, color };
 }
+// The plate's face sees lamps near the camera (up to ~50° off axis), fading
+// out by ~65°; lamps further out are there for the chamfer. `face: 1` on a
+// lamp overrides it (the rim setup lights the face only when tilted).
+const faceSees = c => { const t = clamp01((c[2] - .4226) / (.6428 - .4226)); return t * t * (3 - 2 * t); };
 const studio = look.studio;
 const scale = (color, k) => color.map(value => value * k);
 // Lighting setups. Each lamp: centre direction, roll, gnomonic half-size,
@@ -112,14 +116,16 @@ export const LIGHT_SETUPS = {
     },
     softbox: {
         // One large overhead softbox and a white room: low contrast, even satin.
+        // The room's walls are large and soft: the face sees them at half strength,
+        // enough for a bright turn, too little to leave a band beside the bounce.
         title: 'Софтбокс', hint: 'Один большой мягкий свет сверху: металл ровный, контраста мало.', key: { c: [-.16, .30, 1], power: 4.5 }, bounce: 1.25,
         lights: [
             { c: [-.05, .42, 1], size: [.62, .36], color: 'key', power: .6, wrap: true },
             { c: [.58, .02, 1], size: [.30, .45], color: 'fill', power: .9 },
             { c: [-.58, .02, 1], size: [.30, .45], color: 'key', power: .8 },
-            { c: [0, 1, .15], size: [.80, .60], color: 'key', power: 2.8 },
-            { c: [-1, .10, .10], size: [.40, .80], color: 'key', power: 2.4 },
-            { c: [1, .10, .10], size: [.40, .80], color: 'fill', power: 2.2 }
+            { c: [0, 1, .15], size: [.80, .60], color: 'key', power: 2.8, face: .5 },
+            { c: [-1, .10, .10], size: [.40, .80], color: 'key', power: 2.4, face: .5 },
+            { c: [1, .10, .10], size: [.40, .80], color: 'fill', power: 2.2, face: .5 }
         ]
     },
     drama: {
@@ -133,12 +139,13 @@ export const LIGHT_SETUPS = {
     },
     rim: {
         // Lamps behind and above: the chamfers glow, the face stays dark until tilted.
+        // The face sees them too (`face: 1`): catching them is the point of this light.
         title: 'Контровой', hint: 'Свет сзади: горит контур, а пластина тёмная, пока её не наклонить.', key: { c: [-.10, .95, .30], power: 9 }, shadow: [-.12, .35, 1], bounce: .35,
         lights: [
-            { c: [-1, .20, -.20], size: [.08, .80], color: 'key', power: 8 },
-            { c: [1, .20, -.20], size: [.08, .80], color: 'fill', power: 7 },
-            { c: [0, 1, -.30], size: [.80, .08], color: 'key', power: 7 },
-            { c: [0, -1, -.20], size: [.60, .06], color: 'fill', power: 2.5 },
+            { c: [-1, .20, -.20], size: [.08, .80], color: 'key', power: 8, face: 1 },
+            { c: [1, .20, -.20], size: [.08, .80], color: 'fill', power: 7, face: 1 },
+            { c: [0, 1, -.30], size: [.80, .08], color: 'key', power: 7, face: 1 },
+            { c: [0, -1, -.20], size: [.60, .06], color: 'fill', power: 2.5, face: 1 },
             { c: [.40, .30, 1], size: [.10, .10], color: 'fill', power: 1.4 }
         ]
     },
@@ -319,6 +326,8 @@ uniform vec3 uLightRight[${MAX_LIGHTS}];
 uniform vec3 uLightUp[${MAX_LIGHTS}];
 uniform vec3 uLightShape[${MAX_LIGHTS}];
 uniform vec3 uLightColor[${MAX_LIGHTS}];
+// How much of each lamp the plate's face sees (see roomFor).
+uniform float uLightFace[${MAX_LIGHTS}];
 
 // The key softbox as a rounded rectangle (a circle at full radius). uKeySoft is
 // the studio's diffuser: it widens the edge of every light on top of roughness.
@@ -359,7 +368,15 @@ float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur, float roundne
     return inside * max(body, 0.0) * smoothstep(0.0, .25, z) * energy;
 }
 
-vec3 room(vec3 world, float rough) {
+// The room as seen by the chamfer, the side wall and the lettering (face = 0)
+// or by the plate's face (face = 1). They differ on purpose, as light linking
+// does in a product studio. A hand turn or a phone tilt swings the face's
+// reflection up to ~90° from the camera, far past the lights set up for rest.
+// So the face lives in a light tent: an even lit surround, a little brighter
+// above, that its reflection can only fall to, never through a dark gap, and
+// it does not see the lamps placed far out for the chamfer, which would blow
+// a turned plate out to white. The rest pose sees the same room either way.
+vec3 roomFor(vec3 world, float rough, float face) {
     vec3 d = uRoom * world;
     float blur = .004 + rough * rough * 1.5;
     // Dark floor, dim ceiling and a faint horizon for the side walls.
@@ -376,7 +393,13 @@ vec3 room(vec3 world, float rough) {
     // bounce. Taking the brighter of the two, a turned card's reflection
     // falls from the bounce to the wall and never through a darker gap, so
     // no shadow band runs across the plate at any angle.
-    float wall = .45 * (1.0 - smoothstep(.45, .95, abs(d.y)));
+    // The tent is brighter on the key's side and a little brighter above: a
+    // linear gradient, so a turned plate still shows light running across it,
+    // and a linear gradient cannot dip into a band. Mostly across: brushing
+    // blurs light along the grain anyway, and a plate tilted to the floor
+    // should not go dim.
+    float tent = .52 + .14 * d.x * clamp(uKeyCenter.x * 4.0, -1.0, 1.0) + .06 * d.y;
+    float wall = mix(.45 * (1.0 - smoothstep(.45, .95, abs(d.y))), tent, face);
     col += vec3(${f(studio.bounce)}) * uBounce * max(bounce, wall);
     // Light walls (the paper backdrop) surround the card with brighter room.
     col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
@@ -384,10 +407,17 @@ vec3 room(vec3 world, float rough) {
     for (int i = 0; i < ${MAX_LIGHTS}; i++) {
         if (i >= uLightCount) break;
         vec3 shape = uLightShape[i];
-        col += uLightColor[i] * panel(d, uLightCenter[i], uLightRight[i], uLightUp[i], shape.xy, blur, shape.z < 0.0 ? uRoundLights : shape.z);
+        float seen = mix(1.0, uLightFace[i], face);
+        if (seen <= 0.0) continue;
+        // A lamp the face sees only in part is also softer to it: spread into a
+        // wide glow it fills the gap beside the bounce instead of leaving a band.
+        float soften = face * (1.0 - uLightFace[i]) * .6;
+        col += uLightColor[i] * seen * panel(d, uLightCenter[i], uLightRight[i], uLightUp[i], shape.xy, blur + soften, shape.z < 0.0 ? uRoundLights : shape.z);
     }
     return col;
 }
+
+vec3 room(vec3 world, float rough) { return roomFor(world, rough, 0.0); }
 
 vec3 fresnel(vec3 f0, float nv) {
     return f0 + (1.0 - f0) * pow(1.0 - nv, 5.0);
@@ -395,12 +425,12 @@ vec3 fresnel(vec3 f0, float nv) {
 
 // Brushed metal: micro-grooves tilt the normal across the brush direction,
 // which stretches every reflection into a streak perpendicular to the grain.
-vec3 brushed(vec3 n, vec3 v, vec3 across, float rough, float aniso) {
+vec3 brushed(vec3 n, vec3 v, vec3 across, float rough, float aniso, float face) {
     vec3 sum = vec3(0.0);
     for (int i = 0; i < 7; i++) {
         float s = (float(i) - 3.0) / 3.0;
         vec3 ni = normalize(n + across * s * aniso);
-        sum += room(reflect(-v, ni), rough) * (1.0 - .5 * s * s);
+        sum += roomFor(reflect(-v, ni), rough, face) * (1.0 - .5 * s * s);
     }
     return sum / 5.4444;
 }
@@ -502,11 +532,11 @@ void main() {
         float plateRough = ${f(plate.rough)} * (1.0 + grooves * .12);
         float nv = max(dot(n, v), 1e-3);
         ${plate.film ? 'vec3 plateF0 = filmF0(nv, vUV);' : 'vec3 plateF0 = PLATE_F0;'}
-        color = fresnel(plateF0, nv) * brushed(n, v, across, plateRough, ${f(plate.aniso)});
+        color = fresnel(plateF0, nv) * brushed(n, v, across, plateRough, ${f(plate.aniso)}, 1.0);
         color *= 1.0 + grooves * .05;
         ${plate.coat ? `
         // PVD coatings keep a faint clear reflection above the dark metal.
-        color += ${f(plate.coat)} * room(reflect(-v, n), .10);` : ''}
+        color += ${f(plate.coat)} * roomFor(reflect(-v, n), .10, 1.0);` : ''}
 
         float logoRegion = inRect(uLogoRect);
         float titleRegion = inRect(uTitleRect) * (1.0 - logoRegion);
@@ -575,8 +605,8 @@ void main() {
                 || min(min(uTintAmount.x, uTintAmount.y), min(uTintAmount.z, uTintAmount.w)) < .999) {
                 float fv = max(dot(facet, v), 1e-3);
                 ${plate.film ? 'vec3 letterF0 = filmF0(fv, vUV);' : 'vec3 letterF0 = PLATE_F0;'}
-                plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, ${f(plate.aniso)}) * (1.0 + grooves * .05);
-                ${plate.coat ? `plateLetter += ${f(plate.coat)} * room(reflect(-v, facet), .10);` : ''}
+                plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, ${f(plate.aniso)}, 1.0) * (1.0 + grooves * .05);
+                ${plate.coat ? `plateLetter += ${f(plate.coat)} * roomFor(reflect(-v, facet), .10, 1.0);` : ''}
             }
             // The first letter of the wordmark is drawn red-only in the mask.
             vec3 inkColor = ink.rgb / max(ink.a, .001);
@@ -1130,7 +1160,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1336,6 +1366,7 @@ export class CardRenderer {
         gl.uniform3fv(u.uLightUp, pack((_, i) => setup.lamps[i].up));
         gl.uniform3fv(u.uLightShape, pack(light => [...scale(light.size, size), light.shape === 'rect' ? 0 : -1]));
         gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2)));
+        gl.uniform1fv(u.uLightFace, pack((light, i) => [light.face ?? faceSees(setup.lamps[i].c)]));
     }
 
     // Touch screens: the backdrop sits in a fixed dark frame. The safe areas

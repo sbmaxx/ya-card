@@ -5,6 +5,7 @@ import { directions, direction } from './directions.js';
 import { encodePreset } from './preset.js';
 import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
 import { exported, params, textFields, lab } from './settings.js';
+import { showPoseSheet } from './poses.js';
 
 if (!exported) {
 const style = document.createElement('style');
@@ -201,7 +202,7 @@ panel.innerHTML = `
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
   </fieldset></div>
   <div class="actions"><button type="button" data-action="export">Скачать HTML</button><button type="button" data-action="share">Короткая ссылка</button></div>
-  <div class="actions"><button type="button" data-action="copy">Скопировать настройки</button></div>
+  <div class="actions"><button type="button" data-action="copy">Скопировать настройки</button><button type="button" data-action="poses">Свет по позам</button></div>
   <div class="actions"><button type="button" data-action="intro">Интро заново</button><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="hide">Скрыть</button></div>
   <p>H — скрыть/показать панель. Колесо — зум, перетаскивание — поворот, клик — переворот.</p>`;
 // Sections fold by their heading; which ones are folded is remembered.
@@ -412,6 +413,7 @@ panel.addEventListener('click', event => {
     if (action === 'reset') location.search = `edition=${direction.id}`;
     if (action === 'hide') setHidden(true);
     if (action === 'export') exportHtml();
+    if (action === 'poses') showPoseSheet();
     if (action === 'share') copyShortLink(event.target.closest('button'));
     if (action === 'copy') copySettings(event.target.closest('button'));
 });
