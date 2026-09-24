@@ -1,16 +1,18 @@
-# Studio metal editions
+# Studio metal lab
 
-Four finishes on the production card's contour and layout, rendered by a separate
-studio renderer. The production homepage (`webgl/renderer.js`, `webgl/engraving.js`)
-is not used by these pages and is unchanged.
+One page, `/variants/lab/`: four finishes on the production card's contour and
+layout, rendered by a separate studio renderer, with every setting in a demo panel.
+Settings are kept in the URL, so a look can be shared as a link, and «Скачать HTML»
+saves it as a standalone production file. The production homepage
+(`webgl/renderer.js`, `webgl/engraving.js`) is not used here and is unchanged.
 
-- `/variants/` — gallery with real renders (`previews/*.webp`, captured from `/lab/`).
-- `/variants/steel/` — linear brushed steel (same grain as gold), diamond V-cut logo, black enamel name.
-- `/variants/noir/` — black PVD; laser ablation exposes bare steel for the text and logo.
-- `/variants/gold/` — linear brushed champagne gold, V-cut logo, black enamel name.
-- `/variants/aurora/` — anodised titanium: thin-film interference (145–205 nm oxide).
-- `/variants/lab/` — demo stand: every edition and logo relief, live light, exposure,
-  bloom and idle motion. Settings are kept in the URL, so a look can be shared as a link.
+- Editions (`?edition=`): `steel` — linear brushed steel, diamond V-cut logo, black
+  enamel name; `noir` — black PVD, laser ablation to bare steel; `gold` — brushed
+  champagne gold; `aurora` — anodised titanium, thin-film interference.
+- Backdrops (`?backdrop=`): `studio` (graphite), `dark` (dark graphite), `beam`,
+  `gradient` (#3ED0FF → #A445FF, top to bottom).
+- The old gallery (`/variants/`) and edition pages (`/variants/steel/` …) are HTML
+  redirects to the lab.
 
 ## Rendering
 
@@ -58,8 +60,8 @@ stair-steps and broken creases of the 8-connected chamfer distance on diagonal s
 ## Build and publish
 
 Build: `node webgl/variants/build.mjs` from `webgl/`. Output: `webgl/dist/variants/`.
-Each page is a self-contained minified HTML (font, logos, favicons embedded) with
-`.gz`/`.br` siblings. `_sheet.html` in `dist/` is a local comparison helper only.
+The lab is a self-contained minified HTML (font, logos, favicons embedded) with
+`.gz`/`.br` siblings, plus the redirects, `plain/` (no WebGL 2) and `card.txt`.
 
 Published static directory: `/var/www/rozhdestvenskiy.ru/variants`. Each release lives
 in `/home/sbmaxx/ya-card-variants-<date>-NN` with `previous/` and `rollback.sh`.

@@ -109,11 +109,6 @@ style.textContent = direction.css + `
   font: 16px/26px -apple-system, sans-serif; cursor: pointer; margin-left: 10px; padding: 0; }
 .lab .close:hover { background: #ffffff26; }
 .lab h2 .meta { display: flex; align-items: center; }
-.backdrop-light .edition-link, .backdrop-light .links-overlay, .backdrop-light .links-overlay a { color: #1b1d22b3; }
-.backdrop-light .languages { border-color: #0000001f; background: #ffffff66; }
-.backdrop-light .languages a { color: #1b1d2299; }
-.backdrop-light .languages a + a { border-color: #0000001f; }
-.backdrop-light .languages a[aria-current] { background: #0000001a; color: #111; }
 .lab-dock { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 29;
   display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
 .lab-dock[hidden] { display: none; }
@@ -165,7 +160,7 @@ panel.innerHTML = `
     ${Object.values(directions).map(d => `<button type="button" data-value="${d.id}" aria-pressed="${d.id === direction.id}">${d.title}</button>`).join('')}
   </div></fieldset>
   <fieldset><legend>Фон</legend><div class="segments" data-live="backdrop">
-    ${Object.entries(BACKDROPS).filter(([id]) => id !== 'stage' || !matchMedia('(max-width: 700px)').matches).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b.title}</button>`).join('')}
+    ${Object.entries(BACKDROPS).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b.title}</button>`).join('')}
   </div></fieldset>
   <fieldset><legend>Композиция</legend><div class="segments" data-param="layout">
     <button type="button" data-value="classic" aria-pressed="${currentLayout === 'classic'}">Классика</button>
@@ -264,11 +259,10 @@ panel.querySelectorAll('.segments[data-param]').forEach(group => group.addEventL
     const button = event.target.closest('button');
     if (button && button.getAttribute('aria-pressed') !== 'true') reloadWith(group.dataset.param, button.dataset.value);
 }));
-// Backdrops are uniforms: they switch live, together with the page colour and UI tone.
+// Backdrops are uniforms: they switch live, together with the page colour.
 const applyBackdrop = id => {
     lab.backdrop = id;
     const backdrop = BACKDROPS[id];
-    document.documentElement.classList.toggle('backdrop-light', Boolean(backdrop && backdrop.light));
     // Page colour before the first frame; the renderer then matches the edges.
     document.documentElement.style.backgroundColor = backdrop ? backdrop.css : '';
     panel.querySelectorAll('[data-live="backdrop"] button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.value === id)));
@@ -377,7 +371,6 @@ async function exportHtml() {
     const doc = new DOMParser().parseFromString(source, 'text/html');
     const preset = new URLSearchParams(location.search);
     preset.delete('panel');
-    doc.querySelector('.edition-link')?.remove();
     doc.querySelector('meta[name="robots"]')?.remove();
     const boot = [...doc.head.querySelectorAll('script')].find(script => script.textContent.includes('cardBootTimeout'));
     if (boot) {

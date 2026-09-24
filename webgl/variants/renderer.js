@@ -214,27 +214,23 @@ vec3 toSRGB(vec3 c) {
 
 // Backdrops: rendered with the card, lit by the same key light and receiving
 // the card's real, blurred shadow; the room the metal reflects follows them.
-// `kind` selects a surface; its pattern is baked once into a texture.
-// `void` keeps the original CSS page background.
-const KIND = { plain: 0, stone: 1, marble: 2, velvet: 3, concrete: 4, beam: 5, stage: 6 };
+// `kind` selects a surface; the beam's haze is baked once into a texture.
+const KIND = { plain: 0, beam: 1, gradient: 2 };
 const tint = direction.tint || [.8, .85, 1];
+// Backdrops. `wall`/`floor`/`pool` are linear; for the gradient, `wall` is the
+// top colour and `floor` the bottom one. `roomHigh`/`roomLow` tint the walls
+// of the studio the metal reflects, so the plate picks up the backdrop.
 export const BACKDROPS = {
-    stage: { title: 'Сцена', kind: KIND.stage, wall: [.010, .011, .013], floor: [.004, .004, .005], pool: [.11, .115, .125],
-        accent: [0, 0, 0], grain: .018, shadow: .7, roomBase: .012, bounce: 1.0, css: '#08090b', light: false },
     studio: { title: 'Графит', kind: KIND.plain, wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
-        accent: [0, 0, 0], grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', light: false },
+        accent: [0, 0, 0], grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d' },
+    dark: { title: 'Тёмный графит', kind: KIND.plain, wall: [.016, .017, .020], floor: [.006, .0065, .008], pool: [.075, .077, .082],
+        accent: [0, 0, 0], grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f' },
     beam: { title: 'Луч', kind: KIND.beam, wall: [.010, .011, .014], floor: [.005, .005, .006], pool: tint.map(v => v * .05),
-        accent: tint.map(v => v * .55), grain: .02, shadow: .6, roomBase: .015, bounce: 1.1, css: '#07080b', light: false },
-    marble: { title: 'Мрамор', kind: KIND.marble, wall: [.020, .020, .022], floor: [.010, .010, .011], pool: [.10, .10, .10],
-        accent: [.30, .29, .27], grain: .012, shadow: .8, roomBase: .02, bounce: 1.1, css: '#0c0c0d', light: false },
-    velvet: { title: 'Бархат', kind: KIND.velvet, wall: [.006, .008, .020], floor: [.003, .004, .010], pool: [.03, .035, .07],
-        accent: [.06, .07, .15], grain: .014, shadow: .85, roomBase: .015, bounce: 1.0, css: '#070a16', light: false },
-    stone: { title: 'Камень', kind: KIND.stone, wall: [.034, .034, .036], floor: [.015, .015, .016], pool: [.13, .125, .12],
-        accent: [0, 0, 0], grain: .018, shadow: .82, roomBase: .018, bounce: 1.1, css: '#101112', light: false },
-    concrete: { title: 'Цемент', kind: KIND.concrete, wall: [.27, .255, .235], floor: [.17, .16, .15], pool: [.20, .19, .175],
-        accent: [0, 0, 0], grain: .016, shadow: .6, roomBase: .12, bounce: 1.6, css: '#8e8a84', light: true },
-    paper: { title: 'Бумага', kind: KIND.plain, wall: [.56, .55, .53], floor: [.40, .395, .38], pool: [.30, .29, .275],
-        accent: [0, 0, 0], grain: .014, shadow: .52, roomBase: .20, bounce: 1.9, css: '#c9c7c2', light: true }
+        accent: tint.map(v => v * .55), grain: .02, shadow: .6, roomBase: .015, bounce: 1.1, css: '#07080b' },
+    // #3ED0FF → #A445FF, top to bottom.
+    gradient: { title: 'Градиент', kind: KIND.gradient, wall: [0.0482, 0.6308, 1.0], floor: [0.3712, 0.0595, 1.0], pool: [.18, .18, .18],
+        accent: [0, 0, 0], grain: .012, shadow: .45, roomBase: .05, bounce: 1.1, css: '#7189ff', edges: ['3ed0ff', 'a445ff'],
+        roomHigh: [0.0482, 0.6308, 1.0], roomLow: [0.3712, 0.0595, 1.0] }
 };
 const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
 export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
@@ -287,8 +283,6 @@ uniform vec2 uBrushCenter;
 uniform vec3 uKeyDirection;
 uniform float uKeyGain;
 uniform vec3 uRaisedHeight;
-uniform float uMirror;
-uniform float uFloorY;
 uniform vec4 uLogoTint;
 uniform vec4 uNameTint;
 uniform vec4 uLogoFirstTint;
@@ -297,6 +291,8 @@ uniform vec4 uBodyTint;
 uniform vec4 uTintFinish;
 uniform float uTextMute;
 uniform float uRoomBase;
+uniform vec3 uRoomHigh;
+uniform vec3 uRoomLow;
 uniform float uBounce;
 in vec3 vPosition;
 in vec3 vNormal;
@@ -371,8 +367,7 @@ float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur, float roundne
 }
 
 vec3 room(vec3 world, float rough) {
-    // The floor reflection sees the room mirrored as well.
-    vec3 d = uRoom * (world * vec3(1.0, uMirror > .5 ? -1.0 : 1.0, 1.0));
+    vec3 d = uRoom * world;
     float blur = .004 + rough * rough * 1.5;
     // Dark floor, dim ceiling and a faint horizon for the side walls.
     vec3 col = mix(vec3(.006, .006, .007), vec3(.045, .047, .052), smoothstep(-.6, .9, d.y));
@@ -383,7 +378,7 @@ vec3 room(vec3 world, float rough) {
     float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02, uRoundLights);
     col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .82 * flag);
     // Light walls (the paper backdrop) surround the card with brighter room.
-    col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
+    col += uRoomBase * mix(uRoomLow, uRoomHigh, smoothstep(-.6, .6, d.y)) * smoothstep(-.9, .3, d.y);
     col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
     for (int i = 0; i < ${MAX_LIGHTS}; i++) {
         if (i >= uLightCount) break;
@@ -575,12 +570,6 @@ void main() {
         return;
     }
     vec3 display = toSRGB(neutralTonemap(hdr));
-    if (uMirror > .5) {
-        // Reflection in black acrylic: dim, fading with distance below the floor.
-        float fade = .40 * exp(-max(uFloorY - vPosition.y, 0.0) * 1.1) * uOpacity;
-        outColor = vec4(display * fade, fade);
-        return;
-    }
     outColor = vec4(display * uOpacity, uOpacity);
 }`;
 
@@ -678,58 +667,14 @@ float fbm(vec2 p) {
 // G accent (vein, pore, haze), BA the surface normal for raking light.
 const patternFragment = `#version 300 es
 precision highp float;
-uniform float uKind;
 uniform float uAspect;
 in vec2 vUV;
 out vec4 outColor;
 ${noiseCode}
-float height(vec2 q, float kind) {
-    if (kind < 1.5) return fbm(q * 3.2);                          // honed slate
-    if (kind < 2.5) return fbm(q * 1.4) * .15;                    // polished marble
-    if (kind < 3.5) return fbm(vec2(q.x * 2.0, q.y * 5.0)) * .25; // velvet nap
-    return fbm(q * 2.6) * .35;                                     // cement, soft trowel relief
-}
 void main() {
     vec2 q = (vUV - .5) * vec2(uAspect, 1.0);
-    float kind = uKind;
-    float albedo = .5, accent = 0.0;
-    float h = height(q, kind);
-    float e = .004;
-    vec2 grad = vec2(height(q + vec2(e, 0.0), kind) - h, height(q + vec2(0.0, e), kind) - h) / e;
-    if (kind > .5 && kind < 1.5) albedo = h;
-    if (kind > 1.5 && kind < 2.5) {
-        // Nero Marquina: domain-warped veins, a main family and fine cracks.
-        // Veins follow one diagonal grain, gently warped; thickness varies along them.
-        vec2 m = q * 1.1;
-        vec2 w = vec2(fbm(m * .8 + vec2(1.7, 9.2)), fbm(m * .8 + vec2(8.3, 2.8)));
-        float f = fbm(m + 1.3 * w);
-        float grain = m.x * .9 + m.y * .45 + f * 1.6;
-        float width = mix(.012, .055, fbm(m * 1.7 + 3.1));
-        float main = smoothstep(width, 0.0, abs(fract(grain * 1.9) - .5) - .006);
-        float branch = smoothstep(.012, 0.0, abs(fract((m.x * .4 - m.y * 1.1 + f * 2.2) * 1.3) - .5)) * .45;
-        albedo = .42 + .3 * fbm(m * 2.5 + 7.0);
-        // Veins fade in and out along their length, as in real stone.
-        accent = clamp(main * smoothstep(.35, .65, fbm(m * 2.2 + 2.0)) + branch * smoothstep(.45, .7, f), 0.0, 1.0);
-    }
-    if (kind > 2.5 && kind < 3.5) {
-        // Crushed velvet: large patches where the pile leans a different way.
-        albedo = .5 + .6 * (fbm(q * 1.3 + 3.0) - .5);
-        accent = noise(q * vec2(700.0, 260.0));
-    }
-    if (kind > 3.5 && kind < 4.5) {
-        // Micro-cement: soft trowel clouds and small pores.
-        albedo = fbm(q * 1.6 + 7.0);
-        // Sparse, tiny pores; rotated so their lattice never lines up with the screen.
-        vec2 r = mat2(.8, -.6, .6, .8) * q;
-        accent = smoothstep(.9, .97, noise(r * 330.0)) * smoothstep(.35, .65, fbm(q * 6.0 + 3.0));
-    }
-    if (kind > 4.5 && kind < 5.5) {
-        // Slow haze for the light beam.
-        albedo = fbm(q * vec2(1.4, 2.6) + 4.0);
-        accent = fbm(q * 4.0 + 9.0);
-    }
-    vec2 n = clamp(-grad * .5, -1.0, 1.0);
-    outColor = vec4(albedo, accent, n * .5 + .5);
+    // Slow haze for the light beam.
+    outColor = vec4(fbm(q * vec2(1.4, 2.6) + 4.0), fbm(q * 4.0 + 9.0), .5, .5);
 }`;
 
 const backdropFragment = `#version 300 es
@@ -747,9 +692,6 @@ uniform float uKind;
 uniform float uGrain;
 uniform float uShadowStrength;
 uniform float uShadowFade;
-uniform float uFocal;
-uniform float uFloorY;
-uniform vec2 uCardCenter;
 // Touch screens: the scene melts into flat edge colours that Safari extends
 // under its status bar and toolbar (fractions of height; 0 disables).
 uniform vec4 uEdgeFade;
@@ -768,22 +710,7 @@ vec3 wallColor(vec2 uv, vec2 p) {
     float pool = exp(-dot(d, d) * 2.6);
     color += uPoolColor * pool;
     vec4 pattern = texture(uPattern, uv);
-    vec3 n = normalize(vec3(pattern.ba * 2.0 - 1.0, 1.0));
-    vec3 k = normalize(uKeyDirection * vec3(1.0, 1.0, .35));
-    float rake = max(dot(n, k), 0.0);
-    if (uKind > .5 && uKind < 1.5) color *= (.78 + .44 * pattern.r) * (.72 + .56 * rake);
-    if (uKind > 1.5 && uKind < 2.5) {
-        color *= .75 + .5 * pattern.r;
-        // Polished veins catch the pool of light more than the dark ground.
-        color += uAccent * pattern.g * (.25 + 1.1 * pool);
-    }
-    if (uKind > 2.5 && uKind < 3.5) {
-        // Pile sheen: patches that face the light glow, fibres add a fine sparkle.
-        float sheen = pattern.r * (.25 + 1.3 * pool);
-        color = color * (.75 + .4 * pattern.r) + uAccent * sheen * (.8 + .4 * pattern.g);
-    }
-    if (uKind > 3.5 && uKind < 4.5) color *= (.9 + .18 * pattern.r) * (1.0 - .35 * pattern.g) * (.92 + .16 * rake);
-    if (uKind > 4.5 && uKind < 5.5) {
+    if (uKind > .5 && uKind < 1.5) {
         // A soft volumetric beam from the key, falling towards the card.
         vec2 origin = vec2(.5 + uKeyDirection.x * 1.3, .5 + uKeyDirection.y * 1.3 + .25);
         vec2 axis = normalize(vec2(.5, .48) - origin);
@@ -800,37 +727,24 @@ vec3 wallColor(vec2 uv, vec2 p) {
 void main() {
     float aspect = uResolution.x / uResolution.y;
     vec2 p = (vUV - .5) * vec2(aspect, 1.0);
-    vec3 color;
-    if (uKind > 5.5) {
-        // Stage: a camera ray either meets the glossy floor or the far wall.
-        vec2 ndc = vUV * 2.0 - 1.0;
-        vec3 dir = normalize(vec3(ndc.x * aspect / uFocal, ndc.y / uFocal, -1.0));
-        float t = dir.y < 0.0 ? uFloorY / dir.y : 1e6;
-        vec3 hit = vec3(0.0, 0.0, 7.0) + dir * t;
-        if (hit.z > -0.9) {
-            // Black acrylic: reflects the wall and pool, more at grazing angles.
-            vec3 r = vec3(dir.x, -dir.y, dir.z);
-            float tw = (-0.9 - hit.z) / r.z;
-            vec3 onWall = hit + r * tw;
-            vec2 wallUV = vec2(onWall.x * uFocal / (aspect * 7.9), onWall.y * uFocal / 7.9) * .5 + .5;
-            float fresnel = .04 + .96 * pow(1.0 - abs(dir.y), 5.0);
-            color = uFloor + wallColor(wallUV, p) * (.25 + .6 * fresnel);
-            // A soft pool of darkness right below the floating card.
-            vec2 under = vec2(hit.x - uCardCenter.x, hit.z) * vec2(.55, 1.1);
-            color *= 1.0 - .55 * exp(-dot(under, under) * 1.2) * uShadowFade;
-            // The far edge of the floor melts into the wall: no hard horizon line.
-            color = mix(wallColor(vUV, p), color, smoothstep(-.9, -.35, hit.z));
-        } else {
-            color = wallColor(vUV, p);
-        }
+    vec3 display;
+    if (uKind > 1.5) {
+        // Colour gradient, shown as specified: no tone mapping, a soft pool of
+        // light behind the card, a light vignette and the card's shadow.
+        vec3 color = mix(uFloor, uWall, smoothstep(0.0, 1.0, vUV.y));
+        vec2 d = (vUV - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
+        color *= 1.0 + uPoolColor * exp(-dot(d, d) * 2.6);
+        color *= 1.0 - .30 * smoothstep(.45, 1.3, length(p * vec2(.78, 1.0)));
+        color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
+        display = toSRGB(color);
     } else {
         // Cyclorama: the wall curves softly into a darker floor below the card.
         float floorAmount = smoothstep(-.12, -.62, p.y);
-        color = mix(wallColor(vUV, p), uFloor + (wallColor(vUV, p) - uWall) * .6, floorAmount);
+        vec3 color = mix(wallColor(vUV, p), uFloor + (wallColor(vUV, p) - uWall) * .6, floorAmount);
+        color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
+        color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
+        display = toSRGB(neutralTonemap(color));
     }
-    color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
-    color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
-    vec3 display = toSRGB(neutralTonemap(color));
     display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
     // Touch screens: the backdrop is only a core in the middle. Above and below
     // it ramps into the flat page colour, which continues under Safari's bars.
@@ -1168,13 +1082,13 @@ export class CardRenderer {
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uPattern', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uAccent', 'uKeyDirection', 'uKind', 'uGrain', 'uShadowStrength', 'uShadowFade', 'uFocal', 'uFloorY', 'uCardCenter', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom']);
-        this.patternUniforms = locate(this.patternProgram, ['uKind', 'uAspect']);
+            'uAccent', 'uKeyDirection', 'uKind', 'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom']);
+        this.patternUniforms = locate(this.patternProgram, ['uAspect']);
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uRoomHigh', 'uRoomLow', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1402,20 +1316,24 @@ export class CardRenderer {
         // One colour for both edges: whatever Safari samples for either bar —
         // the page, the scene or an edge strip — it gets the same colour, and the
         // scene ramps into exactly that colour at the top and at the bottom.
+        // The colour gradient ends in its own two colours instead.
+        const split = Boolean(backdrop.edges);
         const top = read(height * (1 - fade[0] - fade[2]) - 1), bottom = read(height * (fade[1] + fade[3]));
-        const edge = top.map((value, i) => Math.round((value + bottom[i]) / 2));
-        this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
-        if (edge.join() === this.edgeCss) return;
-        this.edgeCss = edge.join();
-        const color = `rgb(${edge.join(',')})`;
+        const shared = top.map((value, i) => (value + bottom[i]) / 2);
+        const hex = value => [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16));
+        const edges = (split ? backdrop.edges.map(hex) : [shared, shared]).map(color => color.map(Math.round));
+        this.edges = { fade, top: edges[0].map(v => v / 255), bottom: edges[1].map(v => v / 255) };
+        if (edges.join('|') === this.edgeCss) return;
+        this.edgeCss = edges.join('|');
+        const [topColor, bottomColor] = edges.map(color => `rgb(${color.join(',')})`);
         const root = document.documentElement;
-        root.style.backgroundColor = color;
-        document.body.style.backgroundColor = color;
+        root.style.backgroundColor = bottomColor;
+        document.body.style.backgroundColor = bottomColor;
         const scene = document.querySelector('.scene');
-        if (scene) scene.style.backgroundColor = color;
+        if (scene) scene.style.background = split ? `linear-gradient(${topColor} 50%, ${bottomColor} 50%)` : topColor;
         const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = color;
-        for (const side of ['top', 'bottom']) {
+        if (meta) meta.content = topColor;
+        for (const [side, color] of [['top', topColor], ['bottom', bottomColor]]) {
             let strip = document.querySelector(`.safe-edge-${side}`);
             if (!strip) {
                 strip = Object.assign(document.createElement('div'), { className: `safe-edge safe-edge-${side}` });
@@ -1449,7 +1367,6 @@ export class CardRenderer {
         gl.disable(gl.BLEND);
         gl.useProgram(this.patternProgram);
         gl.bindVertexArray(this.screenArray);
-        gl.uniform1f(this.patternUniforms.uKind, kind);
         gl.uniform1f(this.patternUniforms.uAspect, width / height);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         this.pattern = { kind, width, height, texture, framebuffer };
@@ -1661,11 +1578,11 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uExposure, look.studio.exposure * (lab ? lab.exposure : 1));
         gl.uniform3f(this.uniforms.uKeyDirection, ...this.keyDirection);
         gl.uniform1f(this.uniforms.uOpacity, introFade);
-        let backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
-        // The stage needs room below the card for its reflection; portrait has none.
-        if (backdrop && backdrop.kind === KIND.stage && this.vertical) backdrop = BACKDROPS.studio;
+        const backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
+        gl.uniform3fv(this.uniforms.uRoomHigh, (backdrop && backdrop.roomHigh) || [1, 1, 1]);
+        gl.uniform3fv(this.uniforms.uRoomLow, (backdrop && backdrop.roomLow) || [1, 1, 1]);
         gl.uniform1f(this.uniforms.uBounce, (backdrop ? backdrop.bounce : 1) * setup.bounce);
         const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.round;
         gl.uniform1f(this.uniforms.uRoundLights, (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1);
@@ -1676,7 +1593,6 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius);
         gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
         gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
-        gl.uniform1f(this.uniforms.uMirror, 0);
         const tintOf = hex => {
             if (!hex) return [0, 0, 0, 0];
             const linear = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
@@ -1692,10 +1608,6 @@ export class CardRenderer {
         const finishes = lab ? lab.finish : (direction.finish || {});
         gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
-        // Stage floor just below the card; it scales with the card, like a dolly.
-        const cardScale = this.zoom * fit;
-        this.floorY = -(this.height / 2 + .42) * cardScale;
-        gl.uniform1f(this.uniforms.uFloorY, this.floorY);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
@@ -1749,7 +1661,7 @@ export class CardRenderer {
                 pass(shadowB, shadowA, 0, radius);
             }
         }
-        if (backdrop && backdrop.kind !== KIND.plain) this.bakePattern(backdrop.kind);
+        if (backdrop && backdrop.kind === KIND.beam) this.bakePattern(backdrop.kind);
         // 3. Backdrop, then the card at full resolution with native MSAA.
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -1769,9 +1681,6 @@ export class CardRenderer {
             gl.uniform2f(u.uResolution, this.canvas.width, this.canvas.height);
             gl.uniform1f(u.uKind, backdrop.kind);
             gl.uniform3f(u.uAccent, ...backdrop.accent);
-            gl.uniform1f(u.uFocal, this.projection[5]);
-            gl.uniform1f(u.uFloorY, this.floorY);
-            gl.uniform2f(u.uCardCenter, this.model[12], 0);
             gl.uniform3f(u.uWall, ...backdrop.wall);
             gl.uniform3f(u.uFloor, ...backdrop.floor);
             gl.uniform3f(u.uPoolColor, ...backdrop.pool);
@@ -1793,21 +1702,6 @@ export class CardRenderer {
         }
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.program);
-        if (backdrop && backdrop.kind === KIND.stage) {
-            // The card mirrored in the floor plane, drawn faded over the floor.
-            const mirror = new Float32Array([1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 2 * this.floorY, 0, 1]);
-            gl.uniformMatrix4fv(this.uniforms.uModel, false, multiplyMatrices(mirror, this.model));
-            gl.uniform1f(this.uniforms.uMirror, 1);
-            gl.frontFace(gl.CW);
-            gl.enable(gl.BLEND);
-            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-            this.drawCard(0, null);
-            gl.disable(gl.BLEND);
-            gl.frontFace(gl.CCW);
-            gl.uniform1f(this.uniforms.uMirror, 0);
-            gl.uniformMatrix4fv(this.uniforms.uModel, false, this.model);
-            gl.clear(gl.DEPTH_BUFFER_BIT);
-        }
         this.drawCard(0, focusLink);
         // 4. Glow over the card and the page, screen-blended.
         gl.disable(gl.DEPTH_TEST);

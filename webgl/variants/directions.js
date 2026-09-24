@@ -30,7 +30,7 @@ const directions = {
         `
     },
     noir: {
-        id: 'noir', backdrop: 'stage', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
+        id: 'noir', backdrop: 'dark', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
         look: {
             plate: { f0: [.05, .051, .056], rough: .30, aniso: .22, brush: 'linear', coat: .012 },
             chamfer: { f0: [.94, .94, .96], rough: .025 },
@@ -73,7 +73,7 @@ const directions = {
         `
     },
     aurora: {
-        id: 'aurora', backdrop: 'velvet', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
+        id: 'aurora', backdrop: 'gradient', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
         look: {
             plate: { film: true, rough: .28, aniso: .18, brush: 'linear' },
             chamfer: { f0: [.62, .60, .58], rough: .03 },
