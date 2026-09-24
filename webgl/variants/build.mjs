@@ -46,7 +46,7 @@ const labCss = cornersCss + loaderCss;
 // One page: /lab/, every edition behind the demo panel.
 {
     const js = await build({
-        stdin: { contents: "import './lab.js';\nimport '../app.js';", resolveDir: here, loader: 'js' },
+        stdin: { contents: "import './preset.js';\nimport './lab.js';\nimport '../app.js';", resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
         format: 'iife', platform: 'browser', target: 'es2020', legalComments: 'none', charset: 'utf8',
         define: { __CARD_VARIANT__: JSON.stringify('lab') },

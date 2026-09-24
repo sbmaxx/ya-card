@@ -2,6 +2,7 @@
 // Edition and relief rebuild the shader, so they reload; the rest is live.
 // All settings live in the URL, so a particular look can be shared as a link.
 import { directions, direction } from './directions.js';
+import { encodePreset } from './preset.js';
 import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
 
 // An exported file carries its settings as a preset and shows no panel.
@@ -227,7 +228,7 @@ panel.innerHTML = `
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
   </fieldset></div>
-  <div class="actions"><button type="button" data-action="export">Скачать HTML</button></div>
+  <div class="actions"><button type="button" data-action="export">Скачать HTML</button><button type="button" data-action="share">Короткая ссылка</button></div>
   <div class="actions"><button type="button" data-action="intro">Интро заново</button><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="hide">Скрыть</button></div>
   <p>H — скрыть/показать панель. Колесо — зум, перетаскивание — поворот, клик — переворот.</p>`;
 const toggle = document.createElement('button');
@@ -239,10 +240,12 @@ toggle.setAttribute('aria-label', 'Показать панель демо-сте
 // Collapsed dock: the panel toggle (with fps) and, under it, the export.
 const download = Object.assign(document.createElement('button'), { className: 'lab-download', type: 'button', textContent: 'Скачать HTML' });
 download.addEventListener('click', () => exportHtml());
+const share = Object.assign(document.createElement('button'), { className: 'lab-download', type: 'button', textContent: 'Короткая ссылка' });
+share.addEventListener('click', () => copyShortLink(share));
 const dock = document.createElement('div');
 dock.className = 'lab-dock';
 dock.hidden = true;
-dock.append(toggle, download);
+dock.append(toggle, download, share);
 document.body.append(panel, dock);
 // Pointer movement over the panel must not tilt the card.
 for (const type of ['pointermove', 'pointerdown', 'wheel']) panel.addEventListener(type, event => event.stopPropagation());
@@ -370,6 +373,7 @@ panel.addEventListener('click', event => {
     if (action === 'reset') location.search = `edition=${direction.id}`;
     if (action === 'hide') setHidden(true);
     if (action === 'export') exportHtml();
+    if (action === 'share') copyShortLink(event.target.closest('button'));
 });
 toggle.addEventListener('click', () => setHidden(false));
 // On phones the panel starts collapsed; the choice is kept across reloads within the session.
@@ -385,6 +389,23 @@ window.addEventListener('keydown', event => {
 // Export: this page's own self-contained HTML with the current settings baked
 // in as a preset, without the panel, navigation or noindex; the accessible HTML
 // copy of the card gets the edited text and serves as the no-WebGL fallback.
+// Every setting as one short code; custom card text travels as plain parameters.
+async function copyShortLink(button) {
+    writeUrl();
+    const params = new URLSearchParams(location.search);
+    const extra = new URLSearchParams();
+    for (const [key] of textFields) if (lab.text[key]) extra.set(key, lab.text[key]);
+    const url = `${location.origin}${location.pathname}?c=${encodePreset(params)}${extra.size ? `&${extra}` : ''}${location.hash}`;
+    const label = button.textContent;
+    try {
+        await navigator.clipboard.writeText(url);
+        button.textContent = 'Скопировано';
+    } catch {
+        prompt('Короткая ссылка', url);
+    }
+    setTimeout(() => { button.textContent = label; }, 1600);
+}
+
 async function exportHtml() {
     writeUrl();
     const source = await (await fetch(location.pathname, { cache: 'no-store' })).text();
