@@ -372,11 +372,12 @@ vec3 room(vec3 world, float rough) {
     // tilt slides it off gradually instead of leaving the plate facing an
     // unlit room.
     float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(1.35, 1.05), blur + .22, uRoundLights);
-    // Two soft side flats past it, about 70° to either side: a card turned
-    // far by hand still mirrors a lit wall, not a dark band across the plate.
-    float sides = panel(d, vec3(.94, 0.0, .34), vec3(.34, 0.0, -.94), vec3(0.0, 1.0, 0.0), vec2(1.1, 1.0), blur + .40, 1.0)
-        + panel(d, vec3(-.94, 0.0, .34), vec3(.34, 0.0, .94), vec3(0.0, 1.0, 0.0), vec2(1.1, 1.0), blur + .40, 1.0);
-    col += vec3(${f(studio.bounce)}) * uBounce * (bounce + .7 * sides);
+    // An even lit wall all around at eye level, a little dimmer than the
+    // bounce. Taking the brighter of the two, a turned card's reflection
+    // falls from the bounce to the wall and never through a darker gap, so
+    // no shadow band runs across the plate at any angle.
+    float wall = .45 * (1.0 - smoothstep(.45, .95, abs(d.y)));
+    col += vec3(${f(studio.bounce)}) * uBounce * max(bounce, wall);
     // Light walls (the paper backdrop) surround the card with brighter room.
     col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
     col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
