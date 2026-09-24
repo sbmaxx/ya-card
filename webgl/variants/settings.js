@@ -52,6 +52,8 @@ export const lab = globalThis.__cardLab = {
     bodyWeight: number('bodyWeight', 400) >= 450 ? 500 : 400,
     // Role and contacts: px added to their size (12.5–13 px).
     bodySize: number('bodySize', 0),
+    // Plate finish: 0 brushed, 1 bead-blasted, 2 polished.
+    plateFinish: Math.max(0, Math.min(2, Math.round(number('plateFinish', 0)))),
     bodyDepth: number('bodyDepth', 1),
     bodyTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),

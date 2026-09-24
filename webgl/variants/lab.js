@@ -147,6 +147,9 @@ panel.innerHTML = `
   <fieldset><legend>Материал</legend><div class="segments" data-param="edition">
     ${Object.values(directions).map(d => `<button type="button" data-value="${d.id}" aria-pressed="${d.id === direction.id}">${d.title}</button>`).join('')}
   </div></fieldset>
+  <fieldset><legend>Отделка пластины</legend><div class="segments" data-live="finish">
+    ${['Шлифовка', 'Пескоструй', 'Полировка'].map((title, i) => `<button type="button" data-value="${i}" aria-pressed="${i === lab.plateFinish}">${title}</button>`).join('')}
+  </div></fieldset>
   <fieldset><legend>Фон</legend><div class="segments" data-live="backdrop">
     ${Object.entries(BACKDROPS).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b.title}</button>`).join('')}
   </div></fieldset>
@@ -270,7 +273,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -353,6 +356,13 @@ panel.querySelectorAll('[data-tint]').forEach(row => {
         writeUrl();
     });
     showTint(row);
+});
+panel.querySelector('[data-live="finish"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.plateFinish = Number(button.dataset.value);
+    panel.querySelectorAll('[data-live="finish"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    writeUrl();
 });
 panel.querySelector('[data-live="lightSetup"]').addEventListener('click', event => {
     const button = event.target.closest('button');
@@ -458,7 +468,7 @@ function describeSettings() {
     };
     const lines = [
         'Визитка — настройки стенда',
-        `Материал: ${direction.title} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${currentLayout === 'accent' ? 'акцент на имени' : 'классика'} · размер карточки: ${n(lab.cardSize)}`,
+        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${currentLayout === 'accent' ? 'акцент на имени' : 'классика'} · размер карточки: ${n(lab.cardSize)}`,
         `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,

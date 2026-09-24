@@ -291,6 +291,8 @@ uniform float uTextMute;
 uniform float uLetterGlow;
 // Lettering gloss: x logo, y name, z role and contacts (1 — as finished, 0 — matte).
 uniform vec3 uGloss;
+// Plate finish: 0 brushed, 1 bead-blasted, 2 polished.
+uniform float uFinish;
 // Colour density: x first letter, y wordmark, z name, w role and contacts (1 — opaque).
 uniform vec4 uTintAmount;
 uniform float uRoomBase;
@@ -639,15 +641,27 @@ void main() {
         float grooves = layer1 * .8 + layer2 * .6 + bundles * .9 + bands * .6 + deep * .7;
         // The sheet's sheen is a touch uneven over a fifth of the card.
         float sheen = cloud(surfacePx / 170.0) - .5;
+        // Finish. Brushed: the grain above. Bead-blasted: an even frost with no
+        // direction, rougher. Polished: nearly a mirror, the grain gone.
+        float blasted = 1.0 - step(.5, abs(uFinish - 1.0));
+        float polished = step(1.5, uFinish);
+        float brushing = 1.0 - blasted - polished;
+        grooves *= brushing;
         float plateRough = ${f(plate.rough)} * (1.0 + grooves * .12 + sheen * .16);
+        plateRough = mix(mix(plateRough, .44 * (1.0 + sheen * .12), blasted), .055 * (1.0 + sheen * .3), polished);
+        float plateAniso = ${f(plate.aniso)} * brushing;
         float nv = max(dot(n, v), 1e-3);
         ${plate.film ? 'vec3 plateF0 = filmF0(nv, vUV);' : 'vec3 plateF0 = PLATE_F0;'}
         // Bundles lie at slightly different angles across the grain (~1–2°): a
         // passing highlight breaks into streaks over them, as on real brushed
         // steel, while away from the highlights the metal stays calm.
-        vec3 plateN = normalize(n + across * (layer2 * .3 + bundles + bands * .6) * .035);
-        color = fresnel(plateF0, nv) * brushed(plateN, v, across, plateRough, ${f(plate.aniso)}, 1.0);
-        color *= 1.0 + grooves * .05 + sheen * .05;
+        vec3 plateN = normalize(n + across * (layer2 * .3 + bundles + bands * .6) * .035 * brushing);
+        // Blasting leaves tiny dents tilted every way: a fine, even frost.
+        vec2 frost = vec2(cloud(surfacePx * 1.1) - .5, cloud(surfacePx * 1.1 + 91.0) - .5) * (1.0 - smoothstep(.25, .6, fine * 1.1))
+                   + vec2(cloud(surfacePx * .45 + 13.0) - .5, cloud(surfacePx * .45 + 57.0) - .5) * .35;
+        plateN = normalize(plateN + (T * frost.x + B * frost.y) * .04 * blasted);
+        color = fresnel(plateF0, nv) * brushed(plateN, v, across, plateRough, plateAniso, 1.0);
+        color *= 1.0 + grooves * .05 + sheen * mix(.05, .02, polished) + frost.x * .02 * blasted;
         ${plate.coat ? `
         // PVD coatings keep a faint clear reflection above the dark metal.
         color += ${f(plate.coat)} * roomFor(reflect(-v, n), .10, 1.0);` : ''}
@@ -719,7 +733,7 @@ void main() {
                 || min(min(uTintAmount.x, uTintAmount.y), min(uTintAmount.z, uTintAmount.w)) < .999) {
                 float fv = max(dot(facet, v), 1e-3);
                 ${plate.film ? 'vec3 letterF0 = filmF0(fv, vUV);' : 'vec3 letterF0 = PLATE_F0;'}
-                plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, ${f(plate.aniso)}, 1.0) * (1.0 + grooves * .05);
+                plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, plateAniso, 1.0) * (1.0 + grooves * .05);
                 ${plate.coat ? `plateLetter += ${f(plate.coat)} * roomFor(reflect(-v, facet), .10, 1.0);` : ''}
             }
             // The first letter of the wordmark is drawn red-only in the mask.
@@ -1298,7 +1312,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1807,6 +1821,7 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uLetterGlow, lab ? lab.letterGlow : (direction.letterGlow ?? 1));
         gl.uniform4f(this.uniforms.uTintAmount, ...(lab ? ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - lab[`${key}Sheer`]) : [1, 1, 1, 1]));
         gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));
+        gl.uniform1f(this.uniforms.uFinish, lab ? lab.plateFinish : 0);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
