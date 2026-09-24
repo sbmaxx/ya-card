@@ -2,7 +2,7 @@
 // Edition and relief rebuild the shader, so they reload; the rest is live.
 // All settings live in the URL, so a particular look can be shared as a link.
 import { directions, direction } from './directions.js';
-import { currentLogoShape, currentLayout, BACKDROPS } from './renderer.js';
+import { currentLogoShape, currentNameShape, currentLayout, BACKDROPS } from './renderer.js';
 
 const params = new URLSearchParams(location.search);
 const number = (key, fallback) => {
@@ -14,6 +14,8 @@ const lab = globalThis.__cardLab = {
     bloom: number('bloom', .45),
     idle: number('idle', 1),
     gyro: number('gyro', 1),
+    logoDepth: number('logoDepth', 1),
+    nameDepth: number('nameDepth', 1),
     backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : 'studio',
     manualLight: params.get('light') === 'manual',
     yaw: number('yaw', 0),
@@ -23,7 +25,7 @@ const lab = globalThis.__cardLab = {
 const style = document.createElement('style');
 style.textContent = direction.css + `
 .lab { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 30;
-  width: 272px; max-height: calc(100svh - 32px); overflow: auto; padding: 14px 14px 12px; border-radius: 14px;
+  width: 300px; max-height: calc(100svh - 32px); overflow: auto; padding: 14px 14px 12px; border-radius: 14px;
   background: #0b0d12d9; border: 1px solid #ffffff1c; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   color: #e8ebf0; font: 12px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; box-shadow: 0 12px 40px #0008; }
 .lab[hidden] { display: none; }
@@ -32,7 +34,8 @@ style.textContent = direction.css + `
 .lab h2 output { letter-spacing: 0; text-transform: none; font-variant-numeric: tabular-nums; color: #cfd6df; }
 .lab fieldset { border: 0; margin: 0 0 12px; padding: 0; }
 .lab legend { padding: 0; margin-bottom: 6px; color: #9aa3b0; }
-.lab .segments { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; padding: 2px; border-radius: 8px; background: #ffffff10; }
+.lab .segments { display: flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 8px; background: #ffffff10; }
+.lab .segments button { flex: 1 1 auto; white-space: nowrap; }
 .lab .segments button { appearance: none; border: 0; border-radius: 6px; padding: 7px 4px; background: transparent; color: #c2c9d3; font: inherit; cursor: pointer; }
 .lab .segments button:hover { background: #ffffff12; }
 .lab .segments button[aria-pressed="true"] { background: #ffffff2b; color: #fff; }
@@ -94,7 +97,14 @@ panel.innerHTML = `
   </div></fieldset>
   <fieldset><legend>Логотип</legend><div class="segments" data-param="relief">
     ${Object.entries(labels).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentLogoShape}">${label}</button>`).join('')}
-  </div></fieldset>
+  </div>
+    <label class="range" style="margin-top:8px">Глубина логотипа <output data-for="logoDepth"></output><input type="range" name="logoDepth" min="0" max="3" step=".05" value="${lab.logoDepth}"></label>
+  </fieldset>
+  <fieldset><legend>Имя <span style="color:#6f7884">· «Материал» — эмаль или лазер из пресета</span></legend><div class="segments" data-param="name">
+    ${Object.entries({ edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentNameShape}">${label}</button>`).join('')}
+  </div>
+    <label class="range" style="margin-top:8px">Глубина имени <output data-for="nameDepth"></output><input type="range" name="nameDepth" min="0" max="3" step=".05" value="${lab.nameDepth}"></label>
+  </fieldset>
   <div class="tuning"><fieldset><legend>Свет</legend>
     <label class="check"><input type="checkbox" name="manual" ${lab.manualLight ? 'checked' : ''}> Стоп-кадр света</label>
     <label class="range">Поворот <output data-for="yaw"></output><input type="range" name="yaw" min="-1.2" max="1.2" step=".01" value="${lab.yaw}"></label>
@@ -123,8 +133,9 @@ const writeUrl = () => {
     next.set('edition', direction.id);
     next.set('relief', currentLogoShape);
     next.set('layout', currentLayout);
+    next.set('name', currentNameShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     history.replaceState(null, '', `?${next}${location.hash}`);
 };
@@ -152,6 +163,7 @@ panel.querySelector('[data-live="backdrop"]').addEventListener('click', event =>
     if (button) { applyBackdrop(button.dataset.value); writeUrl(); }
 });
 applyBackdrop(lab.backdrop);
+let reliefQueued = false;
 const showValue = input => { panel.querySelector(`output[data-for="${input.name}"]`).textContent = Number(input.value).toFixed(2); };
 panel.querySelectorAll('input[type=range]').forEach(input => {
     showValue(input);
@@ -163,6 +175,11 @@ panel.querySelectorAll('input[type=range]').forEach(input => {
             panel.querySelector('input[name=manual]').checked = true;
         }
         showValue(input);
+        // Depth changes rebuild the relief maps (a few ms), once per frame at most.
+        if (input.name.endsWith('Depth') && !reliefQueued) {
+            reliefQueued = true;
+            requestAnimationFrame(() => { reliefQueued = false; globalThis.__cardRenderer?.buildRelief(); });
+        }
         writeUrl();
     });
 });

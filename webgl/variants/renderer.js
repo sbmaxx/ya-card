@@ -18,7 +18,26 @@ const LOGO_SHAPES = {
 const requestedShape = new URLSearchParams(location.search).get('relief');
 const logoShape = Object.hasOwn(LOGO_SHAPES, requestedShape) ? requestedShape : direction.relief.logo;
 export const currentLogoShape = logoShape;
-const reliefProfiles = { logo: LOGO_SHAPES[logoShape], name: { shape: 'deboss', ...direction.relief.name } };
+// Name relief: `edition` keeps the finish's own process (enamel, ablation…);
+// the others cut or raise the name in the same polished metal as the logo.
+const NAME_SHAPES = {
+    edition: null,
+    vcut: { shape: 'vcut', depth: .9, bevel: 2.0 },
+    deboss: { shape: 'deboss', depth: .7, bevel: .55 },
+    raised: { shape: 'raised', depth: .7, bevel: .55 }
+};
+const requestedName = new URLSearchParams(location.search).get('name');
+const nameShape = Object.hasOwn(NAME_SHAPES, requestedName) ? requestedName : 'edition';
+export const currentNameShape = nameShape;
+const nameLook = nameShape === 'edition' ? look.name : look.logo;
+const baseProfiles = { logo: LOGO_SHAPES[logoShape], name: NAME_SHAPES[nameShape] || { shape: 'deboss', ...direction.relief.name } };
+// Depth multipliers from the demo stand; relief maps are rebuilt live.
+const reliefProfiles = () => {
+    const lab = globalThis.__cardLab;
+    const scale = (profile, k) => ({ ...profile, depth: profile.depth * k });
+    return { logo: scale(baseProfiles.logo, lab ? lab.logoDepth : 1), name: scale(baseProfiles.name, lab ? lab.nameDepth : 1) };
+};
+const occlusion = shape => shape === 'vcut' ? '.42' : shape === 'deboss' ? '.55' : null;
 
 const between = (min, max) => min + Math.random() * (max - min);
 const variation = {
@@ -148,6 +167,7 @@ uniform vec4 uFocusRect;
 uniform float uLogoScale;
 uniform vec2 uBrushCenter;
 uniform vec3 uKeyDirection;
+uniform vec2 uRaisedHeight;
 uniform float uRoomBase;
 uniform float uBounce;
 in vec3 vPosition;
@@ -162,7 +182,7 @@ const float PI = 3.14159265;
 ${material('CHAMFER', look.chamfer)}
 ${material('SIDE', look.side)}
 ${material('LOGO', look.logo)}
-${material('NAME', look.name)}
+${material('NAME', nameLook)}
 ${material('TEXT', look.text)}
 ${plate.f0 ? `const vec3 PLATE_F0 = ${v3(plate.f0)};` : ''}
 
@@ -311,24 +331,28 @@ void main() {
         float focusStroke = min(1.0, focusInside.x * focusInside.y
             * ((1.0 - step(focusThickness.x, focusEdge.x)) + (1.0 - step(focusThickness.y, focusEdge.y))));
 
-        ${logoShape === 'raised' ? `
+        ${logoShape === 'raised' || nameShape === 'raised' ? `
         // Applied letters stand proud of the plate and throw a short, soft
         // shadow away from the key light onto the surrounding metal.
         vec3 L = normalize(uKeyDirection);
         vec2 lightSlope = vec2(dot(L, T), dot(L, B)) / max(dot(L, n), .35);
-        vec2 castStep = lightSlope * ${f(LOGO_SHAPES.raised.depth)} * 1.6 * uLogoScale / uLayoutSize;
+        vec4 pad = vec4(-6.0, -6.0, 6.0, 6.0) / uLayoutSize.xyxy;
+        float nearLogo = inRect(uLogoRect + pad);
+        float nearName = inRect(uTitleRect + pad) * (1.0 - nearLogo);
+        float raisedHeight = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x;
+        vec2 castStep = lightSlope * raisedHeight * 1.6 / uLayoutSize;
         float occluder = texture(uEngraving, vUV + castStep * .5).a * .45
                        + texture(uEngraving, vUV + castStep).a * .35
                        + texture(uEngraving, vUV + castStep * 1.8).a * .20;
-        float nearLogo = inRect(uLogoRect + vec4(-6.0, -6.0, 6.0, 6.0) / uLayoutSize.xyxy);
-        color *= 1.0 - occluder * (1.0 - ink.a) * .6 * nearLogo * resolved;` : ''}
+        color *= 1.0 - occluder * (1.0 - ink.a) * .6 * step(.001, raisedHeight) * resolved;` : ''}
         float coverage = max(ink.a, max(underline, focusStroke));
         if (coverage > .001) {
             ${letteringCode('logo', look.logo)}
-            ${logoShape === 'raised' ? '' : `
+            ${occlusion(logoShape) ? `
             // Recessed logo: the floor sees less of the room than the plate.
-            logoColor *= mix(1.0, ${logoShape === 'vcut' ? '.42' : '.55'}, depth);`}
-            ${letteringCode('name', look.name)}
+            logoColor *= mix(1.0, ${occlusion(logoShape)}, depth);` : ''}
+            ${letteringCode('name', nameLook)}
+            ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
             ${letteringCode('text', look.text, true)}
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
             // Links are always drawn with the body-text process.
@@ -431,6 +455,7 @@ uniform vec3 uWall;
 uniform vec3 uFloor;
 uniform vec3 uPoolColor;
 uniform vec3 uKeyDirection;
+uniform vec2 uRaisedHeight;
 uniform float uGrain;
 uniform float uStone;
 uniform float uShadowStrength;
@@ -754,13 +779,14 @@ export class CardRenderer {
         this.halfThickness = HALF_THICKNESS;
         this.images = images;
         [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
+        if (globalThis.__cardLab) globalThis.__cardRenderer = this;
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
             'uKeyDirection', 'uGrain', 'uStone', 'uShadowStrength', 'uShadowFade']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce']
+            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -959,9 +985,20 @@ export class CardRenderer {
             return texture;
         };
         this.textures = this.surfaces.map(({ canvas }) => upload(canvas));
+        this.upload = upload;
+        this.buildRelief();
+    }
+
+    // Relief maps only; the demo stand calls this when a depth slider moves.
+    buildRelief() {
+        const gl = this.gl;
+        this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
+        const profiles = reliefProfiles();
+        this.raisedHeight = [profiles.name.shape === 'raised' ? profiles.name.depth : 0,
+            profiles.logo.shape === 'raised' ? profiles.logo.depth : 0];
         this.engravingTextures = this.surfaces.map(surface => {
-            const relief = createReliefMap(surface, reliefProfiles);
-            return upload(relief.data, relief.width, relief.height);
+            const relief = createReliefMap(surface, profiles);
+            return this.upload(relief.data, relief.width, relief.height);
         });
     }
 
@@ -1090,6 +1127,7 @@ export class CardRenderer {
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
+        gl.uniform2f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
