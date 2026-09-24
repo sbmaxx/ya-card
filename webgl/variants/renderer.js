@@ -36,7 +36,7 @@ const BODY_SHAPES = {
     edition: null,
     vcut: { shape: 'vcut', depth: .5, bevel: 1.1 },
     deboss: { shape: 'deboss', depth: .4, bevel: .4 },
-    raised: { shape: 'raised', depth: .4, bevel: .4 }
+    raised: { shape: 'raised', depth: .4, bevel: .3 }
 };
 const requestedBody = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('body');
 const bodyShape = Object.hasOwn(BODY_SHAPES, requestedBody) ? requestedBody : 'edition';
@@ -196,7 +196,10 @@ const toneCode = `vec3 neutralTonemap(vec3 color) {
     const float desaturation = .15;
     float x = min(color.r, min(color.g, color.b));
     float offset = x < .08 ? x - 6.25 * x * x : .04;
-    color -= offset;
+    // The toe takes the same amount from every channel, which empties the
+    // weakest one in deep shadow: dark gold turned brick red. Take it in
+    // proportion instead: identical on grey, the hue kept on coloured metal.
+    color -= offset * color / max(max(color.r, max(color.g, color.b)), 1e-5);
     float peak = max(color.r, max(color.g, color.b));
     if (peak < start) return color;
     const float d = 1.0 - start;
@@ -501,7 +504,15 @@ void main() {
         float titleRegion = inRect(uTitleRect) * (1.0 - logoRegion);
         float textRegion = 1.0 - logoRegion - titleRegion;
         float engraved = clamp(relief.a / max(ink.a, .001), 0.0, 1.0);
-        vec2 slopeXY = (relief.rg * 255.0 - 128.0) / 127.0 * resolved;
+        // Role and contacts are 12–13 px: at their usual size a stroke is about a
+        // pixel wide and mostly bevel, so the bevel split each letter into light
+        // and dark outlines. Their relief shows only once the plate is magnified
+        // (zoom, a phone held close); until then they read as clean print, with
+        // the raised shadow for depth. The bigger type keeps its full relief.
+        // Letters in the plate's own material are read by their relief alone: keep it.
+        float smallRelief = uBodyTint.a > 1.5 ? resolved : 1.0 - smoothstep(.35, .7, footprint);
+        float reliefShown = mix(resolved, smallRelief, textRegion);
+        vec2 slopeXY = (relief.rg * 255.0 - 128.0) / 127.0 * reliefShown;
         float slope = length(slopeXY);
         vec3 facet = normalize(T * slopeXY.x + B * slopeXY.y + n * sqrt(max(.01, 1.0 - dot(slopeXY, slopeXY))));
         float depth = relief.b;
