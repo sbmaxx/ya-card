@@ -5,7 +5,8 @@ import { direction } from './directions.js';
 // Studio renderer for the material editions. WebGL 2, linear HDR shading,
 // an analytic studio environment (no textures, no requests), Khronos PBR
 // Neutral tone mapping and a quarter-resolution bloom on real highlights.
-const HALF_THICKNESS = .026, CHAMFER = .015, portraitHeight = 460;
+// Portrait plate: the original card's 320 × 545 (src/Card/Card.css) on a 300 px wide layout.
+const HALF_THICKNESS = .026, CHAMFER = .015, portraitHeight = 511;
 const look = direction.look;
 
 // Logo relief: a chiselled V, a flat-floored recess or applied raised letters.
@@ -1052,9 +1053,9 @@ function cardContent(lang) {
     };
 }
 
-function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
+function textureCanvas(lang, vertical, logo, maxSize) {
     const plan = LAYOUTS[currentLayout][vertical ? 'portrait' : 'landscape'];
-    const width = vertical ? 300 : 545, height = vertical ? (compact ? 460 : portraitHeight) : 300;
+    const width = vertical ? 300 : 545, height = vertical ? portraitHeight : 300;
     const data = cardContent(lang);
     const canvas = document.createElement('canvas');
     const textureSize = length => Math.min(maxSize, 2 ** Math.ceil(Math.log2(length * 2.5)));
@@ -1350,7 +1351,6 @@ export class CardRenderer {
         this.viewportHeight = Math.max(1, rect.height);
         const touchLandscape = matchMedia('(pointer: coarse) and (orientation: landscape)').matches;
         const vertical = innerWidth <= 700 && !touchLandscape;
-        const compact = vertical && Math.max(screen.width, screen.height) < 740;
         this.touchLandscape = touchLandscape;
         // Safe-area insets in CSS px, read from a probe styled with env().
         let probe = document.querySelector('.safe-probe');
@@ -1363,8 +1363,10 @@ export class CardRenderer {
         }
         const insets = getComputedStyle(probe);
         this.safeInsets = { top: parseFloat(insets.paddingTop) || 0, bottom: parseFloat(insets.paddingBottom) || 0 };
-        if (vertical !== this.vertical || compact !== this.compact) this.rebuild(vertical, compact);
-        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : vertical ? 360 : 684;
+        if (vertical !== this.vertical) this.rebuild(vertical);
+        // Desktop draws the plate at a fixed pixel size: the original card's
+        // 545 px wide (320 px in a narrow window) at the default card size .8.
+        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : (vertical ? 320 : 545) / .8;
         const focalLength = this.fixedCardWidth
             ? 14 * this.fixedCardWidth / (this.width * this.viewportHeight) : undefined;
         this.projection = projectionMatrix(this.aspect, focalLength);
@@ -1473,16 +1475,14 @@ export class CardRenderer {
         this.targets = [];
     }
 
-    rebuild(vertical, compact = false) {
+    rebuild(vertical) {
         const gl = this.gl;
         this.buffers.forEach(buffer => gl.deleteBuffer(buffer));
         this.arrays.forEach(array => gl.deleteVertexArray(array));
         this.textures.forEach(texture => gl.deleteTexture(texture));
         this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
         this.vertical = vertical;
-        this.compact = compact;
-        const layoutHeight = compact ? 460 : portraitHeight;
-        this.width = vertical ? 4.235 * 300 / layoutHeight : 4.235;
+        this.width = vertical ? 4.235 * 300 / portraitHeight : 4.235;
         this.height = vertical ? 4.235 : 2.333;
         this.outline = roundedOutline(this.width, this.height, vertical);
         const meshes = geometry(this.width, this.height, vertical);
@@ -1503,7 +1503,7 @@ export class CardRenderer {
         });
         gl.bindVertexArray(null);
         const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], maxSize, compact));
+        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], maxSize));
         const upload = (source, width, height) => {
             const texture = gl.createTexture();
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -1525,7 +1525,7 @@ export class CardRenderer {
 
     // Card text changed on the demo stand: redraw textures, relief and links.
     refreshText() {
-        this.rebuild(this.vertical, this.compact);
+        this.rebuild(this.vertical);
     }
 
     // Relief maps only; the demo stand calls this when a depth slider moves.
@@ -1652,24 +1652,22 @@ export class CardRenderer {
             this.lift += (targetLift - this.lift) * blend;
         }
         const pixelsPerUnit = this.viewportHeight * this.projection[5] / 14;
-        const fit = this.fixedCardWidth
-            ? Math.min(1, Math.max(1, this.viewportWidth - (this.vertical ? 56 : 96)) * .9 / (this.width * pixelsPerUnit),
-                Math.max(1, this.viewportHeight - 192) * .9 / (this.height * pixelsPerUnit))
-            : this.touchLandscape
-            ? Math.min((this.viewportWidth - 64) / (this.width * pixelsPerUnit),
-                (this.viewportHeight - 108) / (this.height * pixelsPerUnit))
-            : this.vertical ? Math.min(1, (this.viewportWidth - 56) / (this.width * pixelsPerUnit))
-                : Math.min(1, this.aspect * 1.23) * .81;
-        // The lab's card size scales the fitted card (default .8 of the fit).
-        // Touch screens show it 15% larger, but never beyond the fit itself.
+        // The lab's card size scales the plate; the default .8 is the original size.
         const size = lab ? lab.cardSize : (direction.cardSize ?? .8);
-        const cardSize = this.fixedCardWidth ? size : Math.min(1, size * 1.15);
+        const wide = this.width * pixelsPerUnit, tall = this.height * pixelsPerUnit;
+        // The original card's size — 545 × 300 px, 320 × 545 upright (narrow
+        // windows, phones) — shrunk as a whole only where the screen is smaller.
+        const target = (this.vertical ? 320 : 545) * size / .8;
+        const insets = this.safeInsets ? this.safeInsets.top + this.safeInsets.bottom : 0;
+        const [padX, padY] = this.fixedCardWidth ? [this.vertical ? 56 : 96, 192]
+            : this.vertical ? [24, 96 + insets] : this.touchLandscape ? [64, 108] : [96, 192];
+        const plateScale = Math.min(target / wide, (this.viewportWidth - padX) / wide, (this.viewportHeight - padY) / tall);
         if (reduced) { this.zoom = zoom; this.zoomVelocity = 0; }
         else [this.zoom, this.zoomVelocity] = follow(this.zoom, this.zoomVelocity, zoom, 10, dt);
         const lift = this.lift + (this.touchLandscape ? 24 / pixelsPerUnit : 0) - introPose * .18;
         // The plate turns in from slightly in front, never behind the backdrop.
         const tilt = modelMatrix(this.rotationX + introPose * .22, this.rotationY - introPose * .55,
-            this.zoom * fit * cardSize * (1 - introPose * .06), lift, this.rotationZ + introPose * .04, flipDepth + introPose * .35);
+            this.zoom * plateScale * (1 - introPose * .06), lift, this.rotationZ + introPose * .04, flipDepth + introPose * .35);
         const flip = modelMatrix(this.vertical ? 0 : this.flipAngle, this.vertical ? this.flipAngle : 0, 1, 0);
         this.model = multiplyMatrices(tilt, flip);
         this.hoveredLink = this.hoverPointer && !dragging && !freezeHover
