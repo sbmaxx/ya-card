@@ -24,8 +24,10 @@ const lab = globalThis.__cardLab = {
     exported,
     exposure: number('exposure', 1),
     bloom: number('bloom', .3),
+    letterGlow: number('letterGlow', 1),
     keyGain: number('keyGain', .7),
     keySoft: number('keySoft', .05),
+    lampSize: number('lampSize', 1),
     keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'round',
     lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
     lightSetup: Object.hasOwn(LIGHT_SETUPS, params.get('lightSetup')) ? params.get('lightSetup') : 'studio',
@@ -33,6 +35,7 @@ const lab = globalThis.__cardLab = {
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
     nameDepth: number('nameDepth', 1),
+    nameScale: number('nameScale', 1.2),
     bodyDepth: number('bodyDepth', 1),
     bodyTint: /^[0-9a-f]{6}$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),
@@ -98,8 +101,8 @@ style.textContent = direction.css + `
 .lab .mini button { appearance: none; border: 0; border-radius: 5px; padding: 3px 7px; background: transparent; color: #aab2bd; font: 11px -apple-system, sans-serif; cursor: pointer; }
 .lab .mini button[aria-pressed="true"] { background: #ffffff2b; color: #fff; }
 .lab .tint-row .swatches { margin-bottom: 0; }
-.lab .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 7px; }
-.lab .swatches button { appearance: none; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
+.lab .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 7px; }
+.lab .swatches button { appearance: none; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab details.text-fields { margin: 0 0 12px; }
 .lab details.text-fields summary { cursor: pointer; color: #9aa3b0; margin-bottom: 6px; }
@@ -137,14 +140,11 @@ style.textContent = direction.css + `
 document.head.append(style);
 document.title = `Lab · ${direction.title}`;
 
-// Grouped by family: darks, whites, yellows, reds, blues, green.
+// Neutrals only, light to dark, plus the Yandex red for the first letter.
 const swatches = [['', 'Металл'],
-    ['111214', 'Чёрный'], ['25282c', 'Антрацит'], ['3b3f45', 'Графит'], ['5d6168', 'Тёмно-серый'],
-    ['f2f1ee', 'Белый'], ['f1e9d6', 'Молочный'], ['e1e6ec', 'Холодный белый'], ['cfd2d6', 'Жемчужный'],
-    ['ffe066', 'Лимонный'], ['ffcc00', 'Жёлтый'], ['e0a526', 'Горчичный'], ['c9a45c', 'Золото'],
-    ['fc3f1d', 'Яндекс-красный'], ['6d1320', 'Бордо'],
-    ['8cc4ee', 'Небесный'], ['2f80d8', 'Лазурь'], ['1f3c8a', 'Синий'], ['14203f', 'Тёмно-синий'],
-    ['0f5a3c', 'Изумруд']];
+    ['f2f1ee', 'Белый'], ['f1e9d6', 'Молочный'], ['e1e6ec', 'Холодный белый'], ['cfd2d6', 'Жемчужный'], ['b4b8bd', 'Светло-серый'],
+    ['8a8e94', 'Серый'], ['5d6168', 'Тёмно-серый'], ['3b3f45', 'Графит'], ['25282c', 'Антрацит'], ['111214', 'Чёрный'],
+    ['fc3f1d', 'Яндекс-красный']];
 const labels = { vcut: 'V-резка', deboss: 'Углублённый', raised: 'Выпуклый' };
 const panel = document.createElement('aside');
 panel.className = 'lab';
@@ -188,6 +188,7 @@ panel.innerHTML = `
     ${tintRow('logoFirst', 'Первая буква')}`)}
   ${group('Имя', `
     ${shapeRow('name', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentNameShape)}
+    <label class="range">Размер <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
     ${depthRow('nameDepth', 'Глубина')}
     ${tintRow('name', 'Цвет')}`)}
   ${group('Должность и контакты', `
@@ -208,6 +209,7 @@ panel.innerHTML = `
     <div class="segments" data-live="lampShape">
       ${Object.entries(LAMP_SHAPES).map(([id, shape]) => `<button type="button" data-value="${id}" aria-pressed="${id === lampShape()}">${shape.title}</button>`).join('')}
     </div>
+    <label class="range">Размер бликов <output data-for="lampSize"></output><input type="range" name="lampSize" min=".3" max="1.5" step=".05" value="${lab.lampSize}"></label>
     <label class="range">Мягкость <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
     <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>`)}
   <div class="tuning"><fieldset><legend>Движение света</legend>
@@ -217,7 +219,8 @@ panel.innerHTML = `
   </fieldset>
   <fieldset><legend>Картинка</legend>
     <label class="range">Экспозиция <output data-for="exposure"></output><input type="range" name="exposure" min=".4" max="2" step=".01" value="${lab.exposure}"></label>
-    <label class="range">Свечение (bloom) <output data-for="bloom"></output><input type="range" name="bloom" min="0" max="1.5" step=".01" value="${lab.bloom}"></label>
+    <label class="range">Свечение всего <output data-for="bloom"></output><input type="range" name="bloom" min="0" max="1.5" step=".01" value="${lab.bloom}"></label>
+    <label class="range">Свечение букв <output data-for="letterGlow"></output><input type="range" name="letterGlow" min="0" max="2" step=".05" value="${lab.letterGlow}"></label>
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
   </fieldset></div>
@@ -249,7 +252,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'keyGain', 'keySoft', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'keyGain', 'keySoft', 'lampSize', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -337,6 +340,11 @@ panel.querySelectorAll('input[type=range]').forEach(input => {
         }
         showValue(input);
         // Depth changes rebuild the relief maps (a few ms), once per frame at most.
+        // Name size redraws the text and its relief; debounced like typing.
+        if (input.name === 'nameScale') {
+            clearTimeout(textTimer);
+            textTimer = setTimeout(() => globalThis.__cardRenderer?.refreshText(), 60);
+        }
         if (input.name.endsWith('Depth') && !reliefQueued) {
             reliefQueued = true;
             requestAnimationFrame(() => { reliefQueued = false; globalThis.__cardRenderer?.buildRelief(); });

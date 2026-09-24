@@ -277,6 +277,7 @@ uniform vec4 uBodyTint;
 // Finish per object: x first letter, y wordmark, z name, w role and contacts (1 = anodised).
 uniform vec4 uTintFinish;
 uniform float uTextMute;
+uniform float uLetterGlow;
 uniform float uRoomBase;
 uniform float uBounce;
 in vec3 vPosition;
@@ -440,6 +441,8 @@ float inRect(vec4 r) {
 }
 
 void main() {
+    // Lettering coverage, so the glow of the letters can be set on its own.
+    float letterMask = 0.0;
     vec3 n = normalize(vNormal);
     vec3 v = normalize(vec3(0.0, 0.0, 7.0) - vPosition);
     vec3 T = normalize(vTangent), B = normalize(vBitangent);
@@ -545,13 +548,14 @@ void main() {
             float linkMark = max(underline, focusStroke);
             lettering = mix(lettering, textColor, linkMark);
             color = mix(color, lettering, coverage);
+            letterMask = coverage;
         }
     }
 
     vec3 hdr = color * uExposure;
     if (uBloomPass > .5) {
         // Store the part above white, compressed, for the quarter-resolution glow.
-        outColor = vec4(max(hdr - vec3(1.6), 0.0) * .25 * uOpacity, 1.0);
+        outColor = vec4(max(hdr - vec3(1.6), 0.0) * .25 * uOpacity * mix(1.0, uLetterGlow, letterMask), 1.0);
         return;
     }
     vec3 display = toSRGB(neutralTonemap(hdr));
@@ -918,12 +922,20 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
         context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
         return context.measureText(value).width <= maxWidth;
     };
-    const nameLines = fits(data.name, plan.nameSize, 500) ? [data.name] : splitTwo(data.name);
+    // The lab can scale the name; the plans are drawn for the size in LAYOUTS.
+    const nameScale = globalThis.__cardLab?.nameScale ?? direction.nameScale ?? 1;
+    const nameSize = plan.nameSize * nameScale, growth = nameSize - plan.nameSize;
+    const nameLines = fits(data.name, nameSize, 500) ? [data.name] : splitTwo(data.name);
     const roleLines = fits(data.position, textSize, 400) ? [data.position] : (data.positionLines || splitTwo(data.position));
     // Plans are drawn for two-line portrait and one-line landscape blocks.
-    const nameGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
+    const planGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
+    const nameGap = planGap * nameScale;
     const roleGap = plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17;
-    const nameShift = (nameLines.length - plan.name.length) * nameGap;
+    // A larger name keeps its gap to the logo (the baseline moves down by the
+    // cap height it gained) and pushes everything below by its extra size.
+    const nameY = plan.name[0] + growth * .75;
+    const nameShift = nameY + (nameLines.length - 1) * nameGap + growth * .25
+        - (plan.name[0] + (plan.name.length - 1) * planGap);
     const roleShift = nameShift + (roleLines.length - plan.role.length) * roleGap;
     const contactsY = plan.contacts + roleShift;
     const finalBaseline = contactsY + plan.lineHeight;
@@ -951,7 +963,7 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRects = nameLines.map((line, i) => text(line, plan.name[0] + i * nameGap, plan.nameSize, undefined, 500));
+    const titleRects = nameLines.map((line, i) => text(line, nameY + i * nameGap, nameSize, undefined, 500));
     const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
@@ -1016,7 +1028,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1197,9 +1209,10 @@ export class CardRenderer {
     // just inside the fade; the same colours go to the page, the scene and thin
     // fixed edge strips, so the scene continues into Safari's bars.
     // Setup lamps as uniform arrays; re-sent only when the setup or key changes.
-    uploadLights(setup, keyShape, keyGain) {
+    // `size` scales every lamp; the light it emits (area × intensity) stays the same.
+    uploadLights(setup, keyShape, keyGain, size) {
         const { gl } = this, u = this.uniforms;
-        const signature = `${setup.title}|${keyShape.title}|${keyGain}`;
+        const signature = `${setup.title}|${keyShape.title}|${keyGain}|${size}`;
         if (this.lightSignature === signature) return;
         this.lightSignature = signature;
         const key = panel(setup.key.c, keyShape.roll, keyShape.size, [0, 0, 0]);
@@ -1213,8 +1226,8 @@ export class CardRenderer {
         gl.uniform3fv(u.uLightCenter, pack((_, i) => setup.lamps[i].c));
         gl.uniform3fv(u.uLightRight, pack((_, i) => setup.lamps[i].right));
         gl.uniform3fv(u.uLightUp, pack((_, i) => setup.lamps[i].up));
-        gl.uniform3fv(u.uLightShape, pack(light => [...light.size, light.shape === 'rect' ? 0 : -1]));
-        gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1))));
+        gl.uniform3fv(u.uLightShape, pack(light => [...scale(light.size, size), light.shape === 'rect' ? 0 : -1]));
+        gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2)));
     }
 
     sampleEdges(backdrop, light) {
@@ -1485,10 +1498,11 @@ export class CardRenderer {
         const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.round;
         gl.uniform1f(this.uniforms.uRoundLights, (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1);
         const keyGain = (lab ? lab.keyGain : (direction.keyGain ?? .7)) * keyShape.gain;
-        gl.uniform1f(this.uniforms.uKeyGain, keyGain);
-        this.uploadLights(setup, keyShape, keyGain);
-        gl.uniform2f(this.uniforms.uKeySize, ...keyShape.size);
-        gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius);
+        const lampSize = lab ? lab.lampSize : (direction.lampSize ?? 1);
+        gl.uniform1f(this.uniforms.uKeyGain, keyGain / lampSize ** 2);
+        this.uploadLights(setup, keyShape, keyGain, lampSize);
+        gl.uniform2f(this.uniforms.uKeySize, ...scale(keyShape.size, lampSize));
+        gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius * lampSize);
         gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
         gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
         const tintOf = hex => {
@@ -1506,6 +1520,7 @@ export class CardRenderer {
         const finishes = lab ? lab.finish : (direction.finish || {});
         gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
+        gl.uniform1f(this.uniforms.uLetterGlow, lab ? lab.letterGlow : (direction.letterGlow ?? 1));
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
