@@ -30,12 +30,26 @@ const requestedName = new URLSearchParams(globalThis.__cardPreset ?? location.se
 const nameShape = Object.hasOwn(NAME_SHAPES, requestedName) ? requestedName : 'edition';
 export const currentNameShape = nameShape;
 const nameLook = nameShape === 'edition' ? look.name : look.logo;
-const baseProfiles = { logo: LOGO_SHAPES[logoShape], name: NAME_SHAPES[nameShape] || { shape: 'deboss', ...direction.relief.name } };
+// Role and contacts: flat laser marking by default, or the same metal relief
+// processes as the name with profiles scaled for 12–13 px type.
+const BODY_SHAPES = {
+    edition: null,
+    vcut: { shape: 'vcut', depth: .5, bevel: 1.1 },
+    deboss: { shape: 'deboss', depth: .4, bevel: .4 },
+    raised: { shape: 'raised', depth: .4, bevel: .4 }
+};
+const requestedBody = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('body');
+const bodyShape = Object.hasOwn(BODY_SHAPES, requestedBody) ? requestedBody : 'edition';
+export const currentBodyShape = bodyShape;
+const bodyLook = bodyShape === 'edition' ? look.text : look.logo;
+const baseProfiles = { logo: LOGO_SHAPES[logoShape], name: NAME_SHAPES[nameShape] || { shape: 'deboss', ...direction.relief.name },
+    text: BODY_SHAPES[bodyShape] };
 // Depth multipliers from the demo stand; relief maps are rebuilt live.
 const reliefProfiles = () => {
     const lab = globalThis.__cardLab;
     const scale = (profile, k) => ({ ...profile, depth: profile.depth * k });
-    return { logo: scale(baseProfiles.logo, lab ? lab.logoDepth : 1), name: scale(baseProfiles.name, lab ? lab.nameDepth : 1) };
+    return { logo: scale(baseProfiles.logo, lab ? lab.logoDepth : 1), name: scale(baseProfiles.name, lab ? lab.nameDepth : 1),
+        text: baseProfiles.text && scale(baseProfiles.text, lab ? lab.bodyDepth : 1) };
 };
 const occlusion = shape => shape === 'vcut' ? '.42' : shape === 'deboss' ? '.55' : null;
 
@@ -175,17 +189,19 @@ uniform float uBloomPass;
 uniform vec2 uLayoutSize;
 uniform vec4 uLogoRect;
 uniform vec4 uTitleRect;
+uniform vec4 uTextRect;
 uniform vec4 uHoverRect;
 uniform vec4 uFocusRect;
 uniform float uLogoScale;
 uniform vec2 uBrushCenter;
 uniform vec3 uKeyDirection;
-uniform vec2 uRaisedHeight;
+uniform vec3 uRaisedHeight;
 uniform float uMirror;
 uniform float uFloorY;
 uniform vec4 uLogoTint;
 uniform vec4 uNameTint;
 uniform vec4 uLogoFirstTint;
+uniform vec4 uBodyTint;
 uniform float uTintFinish;
 uniform float uTextMute;
 uniform float uRoomBase;
@@ -203,7 +219,7 @@ ${material('CHAMFER', look.chamfer)}
 ${material('SIDE', look.side)}
 ${material('LOGO', look.logo)}
 ${material('NAME', nameLook)}
-${material('TEXT', look.text)}
+${material('TEXT', bodyLook)}
 ${plate.f0 ? `const vec3 PLATE_F0 = ${v3(plate.f0)};` : ''}
 
 // Rectangular studio light in gnomonic coordinates. The edge softness grows
@@ -367,7 +383,7 @@ void main() {
         float focusStroke = min(1.0, focusInside.x * focusInside.y
             * ((1.0 - step(focusThickness.x, focusEdge.x)) + (1.0 - step(focusThickness.y, focusEdge.y))));
 
-        ${logoShape === 'raised' || nameShape === 'raised' ? `
+        ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
         // Applied letters stand proud of the plate and throw a short, soft
         // shadow away from the key light onto the surrounding metal.
         vec3 L = normalize(uKeyDirection);
@@ -375,7 +391,8 @@ void main() {
         vec4 pad = vec4(-6.0, -6.0, 6.0, 6.0) / uLayoutSize.xyxy;
         float nearLogo = inRect(uLogoRect + pad);
         float nearName = inRect(uTitleRect + pad) * (1.0 - nearLogo);
-        float raisedHeight = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x;
+        float nearText = inRect(uTextRect + pad) * (1.0 - nearLogo) * (1.0 - nearName);
+        float raisedHeight = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x + nearText * uRaisedHeight.z;
         vec2 castStep = lightSlope * raisedHeight * 1.6 / uLayoutSize;
         float occluder = texture(uEngraving, vUV + castStep * .5).a * .45
                        + texture(uEngraving, vUV + castStep).a * .35
@@ -389,7 +406,8 @@ void main() {
             logoColor *= mix(1.0, ${occlusion(logoShape)}, depth);` : ''}
             ${letteringCode('name', nameLook)}
             ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
-            ${letteringCode('text', look.text, true)}
+            ${letteringCode('text', bodyLook, bodyShape === 'edition')}
+            ${bodyShape !== 'edition' && occlusion(bodyShape) ? `textColor *= mix(1.0, ${occlusion(bodyShape)}, depth);` : ''}
             // Colour: enamel fills the flat faces and leaves polished bevels;
             // anodising colours the metal itself, bevels included.
             float letterEdge = smoothstep(.12, .45, slope) * resolved;
@@ -399,6 +417,7 @@ void main() {
             logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish, n, facet, v, letterRough, letterEdge),
                             tinted(logoColor, uLogoFirstTint, uTintFinish, n, facet, v, letterRough, letterEdge), firstLetter);
             nameColor = tinted(nameColor, uNameTint, uTintFinish, n, facet, v, letterRough, letterEdge);
+            textColor = tinted(textColor, uBodyTint, uTintFinish, n, facet, v, letterRough, letterEdge);
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
@@ -928,12 +947,14 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    (vertical ? data.positionLines : [data.position]).forEach((line, i) => text(line, plan.role[i], textSize));
+    const bodyRects = (vertical ? data.positionLines : [data.position]).map((line, i) => text(line, plan.role[i], textSize));
     const y = plan.contacts;
     const size = textSize, lineHeight = plan.lineHeight;
-    text(data.email, y, size, `mailto:${data.email}`);
-    text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`);
-    return { canvas, links, width, height, titleRelief, logoRelief, logoScale: logoWidth / 145 };
+    bodyRects.push(text(data.email, y, size, `mailto:${data.email}`));
+    bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`));
+    const textRelief = [Math.min(...bodyRects.map(r => r[0])), Math.min(...bodyRects.map(r => r[1])),
+        Math.max(...bodyRects.map(r => r[2])), Math.max(...bodyRects.map(r => r[3]))];
+    return { canvas, links, width, height, titleRelief, logoRelief, textRelief, logoScale: logoWidth / 145 };
 }
 
 const ease = t => t * t * (3 - 2 * t);
@@ -987,7 +1008,7 @@ export class CardRenderer {
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1281,7 +1302,8 @@ export class CardRenderer {
         this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
         const profiles = reliefProfiles();
         this.raisedHeight = [profiles.name.shape === 'raised' ? profiles.name.depth : 0,
-            profiles.logo.shape === 'raised' ? profiles.logo.depth : 0];
+            profiles.logo.shape === 'raised' ? profiles.logo.depth : 0,
+            profiles.text && profiles.text.shape === 'raised' ? profiles.text.depth : 0];
         this.engravingTextures = this.surfaces.map(surface => {
             const relief = createReliefMap(surface, profiles);
             return this.upload(relief.data, relief.width, relief.height);
@@ -1299,6 +1321,9 @@ export class CardRenderer {
         const introPose = 1 - easeOutCubic(clamp01(this.introTime / 2.4));
         const introLight = 1 - easeInOutCubic(this.intro);
         const introFade = this.intro >= 1 ? 1 : ease(clamp01(this.introTime / .9));
+        // The shadow arrives once the plate has nearly settled, as if the light
+        // found it; during the turn-in its projection would only distract.
+        const shadowFade = this.intro >= 1 ? 1 : ease(clamp01((this.introTime - .9) / 1.3));
 
         // Phone orientation, relative to a slowly re-centering baseline.
         const g = this.gyro;
@@ -1390,8 +1415,9 @@ export class CardRenderer {
         if (reduced) { this.zoom = zoom; this.zoomVelocity = 0; }
         else [this.zoom, this.zoomVelocity] = follow(this.zoom, this.zoomVelocity, zoom, 10, dt);
         const lift = this.lift + (this.touchLandscape ? 24 / pixelsPerUnit : 0) - introPose * .18;
-        const tilt = modelMatrix(this.rotationX + introPose * .30, this.rotationY - introPose * .75,
-            this.zoom * fit * (1 - introPose * .08), lift, this.rotationZ + introPose * .05, flipDepth - introPose * .6);
+        // The plate turns in from slightly in front, never behind the backdrop.
+        const tilt = modelMatrix(this.rotationX + introPose * .22, this.rotationY - introPose * .55,
+            this.zoom * fit * (1 - introPose * .06), lift, this.rotationZ + introPose * .04, flipDepth + introPose * .35);
         const flip = modelMatrix(this.vertical ? 0 : this.flipAngle, this.vertical ? this.flipAngle : 0, 1, 0);
         this.model = multiplyMatrices(tilt, flip);
         this.hoveredLink = this.hoverPointer && !dragging && !freezeHover
@@ -1415,7 +1441,7 @@ export class CardRenderer {
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
-        gl.uniform2f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
+        gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
         gl.uniform1f(this.uniforms.uMirror, 0);
         const tintOf = hex => {
             if (!hex) return [0, 0, 0, 0];
@@ -1428,6 +1454,7 @@ export class CardRenderer {
         // `same` follows the rest of the wordmark; '' is bare metal.
         gl.uniform4f(this.uniforms.uLogoFirstTint, ...tintOf(firstTint === 'same' ? logoTint : firstTint));
         gl.uniform4f(this.uniforms.uNameTint, ...tintOf(lab ? lab.nameTint : direction.nameTint));
+        gl.uniform4f(this.uniforms.uBodyTint, ...tintOf(lab ? lab.bodyTint : direction.bodyTint));
         gl.uniform1f(this.uniforms.uTintFinish, (lab ? lab.tintFinish : direction.tintFinish) === 'anod' ? 1 : 0);
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
         // Stage floor just below the card; it scales with the card, like a dolly.
@@ -1519,7 +1546,7 @@ export class CardRenderer {
             gl.uniform3f(u.uKeyDirection, ...k);
             gl.uniform1f(u.uGrain, backdrop.grain);
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
-            gl.uniform1f(u.uShadowFade, introFade);
+            gl.uniform1f(u.uShadowFade, shadowFade);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         gl.enable(gl.DEPTH_TEST);
@@ -1581,6 +1608,7 @@ export class CardRenderer {
             gl.uniform2f(this.uniforms.uLayoutSize, surface.width, surface.height);
             gl.uniform4f(this.uniforms.uLogoRect, ...surface.logoRelief);
             gl.uniform4f(this.uniforms.uTitleRect, ...surface.titleRelief);
+            gl.uniform4f(this.uniforms.uTextRect, ...surface.textRelief);
             gl.uniform1f(this.uniforms.uLogoScale, surface.logoScale);
             // The spun centre sits in empty metal: the arrow of either layout.
             const center = (this.vertical ? plate.centerPortrait : plate.center) || [.5, .5];

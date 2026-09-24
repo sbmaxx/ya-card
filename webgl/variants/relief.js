@@ -82,12 +82,15 @@ function smooth(values, w, h, passes) {
 }
 
 export function createReliefMap(surface, profiles) {
-    const { canvas, width, height, titleRelief, logoRelief } = surface;
+    const { canvas, width, height, titleRelief, logoRelief, textRelief } = surface;
     const map = new Uint8Array(canvas.width * canvas.height * 4);
     for (let i = 0; i < map.length; i += 4) { map[i] = 128; map[i + 1] = 128; }
     const stepX = width / canvas.width, stepY = height / canvas.height;
     const context = canvas.getContext('2d');
-    for (const [rect, profile, scaled] of [[titleRelief, profiles.name, false], [logoRelief, profiles.logo, true]]) {
+    const regions = [[titleRelief, profiles.name, false], [logoRelief, profiles.logo, true]];
+    // Role and contacts only get a relief when a shape was chosen for them.
+    if (profiles.text && textRelief) regions.push([textRelief, profiles.text, false]);
+    for (const [rect, profile, scaled] of regions) {
         const scale = scaled ? (surface.logoScale ?? 1) : 1;
         const depth = profile.depth * scale, bevel = profile.bevel * scale;
         const sign = profile.shape === 'raised' ? 1 : -1;

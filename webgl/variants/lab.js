@@ -2,7 +2,7 @@
 // Edition and relief rebuild the shader, so they reload; the rest is live.
 // All settings live in the URL, so a particular look can be shared as a link.
 import { directions, direction } from './directions.js';
-import { currentLogoShape, currentNameShape, currentLayout, BACKDROPS } from './renderer.js';
+import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS } from './renderer.js';
 
 // An exported file carries its settings as a preset and shows no panel.
 const exported = typeof globalThis.__cardPreset === 'string';
@@ -28,6 +28,8 @@ const lab = globalThis.__cardLab = {
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
     nameDepth: number('nameDepth', 1),
+    bodyDepth: number('bodyDepth', 1),
+    bodyTint: /^[0-9a-f]{6}$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),
     logoTint: /^[0-9a-f]{6}$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
     nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
@@ -89,8 +91,10 @@ style.textContent = direction.css + `
 .backdrop-light .languages a { color: #1b1d2299; }
 .backdrop-light .languages a + a { border-color: #0000001f; }
 .backdrop-light .languages a[aria-current] { background: #0000001a; color: #111; }
-.lab-toggle { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 29;
-  appearance: none; border: 1px solid #ffffff22; border-radius: 10px; padding: 8px 12px; background: #0b0d12cc; color: #e8ebf0; font: 12px -apple-system, sans-serif; cursor: pointer; }
+.lab-dock { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 29;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
+.lab-dock[hidden] { display: none; }
+.lab-toggle, .lab-download { appearance: none; border: 1px solid #ffffff22; border-radius: 10px; padding: 8px 12px; background: #0b0d12cc; color: #e8ebf0; font: 12px -apple-system, sans-serif; cursor: pointer; }
 /* Phones: a compact bottom sheet, collapsed until asked for, so the card stays visible. */
 @media (max-width: 700px) {
   .lab { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 48svh; border-radius: 16px 16px 0 0;
@@ -103,7 +107,8 @@ style.textContent = direction.css + `
   .lab .check { font-size: 11px; }
   .lab label.range { margin-bottom: 4px; }
   .lab .actions [data-action="hide"], .lab p { display: none; }
-  .lab-toggle { top: auto; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); padding: 10px 14px; font-size: 13px; }
+  .lab-dock { top: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+  .lab-toggle, .lab-download { padding: 10px 14px; font-size: 13px; }
   /* With the sheet open, the card moves into the free upper half. */
   .scene, .card-shadow { transition: transform .35s cubic-bezier(.3,0,.2,1); }
   .lab-sheet-open .scene, .lab-sheet-open .card-shadow { transform: translateY(-21svh) scale(.78); }
@@ -140,11 +145,16 @@ panel.innerHTML = `
   </div>
     <label class="range" style="margin-top:8px">Глубина имени <output data-for="nameDepth"></output><input type="range" name="nameDepth" min="0" max="3" step=".05" value="${lab.nameDepth}"></label>
   </fieldset>
+  <fieldset><legend>Должность и контакты</legend><div class="segments" data-param="body">
+    ${Object.entries({ edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentBodyShape}">${label}</button>`).join('')}
+  </div>
+    <label class="range" style="margin-top:8px">Глубина текста <output data-for="bodyDepth"></output><input type="range" name="bodyDepth" min="0" max="3" step=".05" value="${lab.bodyDepth}"></label>
+  </fieldset>
   <details class="text-fields"><summary>Текст карточки</summary>
     ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
   </details>
   <fieldset><legend>Цвет букв</legend>
-    ${[['logoFirstTint', 'Я / Y'], ['logoTint', 'Логотип'], ['nameTint', 'Имя']].map(([key, label]) => `<div class="swatches" data-tint="${key}"><span>${label}</span>
+    ${[['logoFirstTint', 'Я / Y'], ['logoTint', 'Логотип'], ['nameTint', 'Имя'], ['bodyTint', 'Текст']].map(([key, label]) => `<div class="swatches" data-tint="${key}"><span>${label}</span>
       ${(key === 'logoFirstTint' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[key]}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
     </div>`).join('')}
     <div class="segments" data-live="tintFinish" style="margin-top:6px">
@@ -171,9 +181,16 @@ const toggle = document.createElement('button');
 toggle.className = 'lab-toggle';
 toggle.type = 'button';
 toggle.textContent = 'Стенд';
-toggle.hidden = true;
+toggle.hidden = false;
 toggle.setAttribute('aria-label', 'Показать панель демо-стенда');
-document.body.append(panel, toggle);
+// Collapsed dock: the panel toggle (with fps) and, under it, the export.
+const download = Object.assign(document.createElement('button'), { className: 'lab-download', type: 'button', textContent: 'Скачать HTML' });
+download.addEventListener('click', () => exportHtml());
+const dock = document.createElement('div');
+dock.className = 'lab-dock';
+dock.hidden = true;
+dock.append(toggle, download);
+document.body.append(panel, dock);
 // Pointer movement over the panel must not tilt the card.
 for (const type of ['pointermove', 'pointerdown', 'wheel']) panel.addEventListener(type, event => event.stopPropagation());
 
@@ -183,10 +200,11 @@ const writeUrl = () => {
     next.set('relief', currentLogoShape);
     next.set('layout', currentLayout);
     next.set('name', currentNameShape);
+    next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
-    for (const key of ['logoTint', 'nameTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
+    for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
     else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
     next.set('panel', panel.hidden ? '0' : '1');
@@ -263,7 +281,7 @@ panel.querySelectorAll('input[type=range]').forEach(input => {
 panel.querySelector('input[name=manual]').addEventListener('change', event => { lab.manualLight = event.target.checked; writeUrl(); });
 const setHidden = hidden => {
     panel.hidden = hidden;
-    toggle.hidden = !hidden;
+    dock.hidden = !hidden;
     // Hit testing reads the canvas's live screen rect, so the CSS move is safe.
     document.documentElement.classList.toggle('lab-sheet-open', !hidden);
     sessionStorage.setItem('card-lab-open', hidden ? '0' : '1');
