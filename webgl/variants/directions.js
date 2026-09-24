@@ -9,9 +9,9 @@
 // - `ablate`  — laser ablation: the coating is removed and bare frosted steel shows.
 const directions = {
     steel: {
-        id: 'steel', title: 'Steel', caption: 'Круговая шлифовка · алмазная V-резка · эмаль',
+        id: 'steel', title: 'Steel', caption: 'Продольная шлифовка · алмазная V-резка · эмаль',
         look: {
-            plate: { f0: [.60, .60, .62], rough: .30, aniso: .30, brush: 'circular', center: [.76, .50], centerPortrait: [.50, .80] },
+            plate: { f0: [.60, .60, .62], rough: .32, aniso: .26, brush: 'linear' },
             chamfer: { f0: [.93, .93, .95], rough: .03 },
             side: { f0: [.62, .62, .64], rough: .22 },
             logo: { process: 'vcut', f0: [.88, .88, .90], rough: .025 },

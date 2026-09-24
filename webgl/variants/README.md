@@ -5,7 +5,7 @@ studio renderer. The production homepage (`webgl/renderer.js`, `webgl/engraving.
 is not used by these pages and is unchanged.
 
 - `/variants/` — gallery with real renders (`previews/*.webp`, captured from `/lab/`).
-- `/variants/steel/` — spun (circular) brushed steel, diamond V-cut logo, black enamel name.
+- `/variants/steel/` — linear brushed steel (same grain as gold), diamond V-cut logo, black enamel name.
 - `/variants/noir/` — black PVD; laser ablation exposes bare steel for the text and logo.
 - `/variants/gold/` — linear brushed champagne gold, V-cut logo, black enamel name.
 - `/variants/aurora/` — anodised titanium: thin-film interference (145–205 nm oxide).
@@ -23,8 +23,8 @@ is not used by these pages and is unchanged.
 - The room rotates with the light path, the intro sweep and (on phones) the device
   orientation; the SVG shadow and background glow follow the same key direction.
 - Brushed metal: seven reflection samples across the groove direction (anisotropic
-  streak), with fine groove texture filtered by pixel footprint. Circular brushing is
-  centred in the empty arrow of each layout.
+  streak), with fine groove texture filtered by pixel footprint. Linear (lengthwise)
+  brushing is used on every edition; the renderer still supports `brush: 'circular'`.
 - Rim: 45° diamond-cut chamfers with hard facet normals around a satin side wall.
 - Bloom: highlights above 1.6 are rendered at 1/4 resolution, blurred at 1/4 and 1/8,
   and screen-blended over the card and page.
