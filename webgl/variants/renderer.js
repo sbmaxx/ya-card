@@ -328,6 +328,8 @@ uniform vec3 uLightShape[${MAX_LIGHTS}];
 uniform vec3 uLightColor[${MAX_LIGHTS}];
 // How much of each lamp the plate's face sees (see roomFor).
 uniform float uLightFace[${MAX_LIGHTS}];
+// The back light circling the card with the light orbit (edges and lettering only).
+uniform vec3 uOrbitCenter, uOrbitRight, uOrbitUp, uOrbitColor;
 
 // The key softbox as a rounded rectangle (a circle at full radius). uKeySoft is
 // the studio's diffuser: it widens the edge of every light on top of roughness.
@@ -426,6 +428,9 @@ vec3 roomFor(vec3 world, float rough, float face) {
         float soften = face * (1.0 - uLightFace[i]) * .6;
         col += uLightColor[i] * seen * panel(d, uLightCenter[i], uLightRight[i], uLightUp[i], shape.xy, blur + soften, shape.z < 0.0 ? uRoundLights : shape.z);
     }
+    // The orbiting back light sits square to the view, where the chamfer and
+    // the letters' bevels look: a glint that runs around the edge of the card.
+    if (face < .5 && uOrbitColor.r > 0.0) col += uOrbitColor * panel(d, uOrbitCenter, uOrbitRight, uOrbitUp, vec2(.20), blur, 1.0);
     return col;
 }
 
@@ -1172,7 +1177,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1535,8 +1540,12 @@ export class CardRenderer {
         this.wantsHighFrameRate = Boolean(lab && !lab.exported) || (this.intro < 1 && !reduced) || (g.active && performance.now() - g.lastMove < 600);
 
         const lightPhase = this.time * Math.PI * 2 / variation.lightPeriod + variation.lightPhase;
-        let lightYaw = Math.sin(lightPhase) * .20 * variation.lightTravel + introLight * 1.15;
-        let lightPitch = Math.sin(lightPhase * .8 + .7) * .08 - introLight * .12;
+        // The light orbit widens the key's path into a broad figure in front of
+        // the card, across and up and down, and brings in the back light.
+        const orbit = lab ? lab.orbit : (direction.orbit ?? 0);
+        this.orbit = orbit;
+        let lightYaw = Math.sin(lightPhase) * (.20 + .45 * orbit) * variation.lightTravel + introLight * 1.15;
+        let lightPitch = Math.sin(lightPhase * .8 + .7) * (.08 + .22 * orbit) - introLight * .12;
         if (lab && lab.manualLight) { lightYaw = lab.yaw; lightPitch = lab.pitch; }
         // The room turns with the light path and against the phone, so reflections
         // slide across the plate just like a physical card turned under lamps.
@@ -1649,6 +1658,13 @@ export class CardRenderer {
         const lampSize = lab ? lab.lampSize : (direction.lampSize ?? 1);
         gl.uniform1f(this.uniforms.uKeyGain, keyGain / lampSize ** 2);
         this.uploadLights(setup, keyShape, keyGain, lampSize);
+        // The back light circles the card square to the view, once in ~7 s.
+        const orbitAngle = this.time * Math.PI * 2 / 7 + variation.lightPhase;
+        const back = panel([Math.cos(orbitAngle), Math.sin(orbitAngle) * .8, .05], 0, [.2, .2], [0, 0, 0]);
+        gl.uniform3f(this.uniforms.uOrbitCenter, ...back.c);
+        gl.uniform3f(this.uniforms.uOrbitRight, ...back.right);
+        gl.uniform3f(this.uniforms.uOrbitUp, ...back.up);
+        gl.uniform3fv(this.uniforms.uOrbitColor, scale(toneOf('key'), 22 * this.orbit * this.orbit));
         gl.uniform2f(this.uniforms.uKeySize, ...scale(keyShape.size, lampSize));
         gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius * lampSize);
         gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));

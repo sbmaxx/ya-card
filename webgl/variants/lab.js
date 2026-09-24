@@ -189,6 +189,8 @@ panel.innerHTML = `
     <label class="range">Мягкость <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
     <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>`)}
   <div class="tuning"><fieldset><legend>Движение света</legend>
+    <label class="range">Облёт света <output data-for="orbit"></output><input type="range" name="orbit" min="0" max="1" step=".05" value="${lab.orbit}"></label>
+    <p class="hint">0 — главный свет слегка покачивается. Больше — ходит широкой дугой спереди, а свет сзади облетает карточку и зажигает только грани и буквы.</p>
     <label class="check"><input type="checkbox" name="manual" ${lab.manualLight ? 'checked' : ''}> Стоп-кадр света</label>
     <label class="range">Поворот <output data-for="yaw"></output><input type="range" name="yaw" min="-1.2" max="1.2" step=".01" value="${lab.yaw}"></label>
     <label class="range">Высота <output data-for="pitch"></output><input type="range" name="pitch" min="-.6" max=".6" step=".01" value="${lab.pitch}"></label>
@@ -266,7 +268,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -448,7 +450,7 @@ function describeSettings() {
     const lines = [
         'Визитка — настройки стенда',
         `Материал: ${direction.title} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${currentLayout === 'accent' ? 'акцент на имени' : 'классика'} · размер карточки: ${n(lab.cardSize)}`,
-        `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)}`
+        `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
         `Первая буква: ${colour('logoFirst')}`,

@@ -37,6 +37,9 @@ export const lab = globalThis.__cardLab = {
     keyGain: number('keyGain', .7),
     keySoft: number('keySoft', .05),
     lampSize: number('lampSize', 1),
+    // Light orbit: 0 — the key drifts gently; 1 — it sweeps a wide arc in front
+    // and a back light circles the card, catching only its edges and lettering.
+    orbit: number('orbit', 0),
     keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'round',
     lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
     lightSetup: Object.hasOwn(LIGHT_SETUPS, params.get('lightSetup')) ? params.get('lightSetup') : 'studio',
