@@ -23,7 +23,8 @@ const number = (key, fallback) => {
 const lab = globalThis.__cardLab = {
     exported,
     exposure: number('exposure', 1),
-    bloom: number('bloom', .45),
+    bloom: number('bloom', .3),
+    keyGain: number('keyGain', .7),
     idle: number('idle', 1),
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
@@ -190,6 +191,7 @@ panel.innerHTML = `
   </fieldset>
   <fieldset><legend>Картинка</legend>
     <label class="range">Экспозиция <output data-for="exposure"></output><input type="range" name="exposure" min=".4" max="2" step=".01" value="${lab.exposure}"></label>
+    <label class="range">Световая полоса <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>
     <label class="range">Свечение (bloom) <output data-for="bloom"></output><input type="range" name="bloom" min="0" max="1.5" step=".01" value="${lab.bloom}"></label>
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
@@ -222,7 +224,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'keyGain', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');

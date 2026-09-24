@@ -99,8 +99,10 @@ const lights = [
     panel([.70, .70, .10], .5, [.10, .40], scale(studio.key, 3.0)),
     panel([.70, -.70, .10], -.5, [.10, .40], scale(studio.fill, 1.6))
 ];
-const lightCode = lights.map(({ c, right, up, size, color }) =>
-    `    col += ${v3(color)} * panel(d, ${v3(c)}, ${v3(right)}, ${v3(up)}, vec2(${f(size[0])}, ${f(size[1])}), blur);`).join('\n');
+// The first two panels are the key strip and its wrap: the travelling light
+// band on the plate. uKeyGain scales them (the lab's "light band" slider).
+const lightCode = lights.map(({ c, right, up, size, color }, i) =>
+    `    col += ${v3(color)}${i < 2 ? ' * uKeyGain' : ''} * panel(d, ${v3(c)}, ${v3(right)}, ${v3(up)}, vec2(${f(size[0])}, ${f(size[1])}), blur);`).join('\n');
 
 const toneCode = `vec3 neutralTonemap(vec3 color) {
     const float start = .76;
@@ -195,6 +197,7 @@ uniform vec4 uFocusRect;
 uniform float uLogoScale;
 uniform vec2 uBrushCenter;
 uniform vec3 uKeyDirection;
+uniform float uKeyGain;
 uniform vec3 uRaisedHeight;
 uniform float uMirror;
 uniform float uFloorY;
@@ -877,26 +880,27 @@ const requestedLayout = new URLSearchParams(globalThis.__cardPreset ?? location.
 export const currentLayout = Object.hasOwn(LAYOUTS, requestedLayout) ? requestedLayout : (direction.layout || 'classic');
 
 // Card text. The demo stand may override any field; the rest comes from data.js.
+// Two balanced lines, split between words.
+function splitTwo(value) {
+    const words = value.split(/\s+/);
+    let best = [value], score = Infinity;
+    for (let i = 1; i < words.length; i++) {
+        const a = words.slice(0, i).join(' '), b = words.slice(i).join(' ');
+        if (Math.abs(a.length - b.length) < score) { score = Math.abs(a.length - b.length); best = [a, b]; }
+    }
+    return best;
+}
+
 function cardContent(lang) {
     const base = cards[lang];
     const edit = (globalThis.__cardLab && globalThis.__cardLab.text) || {};
     const role = (edit[`role_${lang}`] || '').trim();
-    // Two balanced lines for the portrait layout.
-    const splitTwo = value => {
-        const words = value.split(/\s+/);
-        let best = [value], score = Infinity;
-        for (let i = 1; i < words.length; i++) {
-            const a = words.slice(0, i).join(' '), b = words.slice(i).join(' ');
-            if (Math.abs(a.length - b.length) < score) { score = Math.abs(a.length - b.length); best = [a, b]; }
-        }
-        return best;
-    };
     const login = (edit.email || '').trim() || 'sbmaxx@yandex-team.ru';
     const telegram = ((edit.telegram || '').trim() || 'sbmaxx').replace(/^(https?:\/\/)?t\.me\//, '').replace(/^@/, '');
     return {
         name: (edit[`name_${lang}`] || '').trim() || base.name,
         position: role || base.position,
-        positionLines: role ? splitTwo(role) : base.positionLines,
+        positionLines: role ? null : base.positionLines,
         email: login.includes('@') ? login : `${login}@yandex-team.ru`,
         telegram,
         companyUrl: base.companyUrl
@@ -924,7 +928,22 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const logoX = plan.center ? (width - logoWidth) / 2 : x;
     const logoY = plan.logoY;
     const textSize = vertical ? 12.5 : 13;
-    const finalBaseline = plan.contacts + plan.lineHeight;
+    // Name and role stay on one line whenever they fit the plate; only a line
+    // that does not fit is split in two, and everything below moves with it.
+    const maxWidth = vertical ? width - x - 26 : 440;
+    const fits = (value, size, weight) => {
+        context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+        return context.measureText(value).width <= maxWidth;
+    };
+    const nameLines = fits(data.name, plan.nameSize, 500) ? [data.name] : splitTwo(data.name);
+    const roleLines = fits(data.position, textSize, 400) ? [data.position] : (data.positionLines || splitTwo(data.position));
+    // Plans are drawn for two-line portrait and one-line landscape blocks.
+    const nameGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
+    const roleGap = plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17;
+    const nameShift = (nameLines.length - plan.name.length) * nameGap;
+    const roleShift = nameShift + (roleLines.length - plan.role.length) * roleGap;
+    const contactsY = plan.contacts + roleShift;
+    const finalBaseline = contactsY + plan.lineHeight;
     context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
     const finalMetrics = context.measureText(`t.me/${data.telegram}`);
     const blockTop = logoY;
@@ -949,14 +968,13 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const nameLines = vertical ? data.name.split(' ') : [data.name];
-    const titleRects = nameLines.map((line, i) => text(line, plan.name[i], plan.nameSize, undefined, 500));
+    const titleRects = nameLines.map((line, i) => text(line, plan.name[0] + i * nameGap, plan.nameSize, undefined, 500));
     const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    const bodyRects = (vertical ? data.positionLines : [data.position]).map((line, i) => text(line, plan.role[i], textSize));
-    const y = plan.contacts;
+    const bodyRects = roleLines.map((line, i) => text(line, plan.role[0] + nameShift + i * roleGap, textSize));
+    const y = contactsY;
     const size = textSize, lineHeight = plan.lineHeight;
     bodyRects.push(text(data.email, y, size, `mailto:${data.email}`));
     bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`));
@@ -1016,7 +1034,7 @@ export class CardRenderer {
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1468,6 +1486,7 @@ export class CardRenderer {
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
+        gl.uniform1f(this.uniforms.uKeyGain, lab ? lab.keyGain : (direction.keyGain ?? .7));
         gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
         gl.uniform1f(this.uniforms.uMirror, 0);
         const tintOf = hex => {
@@ -1612,7 +1631,7 @@ export class CardRenderer {
         gl.bindTexture(gl.TEXTURE_2D, wideB.texture);
         gl.uniform1i(this.compositeUniforms.near, 0);
         gl.uniform1i(this.compositeUniforms.wide, 1);
-        gl.uniform1f(this.compositeUniforms.strength, lab ? lab.bloom : .45);
+        gl.uniform1f(this.compositeUniforms.strength, lab ? lab.bloom : .3);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.disable(gl.BLEND);
         gl.bindVertexArray(null);

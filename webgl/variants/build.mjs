@@ -16,7 +16,8 @@ const license = await readFile(resolve(root, 'assets/Onest-OFL.txt'), 'utf8');
 // Minimal loader: a hairline with a travelling glint, a real element so it can
 // fade out while the card fades in. Transform and opacity animate on the
 // compositor, so it keeps moving while warm-up keeps the main thread busy.
-// The canvas extends under Safari's toolbars (large viewport).
+// On touch screens the scene fades into the bar colours inside the visible
+// viewport, so the transition completes before Safari's header and footer.
 const loaderCss = `.card-loader{position:fixed;left:50%;top:50%;width:140px;height:1px;margin-left:-70px;z-index:20;pointer-events:none;
 opacity:0;transition:opacity .8s ease;mix-blend-mode:difference;background:#ffffff2e}
 .webgl-loading .card-loader{opacity:1;transition-duration:.35s}
@@ -24,7 +25,6 @@ opacity:0;transition:opacity .8s ease;mix-blend-mode:difference;background:#ffff
 will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite}
 @keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(92px);opacity:0}}
 @media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(46px)}}
-.webgl-ready .scene,.webgl-loading .scene{bottom:auto;height:100lvh}
 .safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none}
 .safe-edge-top{top:0;height:max(6px,env(safe-area-inset-top,0px))}
 .safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
