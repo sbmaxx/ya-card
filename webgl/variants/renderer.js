@@ -202,7 +202,8 @@ uniform vec4 uLogoTint;
 uniform vec4 uNameTint;
 uniform vec4 uLogoFirstTint;
 uniform vec4 uBodyTint;
-uniform float uTintFinish;
+// Finish per object: x first letter, y wordmark, z name, w role and contacts (1 = anodised).
+uniform vec4 uTintFinish;
 uniform float uTextMute;
 uniform float uRoomBase;
 uniform float uBounce;
@@ -414,10 +415,10 @@ void main() {
             // The first letter of the wordmark is drawn red-only in the mask.
             vec3 inkColor = ink.rgb / max(ink.a, .001);
             float firstLetter = smoothstep(.6, .3, inkColor.g);
-            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish, n, facet, v, letterRough, letterEdge),
-                            tinted(logoColor, uLogoFirstTint, uTintFinish, n, facet, v, letterRough, letterEdge), firstLetter);
-            nameColor = tinted(nameColor, uNameTint, uTintFinish, n, facet, v, letterRough, letterEdge);
-            textColor = tinted(textColor, uBodyTint, uTintFinish, n, facet, v, letterRough, letterEdge);
+            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge),
+                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge), firstLetter);
+            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge);
+            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge);
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
@@ -1455,7 +1456,8 @@ export class CardRenderer {
         gl.uniform4f(this.uniforms.uLogoFirstTint, ...tintOf(firstTint === 'same' ? logoTint : firstTint));
         gl.uniform4f(this.uniforms.uNameTint, ...tintOf(lab ? lab.nameTint : direction.nameTint));
         gl.uniform4f(this.uniforms.uBodyTint, ...tintOf(lab ? lab.bodyTint : direction.bodyTint));
-        gl.uniform1f(this.uniforms.uTintFinish, (lab ? lab.tintFinish : direction.tintFinish) === 'anod' ? 1 : 0);
+        const finishes = lab ? lab.finish : (direction.finish || {});
+        gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
         // Stage floor just below the card; it scales with the card, like a dolly.
         const cardScale = this.zoom * fit;

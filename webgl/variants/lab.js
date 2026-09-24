@@ -34,7 +34,11 @@ const lab = globalThis.__cardLab = {
     logoTint: /^[0-9a-f]{6}$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
     nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
     logoFirstTint: /^([0-9a-f]{6}|metal)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
-    tintFinish: params.get('tintFinish') === 'anod' ? 'anod' : 'enamel',
+    // Finish per object; the old shared `tintFinish` becomes their default.
+    finish: Object.fromEntries(['logoFirst', 'logo', 'name', 'body'].map(key => {
+        const value = params.get(`${key}Finish`) || params.get('tintFinish');
+        return [key, value === 'anod' ? 'anod' : 'enamel'];
+    })),
     text: Object.fromEntries(textFields.map(([key]) => [key, params.get(key) || ''])),
     backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : (direction.backdrop || 'studio'),
     manualLight: params.get('light') === 'manual',
@@ -77,8 +81,13 @@ style.textContent = direction.css + `
 .lab::-webkit-scrollbar { width: 6px; }
 .lab::-webkit-scrollbar-thumb { background: #ffffff38; border-radius: 3px; }
 .lab::-webkit-scrollbar-track { background: transparent; }
+.lab .tint-row { margin-bottom: 9px; }
+.lab .tint-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; color: #9aa3b0; }
+.lab .mini { display: flex; gap: 1px; padding: 1px; border-radius: 6px; background: #ffffff10; }
+.lab .mini button { appearance: none; border: 0; border-radius: 5px; padding: 3px 7px; background: transparent; color: #aab2bd; font: 11px -apple-system, sans-serif; cursor: pointer; }
+.lab .mini button[aria-pressed="true"] { background: #ffffff2b; color: #fff; }
+.lab .tint-row .swatches { margin-bottom: 0; }
 .lab .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 7px; }
-.lab .swatches span { width: 52px; flex: none; color: #9aa3b0; }
 .lab .swatches button { appearance: none; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab details.text-fields { margin: 0 0 12px; }
@@ -159,13 +168,13 @@ panel.innerHTML = `
     ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
   </details>
   <fieldset><legend>Цвет букв</legend>
-    ${[['logoFirstTint', 'Я / Y'], ['logoTint', 'Логотип'], ['nameTint', 'Имя'], ['bodyTint', 'Текст']].map(([key, label]) => `<div class="swatches" data-tint="${key}"><span>${label}</span>
-      ${(key === 'logoFirstTint' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[key]}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
-    </div>`).join('')}
-    <div class="segments" data-live="tintFinish" style="margin-top:6px">
-      <button type="button" data-value="enamel" aria-pressed="${lab.tintFinish === 'enamel'}">Эмаль</button>
-      <button type="button" data-value="anod" aria-pressed="${lab.tintFinish === 'anod'}">Анодировка</button>
-    </div>
+    ${[['logoFirst', 'Я / Y'], ['logo', 'Логотип'], ['name', 'Имя'], ['body', 'Текст']].map(([object, label]) => `<div class="tint-row">
+      <div class="tint-head"><span>${label}</span><div class="mini" data-finish="${object}">
+        <button type="button" data-value="enamel" aria-pressed="${lab.finish[object] === 'enamel'}">Эмаль</button><button type="button" data-value="anod" aria-pressed="${lab.finish[object] === 'anod'}">Анод</button>
+      </div></div>
+      <div class="swatches" data-tint="${object}Tint">
+      ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+    </div></div>`).join('')}
     <label class="range" style="margin-top:8px">Приглушение текста <output data-for="textMute"></output><input type="range" name="textMute" min="0" max=".8" step=".02" value="${lab.textMute}"></label>
   </fieldset>
   <div class="tuning"><fieldset><legend>Свет</legend>
@@ -214,7 +223,8 @@ const writeUrl = () => {
     else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
     next.set('panel', panel.hidden ? '0' : '1');
     for (const [key] of textFields) if (lab.text[key]) next.set(key, lab.text[key]); else next.delete(key);
-    next.set('tintFinish', lab.tintFinish);
+    next.delete('tintFinish');
+    for (const [key, value] of Object.entries(lab.finish)) next.set(`${key}Finish`, value);
     history.replaceState(null, '', `?${next}${location.hash}`);
 };
 const reloadWith = (key, value) => {
@@ -256,13 +266,13 @@ panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click
     row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
 }));
-panel.querySelector('[data-live="tintFinish"]').addEventListener('click', event => {
+panel.querySelectorAll('[data-finish]').forEach(group => group.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
-    lab.tintFinish = button.dataset.value;
-    panel.querySelectorAll('[data-live="tintFinish"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    lab.finish[group.dataset.finish] = button.dataset.value;
+    group.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
-});
+}));
 let reliefQueued = false;
 const showValue = input => { panel.querySelector(`output[data-for="${input.name}"]`).textContent = Number(input.value).toFixed(2); };
 panel.querySelectorAll('input[type=range]').forEach(input => {
