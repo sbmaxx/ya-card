@@ -116,6 +116,9 @@ import { CardRenderer } from './renderer.js';
         const interval = interacting ? 1000 / 60 : 1000 / 30;
         if (now - lastDraw < interval - 1) { schedule(); return; }
         const delta = Math.max(.001, (now - previousTime) / 1000);
+        // A hand spin whose gesture was dropped (window blur, a system gesture)
+        // must not hang mid-turn: let go, and it settles on the nearest side.
+        if (renderer.spinning && !gesture) renderer.spinRelease();
         previousTime = now;
         lastDraw = now;
         // Hold a hovered link long enough to click, then let a parked mouse
@@ -265,9 +268,10 @@ import { CardRenderer } from './renderer.js';
                         const first = gesture.samples[0];
                         const speed = now - first.time > 8 ? (position - first.position) / (now - first.time) * 1000 : 0;
                         renderer.spinDrag(gesture.spinAngle + (position - gesture.spinFrom) * SPIN_PER_PIXEL, speed * SPIN_PER_PIXEL);
-                        // The other axis still tilts.
-                        if (renderer.vertical) rx = clamp(gesture.rx + dy * 0.22, -40, 40);
-                        else ry = clamp(gesture.ry + dx * 0.22, -40, 40);
+                        // The other axis tilts a little while the plate turns, and
+                        // springs back on release (see below).
+                        if (renderer.vertical) rx = clamp(gesture.rx + dy * 0.22, -15, 15);
+                        else ry = clamp(gesture.ry + dx * 0.22, -15, 15);
                     } else {
                         rx = clamp(gesture.rx + dy * 0.22, -40, 40);
                         ry = clamp(gesture.ry + dx * 0.22, -40, 40);
@@ -343,12 +347,18 @@ import { CardRenderer } from './renderer.js';
         pointers.delete(event.pointerId);
         if (!pointers.size) {
             const moved = gesture?.moved && gesture.onCard;
+            const spun = gesture?.mode === 'spin';
             if (!suppressClick) pendingClick = {
                 onCard: gesture.onCard, url: gesture.url, time: performance.now()
             };
             gesture = null;
             root.classList.remove('is-dragging');
-            if (moved) {
+            if (moved && spun) {
+                // After a hand spin the plate settles square: a sideways tilt left
+                // by a diagonal fling would turn its face to the dark room.
+                rx = baseRx; ry = baseRy; rz = baseRz;
+                hoverRx = hoverRy = hoverRz = 0;
+            } else if (moved) {
                 // Keep the orientation the user chose; subsequent hover is a small offset.
                 baseRx = rx; baseRy = ry; baseRz = rz;
                 hoverRx = hoverRy = hoverRz = 0;
@@ -402,6 +412,7 @@ import { CardRenderer } from './renderer.js';
         }
     });
     window.addEventListener('blur', () => {
+        renderer?.spinRelease();
         pendingClick = null;
         pointers.clear(); gesture = null; suppressClick = true;
         root.classList.remove('is-dragging');
