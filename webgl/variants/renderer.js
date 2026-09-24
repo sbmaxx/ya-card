@@ -692,16 +692,22 @@ out vec4 outColor;
 ${toneCode}
 ${hashCode}
 
+// Screen position in units of the shorter side: a portrait phone gets the same
+// pool and vignette as a landscape screen, turned, instead of a pool that fills
+// the whole narrow screen and a vignette that never reaches its sides.
+vec2 screenUnits(vec2 uv) {
+    float aspect = uResolution.x / uResolution.y;
+    return uv * vec2(aspect, 1.0) / min(aspect, 1.0);
+}
+
 // Wall lighting at a screen position: base tone and the key light's pool.
 vec3 wallColor(vec2 uv) {
-    float aspect = uResolution.x / uResolution.y;
-    vec2 d = (uv - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
+    vec2 d = (screenUnits(uv) - screenUnits(uPool)) * vec2(.85, 1.1);
     return uWall + uPoolColor * exp(-dot(d, d) * 2.6);
 }
 
 void main() {
-    float aspect = uResolution.x / uResolution.y;
-    vec2 p = (vUV - .5) * vec2(aspect, 1.0);
+    vec2 p = screenUnits(vUV) - screenUnits(vec2(.5));
     // Cyclorama: the wall curves softly into a darker floor below the card.
     vec3 wall = wallColor(vUV);
     vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y));
@@ -1285,7 +1291,7 @@ export class CardRenderer {
         gl.uniform1f(u.uShadowFade, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         const row = new Uint8Array(width * 4);
-        // Average a whole row where the ramp starts, i.e. where the core ends.
+        // Average a whole row.
         const read = y => {
             gl.readPixels(0, Math.round(y), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, row);
             const sum = [0, 0, 0];
@@ -1295,7 +1301,10 @@ export class CardRenderer {
         // One colour for both edges: whatever Safari samples for either bar —
         // the page, the scene or an edge strip — it gets the same colour, and the
         // scene ramps into exactly that colour at the top and at the bottom.
-        const top = read(height * (1 - fade[0] - fade[2]) - 1), bottom = read(height * (fade[1] + fade[3]));
+        // Sampled at the very edges of the frame, where the vignette and the floor
+        // have darkened the backdrop, so the bands continue it rather than
+        // spreading the brighter middle over a third of the screen.
+        const top = read(height * .98), bottom = read(height * .02);
         const edge = top.map((value, i) => Math.round((value + bottom[i]) / 2));
         this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
         if (edge.join() === this.edgeCss) return;
