@@ -1375,18 +1375,22 @@ export class CardRenderer {
         gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1))));
     }
 
-    sampleEdges(backdrop) {
-        if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; this.edgeColor = null; return; }
-        this.edgeFrames = (this.edgeFrames || 0) + 1;
-        const key = `${backdrop.title}:${this.canvas.width}x${this.canvas.height}`;
-        // The light pool drifts: sample now and then and ease towards it, so the
-        // page colour never jumps. A new backdrop or size is taken at once.
-        const fresh = key !== this.edgeKey || !this.edgeColor;
-        if (!fresh && this.edgeFrames % 30) return;
+    sampleEdges(backdrop, light) {
+        if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; return; }
+        // The page colour is fixed per backdrop, size and light setup: Safari takes
+        // the bar tint once and does not follow later changes, so it must not
+        // move with the light, the intro or the phone's tilt.
+        const key = `${backdrop.title}:${this.lightSetup ? this.lightSetup.title : ''}:${this.canvas.width}x${this.canvas.height}`;
+        if (key === this.edgeKey) return;
         this.edgeKey = key;
         // Flat bands of 14% / 16% of the height, each with a 20% ramp into the core.
         const fade = [.14, .16, .20, .20];
-        const gl = this.gl, width = this.canvas.width, height = this.canvas.height;
+        const gl = this.gl, u = this.backdropUniforms, width = this.canvas.width, height = this.canvas.height;
+        // A throwaway frame of the bare backdrop with the light at rest.
+        light(this.lightSetup ? this.lightSetup.shadowDirection : this.keyDirection);
+        gl.uniform4f(u.uEdgeFade, 0, 0, 0, 0);
+        gl.uniform1f(u.uShadowFade, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
         const row = new Uint8Array(width * 4);
         // Average a whole row where the ramp starts, i.e. where the core ends.
         const read = y => {
@@ -1399,9 +1403,7 @@ export class CardRenderer {
         // the page, the scene or an edge strip — it gets the same colour, and the
         // scene ramps into exactly that colour at the top and at the bottom.
         const top = read(height * (1 - fade[0] - fade[2]) - 1), bottom = read(height * (fade[1] + fade[3]));
-        const target = top.map((value, i) => (value + bottom[i]) / 2);
-        this.edgeColor = fresh ? target : this.edgeColor.map((value, i) => value + (target[i] - value) * .15);
-        const edge = this.edgeColor.map(Math.round);
+        const edge = top.map((value, i) => Math.round((value + bottom[i]) / 2));
         this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
         if (edge.join() === this.edgeCss) return;
         this.edgeCss = edge.join();
@@ -1770,22 +1772,24 @@ export class CardRenderer {
             gl.uniform1f(u.uFocal, this.projection[5]);
             gl.uniform1f(u.uFloorY, this.floorY);
             gl.uniform2f(u.uCardCenter, this.model[12], 0);
+            gl.uniform3f(u.uWall, ...backdrop.wall);
+            gl.uniform3f(u.uFloor, ...backdrop.floor);
+            gl.uniform3f(u.uPoolColor, ...backdrop.pool);
+            gl.uniform1f(u.uGrain, backdrop.grain);
+            gl.uniform1f(u.uShadowStrength, backdrop.shadow);
+            // The pool sits behind the card, offset towards the key light.
+            const light = k => {
+                gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
+                gl.uniform3f(u.uKeyDirection, ...k);
+            };
+            this.sampleEdges(backdrop, light);
             const edge = this.edges || { fade: [0, 0, 0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
             gl.uniform4f(u.uEdgeFade, ...edge.fade);
             gl.uniform3f(u.uEdgeTop, ...edge.top);
             gl.uniform3f(u.uEdgeBottom, ...edge.bottom);
-            // The pool sits behind the card, offset towards the key light.
-            const k = this.keyDirection;
-            gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
-            gl.uniform3f(u.uWall, ...backdrop.wall);
-            gl.uniform3f(u.uFloor, ...backdrop.floor);
-            gl.uniform3f(u.uPoolColor, ...backdrop.pool);
-            gl.uniform3f(u.uKeyDirection, ...k);
-            gl.uniform1f(u.uGrain, backdrop.grain);
-            gl.uniform1f(u.uShadowStrength, backdrop.shadow);
+            light(this.keyDirection);
             gl.uniform1f(u.uShadowFade, shadowFade);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
-            this.sampleEdges(backdrop);
         }
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.program);
