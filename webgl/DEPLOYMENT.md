@@ -7,8 +7,9 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-23`
-  (20260924-23: new look from the lab, `HOME_LOOK`; 20260924-22: the card 20% smaller;
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-24`
+  (20260924-24: touch screens 15% larger card, portrait text centred on the plate,
+  no roll on portrait; 20260924-23: new look from the lab, `HOME_LOOK`; 20260924-22: the card 20% smaller;
   both changed only `/` and `/en/`).
 
 ## Artifacts
@@ -61,7 +62,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-23/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-24/rollback.sh'
 # the release before it (RU/EN, nginx /en/, robots, sitemap, share images):
 ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-21/rollback.sh'
 ```

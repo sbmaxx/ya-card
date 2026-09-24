@@ -971,7 +971,11 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const finalMetrics = context.measureText(`t.me/${data.telegram}`);
     const blockTop = logoY;
     const blockBottom = finalBaseline + finalMetrics.actualBoundingBoxDescent;
-    const yOffset = (height - blockTop - blockBottom) / 2;
+    // Centre the block on the rectangular part of the plate: the portrait
+    // plate narrows into its point over the last 13% of the height. A touch
+    // above the geometric centre reads as centred.
+    const usable = vertical ? height * .87 : height;
+    const yOffset = (usable - blockTop - blockBottom) / 2 - usable * .015;
     function text(value, y, size, url, weight = 400) {
         y += yOffset;
         context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
@@ -1470,7 +1474,10 @@ export class CardRenderer {
         const flipDepth = progress >= 1 ? 0 : Math.sin(Math.PI * Math.min(1, progress / .85)) * .45;
         const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX + gyroX * .2);
         const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY + gyroY * .2);
-        const targetZ = variation.poseZ + (reduced ? 0 : rz * Math.PI / 180 + Math.sin(idleTime * .36 + variation.phaseZ) * .025 * idleStrength);
+        // A tall portrait plate shows any roll as a slanted left edge of the text:
+        // it keeps its tilt and sway but no resting or idle roll.
+        const roll = this.vertical ? 0 : 1;
+        const targetZ = roll * variation.poseZ + (reduced ? 0 : rz * Math.PI / 180 + Math.sin(idleTime * .36 + variation.phaseZ) * .025 * idleStrength * roll);
         const blend = reduced ? 1 : 1 - Math.exp(-dt * 3);
         if (reduced) {
             this.rotationX = targetX; this.rotationY = targetY; this.rotationZ = targetZ;
@@ -1497,7 +1504,9 @@ export class CardRenderer {
             : this.vertical ? Math.min(1, (this.viewportWidth - 56) / (this.width * pixelsPerUnit))
                 : Math.min(1, this.aspect * 1.23) * .81;
         // The lab's card size scales the fitted card (default .8 of the fit).
-        const cardSize = lab ? lab.cardSize : (direction.cardSize ?? .8);
+        // Touch screens show it 15% larger, but never beyond the fit itself.
+        const size = lab ? lab.cardSize : (direction.cardSize ?? .8);
+        const cardSize = this.fixedCardWidth ? size : Math.min(1, size * 1.15);
         if (reduced) { this.zoom = zoom; this.zoomVelocity = 0; }
         else [this.zoom, this.zoomVelocity] = follow(this.zoom, this.zoomVelocity, zoom, 10, dt);
         const lift = this.lift + (this.touchLandscape ? 24 / pixelsPerUnit : 0) - introPose * .18;

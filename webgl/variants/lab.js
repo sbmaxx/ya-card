@@ -53,6 +53,14 @@ style.textContent = direction.css + `
 .lab .swatches button { appearance: none; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab .swatches .break { flex-basis: 100%; height: 0; }
+.lab .fold { display: flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; -webkit-user-select: none; }
+.lab .fold::before { content: ''; flex: none; width: 5px; height: 5px; margin: 0 1px 2px 1px; border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .15s; opacity: .7; }
+.lab .folded > .fold::before { transform: rotate(-45deg); margin-bottom: 0; }
+.lab .fold:focus-visible { outline: 1px solid #ffffff66; outline-offset: 2px; border-radius: 4px; }
+.lab .folded > :not(.fold) { display: none !important; }
+.lab .group.folded { padding-bottom: 10px; }
+.lab .group.folded > h3, .lab fieldset.folded > legend { margin-bottom: 0; }
 .lab .tint-row .sheer { margin: 6px 0 2px; }
 .lab .swatches .pick { position: relative; flex: none; width: 16px; height: 16px; border-radius: 50%; overflow: hidden; cursor: pointer;
   border: 1px solid #ffffff33; background: conic-gradient(#f33, #fc0, #3c3, #3cf, #33f, #c3f, #f33); }
@@ -105,6 +113,7 @@ const swatches = [['', 'Полированный металл'], ['plate', 'Ка
     ['fa7e6c', 'Светлый коралл'], ['f8604a', 'Коралловый'], ['fc3f1d', 'Яндекс-красный'], ['ff3333', 'Ярко-красный'],
     ['e00009', 'Красный'], ['ba2528', 'Гранатовый'], ['9d204e', 'Малиновый'], ['890006', 'Тёмно-красный']];
 const labels = { vcut: 'V-резка', deboss: 'Углублённый', raised: 'Выпуклый' };
+const reliefLabels = { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' };
 const panel = document.createElement('aside');
 panel.className = 'lab';
 panel.setAttribute('aria-label', 'Демо-стенд');
@@ -151,13 +160,13 @@ panel.innerHTML = `
     ${tintRow('logo', 'Цвет')}
     ${tintRow('logoFirst', 'Первая буква')}`)}
   ${group('Имя', `
-    ${shapeRow('name', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentNameShape)}
+    ${shapeRow('name', reliefLabels, currentNameShape)}
     <label class="range">Размер имени <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
     ${depthRow('nameDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="nameGloss"></output><input type="range" name="nameGloss" min="0" max="1" step=".05" value="${lab.nameGloss}"></label>
     ${tintRow('name', 'Цвет')}`)}
   ${group('Должность и контакты', `
-    ${shapeRow('body', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentBodyShape)}
+    ${shapeRow('body', reliefLabels, currentBodyShape)}
     ${depthRow('bodyDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="bodyGloss"></output><input type="range" name="bodyGloss" min="0" max="1" step=".05" value="${lab.bodyGloss}"></label>
     ${tintRow('body', 'Цвет')}
@@ -192,8 +201,43 @@ panel.innerHTML = `
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
   </fieldset></div>
   <div class="actions"><button type="button" data-action="export">Скачать HTML</button><button type="button" data-action="share">Короткая ссылка</button></div>
+  <div class="actions"><button type="button" data-action="copy">Скопировать настройки</button></div>
   <div class="actions"><button type="button" data-action="intro">Интро заново</button><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="hide">Скрыть</button></div>
   <p>H — скрыть/показать панель. Колесо — зум, перетаскивание — поворот, клик — переворот.</p>`;
+// Sections fold by their heading; which ones are folded is remembered.
+{
+    const FOLDED = 'card-lab-folded';
+    let saved = [];
+    try { saved = JSON.parse(localStorage.getItem(FOLDED) || '[]'); } catch {}
+    const folded = new Set(saved);
+    const store = () => { try { localStorage.setItem(FOLDED, JSON.stringify([...folded])); } catch {} };
+    panel.querySelectorAll('.group > h3, fieldset > legend').forEach(heading => {
+        const section = heading.parentElement, key = heading.textContent.trim();
+        heading.classList.add('fold');
+        heading.tabIndex = 0;
+        heading.setAttribute('role', 'button');
+        const apply = () => {
+            section.classList.toggle('folded', folded.has(key));
+            heading.setAttribute('aria-expanded', String(!folded.has(key)));
+        };
+        const flip = () => { if (!folded.delete(key)) folded.add(key); store(); apply(); };
+        heading.addEventListener('click', flip);
+        heading.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); flip(); }
+        });
+        apply();
+    });
+    // «Текст карточки» is a native disclosure: remember it the same way.
+    panel.querySelectorAll('details').forEach(details => {
+        const key = details.querySelector('summary').textContent.trim();
+        details.open = !folded.has(key) && saved.includes(`open:${key}`);
+        details.addEventListener('toggle', () => {
+            folded.delete(`open:${key}`);
+            if (details.open) folded.add(`open:${key}`);
+            store();
+        });
+    });
+}
 const toggle = document.createElement('button');
 toggle.className = 'lab-toggle';
 toggle.type = 'button';
@@ -369,6 +413,7 @@ panel.addEventListener('click', event => {
     if (action === 'hide') setHidden(true);
     if (action === 'export') exportHtml();
     if (action === 'share') copyShortLink(event.target.closest('button'));
+    if (action === 'copy') copySettings(event.target.closest('button'));
 });
 toggle.addEventListener('click', () => setHidden(false));
 // On phones the panel starts collapsed; the choice is kept across reloads within the session.
@@ -384,13 +429,59 @@ window.addEventListener('keydown', event => {
 // Export: this page's own self-contained HTML with the current settings baked
 // in as a preset, without the panel, navigation or noindex; the accessible HTML
 // copy of the card gets the edited text and serves as the no-WebGL fallback.
+// All settings as readable text with the short code, to paste into a chat.
+function describeSettings() {
+    writeUrl();
+    const n = value => String(Number(Number(value).toFixed(2)));
+    const named = Object.fromEntries(swatches.filter(entry => entry.length === 2).map(([hex, title]) => [hex, title]));
+    const colour = (object, finishKey = object) => {
+        const value = lab[`${object}Tint`];
+        if (value === 'same') return 'как у логотипа';
+        if (value === 'plate') return 'как пластина';
+        if (!value) return 'полированный металл';
+        const finish = lab.finish[finishKey] === 'anod' ? 'анод' : 'эмаль';
+        const sheer = lab[`${object}Sheer`] ? `, прозрачность ${n(lab[`${object}Sheer`])}` : '';
+        return `${named[value] ? `${named[value]} ` : ''}#${value}, ${finish}${sheer}`;
+    };
+    const lines = [
+        'Визитка — настройки стенда',
+        `Материал: ${direction.title} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${currentLayout === 'accent' ? 'акцент на имени' : 'классика'} · размер карточки: ${n(lab.cardSize)}`,
+        `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)}`
+            + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
+        `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
+        `Первая буква: ${colour('logoFirst')}`,
+        `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')}`,
+        `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
+        `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)}`
+    ];
+    const text = textFields.filter(([key]) => lab.text[key]).map(([key, label]) => `${label}: ${lab.text[key]}`);
+    if (text.length) lines.push(`Текст: ${text.join(' · ')}`);
+    const url = shortLink();
+    lines.push(`Код: ${new URL(url).searchParams.get('c')}`, `Ссылка: ${url}`);
+    return lines.join('\n');
+}
+async function copySettings(button) {
+    const text = describeSettings();
+    const label = button.textContent;
+    try {
+        await navigator.clipboard.writeText(text);
+        button.textContent = 'Скопировано';
+    } catch {
+        prompt('Настройки', text);
+    }
+    setTimeout(() => { button.textContent = label; }, 1600);
+}
+
 // Every setting as one short code; custom card text travels as plain parameters.
-async function copyShortLink(button) {
+function shortLink() {
     writeUrl();
     const params = new URLSearchParams(location.search);
     const extra = new URLSearchParams();
     for (const [key] of textFields) if (lab.text[key]) extra.set(key, lab.text[key]);
-    const url = `${location.origin}${location.pathname}?c=${encodePreset(params)}${extra.size ? `&${extra}` : ''}${location.hash}`;
+    return `${location.origin}${location.pathname}?c=${encodePreset(params)}${extra.size ? `&${extra}` : ''}${location.hash}`;
+}
+async function copyShortLink(button) {
+    const url = shortLink();
     const label = button.textContent;
     try {
         await navigator.clipboard.writeText(url);
