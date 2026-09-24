@@ -7,20 +7,20 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-20`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-21`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 107826 |
-| index.html.gz | 43775 |
-| index.html.br | 38279 |
+| index.html (RU) | 109105 |
+| index.html.gz | 44141 |
+| index.html.br | 38648 |
+| en/index.html (EN) | 108830 |
+| og-ru.jpg, og-en.jpg | 55585, 55430 |
+| robots.txt, sitemap.xml | 111, 614 |
 | plain/index.html | 25193 |
 | card.txt | 294 |
-
-HTML SHA-256:
-`48dc73a16d1444c4842da8d36cdb4afff62bdaf19b9912af82b2da13d08bc9b8`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -42,16 +42,27 @@ or if the scene has not started after 20 s on screen, the page opens `/plain/`
 new files in the document root. The rollback script restores the previous
 homepage files and removes them.
 
+## RU and EN addresses (20260924-21)
+
+Russian at `/`, English at `/en/`: the same card with its own `lang`, title,
+description, canonical, hreflang (ru, en, x-default), OpenGraph (locale, url,
+1200×630 image `og-<lang>.jpg`) and schema.org Person. Flipping the card changes
+the address with `history.pushState` (`window.cardLanguagePaths` in `app.js`); old
+`/#en` links move to `/en/`. nginx serves `/en/` precompressed like `/` (a
+`location = /en/` block, plus `/en` → `/en/`). `robots.txt` allows the site except
+`/variants/` and `/plain/` and names `sitemap.xml`. The share images are captured
+from the built pages at 1200×630 and kept in `variants/og/`.
+
 ## Rollback
 
 The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-20/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-21/rollback.sh'
 ```
 
-The script atomically restores the previous site files. No nginx reload is needed.
+The script restores the previous homepage files and vhost (with `nginx -t` and a reload) and removes the files this release added.
 The original Three.js page and old nginx configuration remain in release `20260923-01`. Keep this release directory until the new site is accepted.
 
 For subsequent deployments, create a new release directory and backup rather

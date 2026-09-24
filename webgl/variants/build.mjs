@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
 import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
@@ -50,7 +50,7 @@ const labCss = cornersCss + loaderCss;
 
 // A studio page: the WebGL card with the loader, a watchdog that opens the
 // plain card if the scene never starts, and everything inlined.
-async function studioPage({ entry, define, direction, fallback, head }) {
+async function studioPage({ entry, define, direction, fallback, head, source = template }) {
     const js = await build({
         stdin: { contents: entry, resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
@@ -67,7 +67,7 @@ async function studioPage({ entry, define, direction, fallback, head }) {
     });
     const css = await transform((baseCss + '\n' + labCss)
         .replace('./assets/Onest-card.woff2', `data:font/woff2;base64,${font.toString('base64')}`), { loader: 'css', minify: true, target: 'es2020' });
-    let html = template
+    let html = source
         // The backdrop is rendered in WebGL: no CSS ambient layer or SVG shadow.
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '<div class="card-loader" aria-hidden="true"></div>')
         // Without WebGL 2, or if the scene never starts, open the plain card instead.
@@ -80,7 +80,7 @@ async function studioPage({ entry, define, direction, fallback, head }) {
         if (document.visibilityState === 'visible') visible += Math.min(now - last, 1000);
         last = now;
         if (!document.documentElement.classList.contains('webgl-loading')) return;
-        if (visible > 20000) location.replace('${fallback}?why=timeout' + location.hash);
+        if (visible > 20000) location.replace('${fallback}?why=timeout' + (location.hash || (document.documentElement.lang === 'en' ? '#en' : '')));
         else window.cardBootTimeout = setTimeout(tick, 500);
     };
     window.cardBootTimeout = setTimeout(tick, 500);
@@ -104,18 +104,78 @@ await page('lab', await studioPage({
 }));
 
 // The homepage: one look from the lab, without the panel and other editions.
+// Russian at `/`, English at `/en/`: the same page with its own head, so each
+// address is indexed and shared in its language. Flipping the card switches
+// the address without a navigation (`cardLanguagePaths` in app.js).
+const SITE = 'https://rozhdestvenskiy.ru';
+const HOME = {
+    ru: { path: '/', locale: 'ru_RU', title: 'Роман Рождественский', first: 'Роман', last: 'Рождественский',
+        description: 'Роман Рождественский — руководитель отдела поисковых интерфейсов, Яндекс. Контакты.',
+        summary: 'Руководитель отдела поисковых интерфейсов, Яндекс', company: 'Яндекс',
+        job: 'Руководитель отдела поисковых интерфейсов', image: 'Металлическая визитка Романа Рождественского' },
+    en: { path: '/en/', locale: 'en_US', title: 'Roman Rozhdestvenskiy', first: 'Roman', last: 'Rozhdestvenskiy',
+        description: 'Roman Rozhdestvenskiy — head of search interfaces department at Yandex. Contacts.',
+        summary: 'Head of search interfaces department, Yandex', company: 'Yandex',
+        job: 'Head of search interfaces department', image: 'Metal business card of Roman Rozhdestvenskiy' }
+};
+const escapeHtml = value => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+function homeSource(lang) {
+    const info = HOME[lang], other = HOME[lang === 'ru' ? 'en' : 'ru'];
+    const meta = (property, content) => `<meta property="${property}" content="${escapeHtml(content)}">`;
+    const person = { '@context': 'https://schema.org', '@type': 'Person', name: info.title, alternateName: other.title,
+        jobTitle: info.job, url: SITE + info.path, email: 'sbmaxx@yandex-team.ru',
+        worksFor: { '@type': 'Organization', name: info.company }, sameAs: ['https://t.me/sbmaxx', 'https://github.com/sbmaxx'] };
+    const head = [
+        `<title>${escapeHtml(info.title)}</title>`,
+        `<meta name="description" content="${escapeHtml(info.description)}">`,
+        `<link rel="canonical" href="${SITE}${info.path}">`,
+        `<link rel="alternate" hreflang="ru" href="${SITE}/">`,
+        `<link rel="alternate" hreflang="en" href="${SITE}/en/">`,
+        `<link rel="alternate" hreflang="x-default" href="${SITE}/">`,
+        meta('og:type', 'profile'), meta('og:site_name', info.title),
+        meta('og:title', info.title), meta('og:description', info.summary), meta('og:url', SITE + info.path),
+        meta('og:locale', info.locale), meta('og:locale:alternate', other.locale),
+        meta('og:image', `${SITE}/og-${lang}.jpg`), meta('og:image:width', '1200'), meta('og:image:height', '630'),
+        meta('og:image:alt', info.image), meta('profile:first_name', info.first), meta('profile:last_name', info.last),
+        '<meta name="twitter:card" content="summary_large_image">'
+    ].join('\n');
+    const replaced = template
+        .replace('<html lang="ru">', `<html lang="${lang}">`)
+        .replace(/<title>[\s\S]*?<link rel="canonical" href="[^"]*">/, () => head)
+        .replace(/<script type="application\/ld\+json">[\s\S]*?<\/script>/, () => `<script type="application/ld+json">${JSON.stringify(person)}</script>`)
+        // The favicon follows the page language (and old `#en` links).
+        .replace('location.hash === "#en"', '(location.hash ? location.hash === "#en" : document.documentElement.lang === "en")')
+        .replace('href="#ru" data-lang="ru"', 'href="/" data-lang="ru"').replace('href="#en" data-lang="en"', 'href="/en/" data-lang="en"')
+        .replace("document.documentElement.classList.add('webgl-loading');", "document.documentElement.classList.add('webgl-loading');\nwindow.cardLanguagePaths = { ru: '/', en: '/en/' };");
+    for (const check of [`lang="${lang}"`, 'hreflang="x-default"', 'og:image', 'cardLanguagePaths', 'href="/en/" data-lang', `"jobTitle":"${info.job}"`]) {
+        if (!replaced.includes(check)) throw new Error(`homepage ${lang}: ${check} missing`);
+    }
+    return replaced;
+}
 {
     const look = decodePreset(HOME_LOOK);
     look.delete('panel');
     const direction = directions[look.get('edition')];
-    await page('', await studioPage({
-        entry: "import './home.js';\nimport './settings.js';\nimport '../app.js';",
-        define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
-        direction,
-        fallback: '/plain/',
-        // Indexed, unlike the lab. The scene sets the exact page colour at start.
-        head: '<meta name="theme-color" content="#0b0c0f">'
-    }), homeOut);
+    for (const lang of ['ru', 'en']) {
+        await page(lang === 'ru' ? '' : 'en', await studioPage({
+            entry: "import './home.js';\nimport './settings.js';\nimport '../app.js';",
+            define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
+            direction,
+            fallback: '/plain/',
+            // Indexed, unlike the lab. The scene sets the exact page colour at start.
+            head: '<meta name="theme-color" content="#0b0c0f">',
+            source: homeSource(lang)
+        }), homeOut);
+    }
+    // Share images, captured from the built pages (see README).
+    for (const lang of ['ru', 'en']) await copyFile(resolve(here, `og/og-${lang}.jpg`), resolve(homeOut, `og-${lang}.jpg`)).catch(() => console.warn(`og-${lang}.jpg missing`));
+    await writeFile(resolve(homeOut, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /variants/\nDisallow: /plain/\n\nSitemap: ${SITE}/sitemap.xml\n`);
+    const alternates = Object.entries(HOME).map(([code, { path }]) => `    <xhtml:link rel="alternate" hreflang="${code}" href="${SITE}${path}"/>`).join('\n');
+    await writeFile(resolve(homeOut, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${Object.values(HOME).map(({ path }) => `  <url>\n    <loc>${SITE}${path}</loc>\n${alternates}\n  </url>`).join('\n')}
+</urlset>
+`);
 }
 
 // The gallery and the old edition pages now open the lab (nginx is untouched,

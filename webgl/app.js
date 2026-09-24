@@ -83,9 +83,19 @@ import { CardRenderer } from './renderer.js';
         schedule();
     }
 
+    // A page may give each language its own address (`{ ru: '/', en: '/en/' }`):
+    // flipping the card then changes the address without a navigation.
+    // Without it, and for old `#en` links, the language lives in the hash.
+    const languagePaths = window.cardLanguagePaths || null;
+    const languageFromUrl = () => {
+        if (location.hash === '#en' || location.hash === '#ru') return location.hash.slice(1);
+        if (languagePaths) return location.pathname === languagePaths.en ? 'en' : 'ru';
+        return 'ru';
+    };
+    const urlFor = next => languagePaths ? languagePaths[next] + location.search : `#${next}`;
     function navigate(next) {
         if (next === lang) return;
-        history.pushState(null, '', `#${next}`);
+        history.pushState(null, '', urlFor(next));
         setLanguage(next);
     }
     const flip = () => navigate(lang === 'ru' ? 'en' : 'ru');
@@ -93,8 +103,8 @@ import { CardRenderer } from './renderer.js';
         event.preventDefault();
         navigate(link.dataset.lang);
     }));
-    window.addEventListener('hashchange', () => setLanguage(location.hash === '#en' ? 'en' : 'ru'));
-    window.addEventListener('popstate', () => setLanguage(location.hash === '#en' ? 'en' : 'ru'));
+    window.addEventListener('hashchange', () => setLanguage(languageFromUrl()));
+    window.addEventListener('popstate', () => setLanguage(languageFromUrl()));
 
     // Native WebGL: 3 draw calls, capped to 30 fps at rest, 60 fps during interaction.
     // Reduced-motion scenes stop requesting frames once the flip settles.
@@ -368,7 +378,9 @@ import { CardRenderer } from './renderer.js';
     scene.tabIndex = 0;
     scene.setAttribute('role', 'group');
 
-    setLanguage(location.hash === '#en' ? 'en' : 'ru', false);
+    setLanguage(languageFromUrl(), false);
+    // An old `/#en` link on a page with per-language addresses moves to `/en/`.
+    if (languagePaths && location.hash && location.pathname !== languagePaths[lang]) history.replaceState(null, '', urlFor(lang));
     async function initialize() {
         try {
             renderer = await CardRenderer.create(canvas);
@@ -395,7 +407,7 @@ import { CardRenderer } from './renderer.js';
                 // is not a missing WebGL: wait behind the loader for its restoration.
                 if (canvas.getContext('webgl2')?.isContextLost()) return;
                 const why = encodeURIComponent(String(error?.message || error).slice(0, 80));
-                location.replace(`${window.cardFallbackUrl}?why=${why}${location.hash}`);
+                location.replace(`${window.cardFallbackUrl}?why=${why}${location.hash || (lang === 'en' ? '#en' : '')}`);
                 return;
             }
             showFallback();
