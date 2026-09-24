@@ -7,23 +7,24 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-16`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-17`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 71272 |
-| index.html.gz | 30348 |
-| index.html.br | 26868 |
+| index.html | 72889 |
+| index.html.gz | 30809 |
+| index.html.br | 27296 |
 
 HTML SHA-256:
-`4c1cb2992e52f415721861d8b0044e2a0cfa0a042da8de22a3c11be479234e1e`.
+`16a855e5f4d15ca3fa9e75c21be4e86385af099986c3791752ea055ac6156156`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
-were compared byte-for-byte with the built artifacts. Browser checks passed on
-the production URL, including RU/EN favicon switching and no external resources.
+were compared byte-for-byte in prior releases. Those browser checks covered
+RU/EN favicon switching and no external resources. Per-release validation is
+recorded below; this visual release does not rerun the regression suites.
 
 The HTML, styles, JavaScript, Onest font, logos and favicons are contained in one document;
 compressed files are alternative encodings, not additional client requests.
@@ -34,7 +35,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-16/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-17/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -167,3 +168,12 @@ hits and shadows use the same camera. Larger windows preserve the size and
 tilted perspective. The rollback restores release `20260924-15`.
 Fixed-size, contact, browser, mobile and idle-motion checks passed; public
 Brotli matches the tested artifact. See `design/2026-09-24-fixed-desktop-size.md`.
+
+## Stronger carved lettering
+
+Release `20260924-17` adds light-dependent cavity shadows and view-dependent
+inner walls to the logo and name, within the original glyph coverage. Logo
+bevel/depth is 1.40/1.65 layout pixels; name is 0.80/0.80 with a quieter rim.
+Two visual previews (detail/mobile, then refined mobile) and the normal build
+were used; no test suites were run, as requested. The upload hashes matched.
+Rollback restores release `20260924-16`.

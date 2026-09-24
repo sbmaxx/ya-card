@@ -155,6 +155,18 @@ void main() {
     #endif
     // Subpixel tooling marks fade out before they can alias during rotation.
     float grainVisibility = 1.0 - smoothstep(0.28, 0.65, footprint);
+    float logoRegion = step(uLogoRect.x, vUV.x) * step(uLogoRect.y, vUV.y)
+                     * step(vUV.x, uLogoRect.z) * step(vUV.y, uLogoRect.w);
+    ${art.cavity ? `
+    // A recessed floor is occluded by its opening. Read these masks outside
+    // the glyph branch so mip derivatives remain valid on WebGL 1.
+    float logoScale = max(0.1, ((uLogoRect.z - uLogoRect.x) * uLayoutSize.x - 4.0) / 145.0);
+    float cutDepth = mix(${art.name.depth.toFixed(3)}, ${art.logo.depth.toFixed(3)} * logoScale, logoRegion);
+    vec2 viewSlope = vec2(dot(view, normalize(vTangent)), dot(view, normalize(vBitangent))) / max(dot(view, normal), 0.4);
+    vec2 lightSlope = vec2(dot(light, normalize(vTangent)), dot(light, normalize(vBitangent))) / max(dot(light, normal), 0.35);
+    float visibleInnerWall = 1.0 - texture2D(uEngraving, vUV - viewSlope * cutDepth / uLayoutSize).a;
+    float cavityShadow = 1.0 - texture2D(uEngraving, vUV + lightSlope * cutDepth * 1.3 / uLayoutSize).a;
+    ` : ''}
     if (engraved > 0.001) {
         vec2 mappedXY = (relief.rg * 255.0 - 128.0) / 127.0;
         mappedXY *= resolved;
@@ -162,7 +174,7 @@ void main() {
         vec3 facetNormal = normalize(normalize(vTangent) * mappedXY.x
                          + normalize(vBitangent) * mappedXY.y
                          + normal * sqrt(max(0.01, 1.0 - dot(mappedXY, mappedXY))));
-        float wall = smoothstep(0.035, 0.30, slope) * 0.58 * resolved;
+        float wall = smoothstep(0.035, 0.30, slope) * ${(art.name.wall ?? .58).toFixed(3)} * resolved;
         // Dark matte fill on the floor; the narrow cut wall reflects the same
         // studio source as the plate, with mild cavity occlusion.
         vec3 floorInk = paint * (0.91 + 0.09 * max(dot(normal, light), 0.0)) * (1.0 - 0.18 * relief.b);
@@ -171,8 +183,6 @@ void main() {
         vec3 litWall = metalLighting(facetNormal, view, light) * (0.65 + 0.28 * facetLight);
         // The occluded wall must become darker, not a second silver outline.
         vec3 cutMetal = mix(floorInk * 0.58, litWall, wallExposure);
-        float logoRegion = step(uLogoRect.x, vUV.x) * step(uLogoRect.y, vUV.y)
-                         * step(vUV.x, uLogoRect.z) * step(vUV.y, uLogoRect.w);
         vec3 stampedFace = metalLighting(normal, view, light) * ${art.logo.face.toFixed(3)} + uMetalTone * 0.018;
         stampedFace += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
         stampedFace *= ${art.logo.raised ? '1.0' : '(1.0 - 0.14 * relief.b)'};
@@ -204,6 +214,14 @@ void main() {
         // The chosen monochrome relief catches the same moving softbox as the
         // plate. Coverage is preserved, so no exterior outline is introduced.
         inkColor = mix(inkColor, stampedMetal, engraved * logoRegion);
+        ${art.cavity ? `
+        // Internal shadow separates the bottom from the bevel. The visible
+        // wall shifts with the viewing angle, while the letter opening stays fixed.
+        float floorAmount = smoothstep(0.20, 0.85, relief.b);
+        inkColor *= 1.0 - cavityShadow * floorAmount * 0.62 * resolved;
+        vec3 innerWall = mix(paint * 0.36, metalLighting(facetNormal, view, light) * 1.03, wallExposure);
+        inkColor = mix(inkColor, innerWall, visibleInnerWall * mix(0.64, 0.80, logoRegion) * resolved);
+        ` : ''}
     }
     // Preserve the original glyph coverage: the bevel cannot create an outer halo.
     color = mix(color, inkColor, ink.a * (1.0 - uEdge));
