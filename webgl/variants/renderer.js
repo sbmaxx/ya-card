@@ -280,6 +280,8 @@ uniform float uTextMute;
 uniform float uLetterGlow;
 // Lettering gloss: x logo, y name, z role and contacts (1 — as finished, 0 — matte).
 uniform vec3 uGloss;
+// Colour density: x first letter, y wordmark, z name, w role and contacts (1 — opaque).
+uniform vec4 uTintAmount;
 uniform float uRoomBase;
 uniform float uBounce;
 in vec3 vPosition;
@@ -402,12 +404,16 @@ vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
 
 // Colour on a letter: enamel fills the flat faces and leaves polished bevels;
 // anodising colours the metal itself, bevels included.
-vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge, float shine, vec3 plateLetter) {
+vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge, float shine, vec3 plateLetter, float amount) {
     // The plate's own material: letters pressed out of (or into) the same steel.
     if (tint.a > 1.5) return plateLetter;
     if (tint.a < .5) return base;
     vec3 anod = metal(tint.rgb, facet, v, mix(.55, max(.06, rough), shine));
-    return mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .10, shine)), anod, finish), mix(base, anod, finish), edge);
+    vec3 full = mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .10, shine)), anod, finish), mix(base, anod, finish), edge);
+    // A translucent colour: the plate's brushed steel shows through, tinted.
+    if (amount > .999) return full;
+    vec3 dyed = plateLetter * mix(vec3(1.0), tint.rgb / max(max(tint.r, max(tint.g, tint.b)), .02), amount);
+    return mix(dyed, full, amount * amount);
 }
 
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough) {
@@ -540,7 +546,8 @@ void main() {
             float letterEdge = smoothstep(.12, .45, slope) * resolved;
             // Blind embossing: the plate's brushed finish on the relief normal.
             vec3 plateLetter = vec3(0.0);
-            if (max(max(uLogoTint.a, uLogoFirstTint.a), max(uNameTint.a, uBodyTint.a)) > 1.5) {
+            if (max(max(uLogoTint.a, uLogoFirstTint.a), max(uNameTint.a, uBodyTint.a)) > 1.5
+                || min(min(uTintAmount.x, uTintAmount.y), min(uTintAmount.z, uTintAmount.w)) < .999) {
                 float fv = max(dot(facet, v), 1e-3);
                 ${plate.film ? 'vec3 letterF0 = filmF0(fv, vUV);' : 'vec3 letterF0 = PLATE_F0;'}
                 plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, ${f(plate.aniso)}) * (1.0 + grooves * .05);
@@ -549,10 +556,10 @@ void main() {
             // The first letter of the wordmark is drawn red-only in the mask.
             vec3 inkColor = ink.rgb / max(ink.a, .001);
             float firstLetter = smoothstep(.6, .3, inkColor.g);
-            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter),
-                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter), firstLetter);
-            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter);
-            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter);
+            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.y),
+                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.x), firstLetter);
+            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
+            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter, uTintAmount.w);
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
@@ -1049,7 +1056,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1546,6 +1553,7 @@ export class CardRenderer {
         gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
         gl.uniform1f(this.uniforms.uLetterGlow, lab ? lab.letterGlow : (direction.letterGlow ?? 1));
+        gl.uniform4f(this.uniforms.uTintAmount, ...(lab ? ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - lab[`${key}Sheer`]) : [1, 1, 1, 1]));
         gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);

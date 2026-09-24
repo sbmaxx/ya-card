@@ -53,6 +53,7 @@ style.textContent = direction.css + `
 .lab .swatches button { appearance: none; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab .swatches .break { flex-basis: 100%; height: 0; }
+.lab .tint-row .sheer { margin: 6px 0 2px; }
 .lab .swatches .pick { position: relative; flex: none; width: 16px; height: 16px; border-radius: 50%; overflow: hidden; cursor: pointer;
   border: 1px solid #ffffff33; background: conic-gradient(#f33, #fc0, #3c3, #3cf, #33f, #c3f, #f33); }
 .lab .swatches .pick.active { outline: 2px solid #fff; outline-offset: 2px; }
@@ -128,7 +129,9 @@ const tintRow = (object, label) => `<div class="tint-row">
     <div class="swatches" data-tint="${object}Tint">
     ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => hex === 'break' ? '<span class="break"></span>' : `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex === 'plate' ? 'repeating-linear-gradient(0deg,#c4c7cb 0 1px,#9ca0a5 1px 2px)' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
     <label class="pick" title="Свой цвет"><input type="color" aria-label="Свой цвет" value="#${customHex(lab[object + 'Tint'])}"></label><input class="hex" type="text" maxlength="7" spellcheck="false" aria-label="Цвет, HEX" placeholder="#rrggbb" value="${/^[0-9a-f]{6}$/i.test(lab[object + 'Tint'] || '') ? '#' + lab[object + 'Tint'] : ''}">
-  </div></div>`;
+  </div>
+    <label class="range sheer">Прозрачность цвета <output data-for="${object}Sheer"></output><input type="range" name="${object}Sheer" min="0" max="1" step=".05" value="${lab[object + 'Sheer']}"></label>
+  </div>`;
 panel.innerHTML = `
   <h2>Демо-стенд <span class="meta"><output class="fps">— fps</output><button type="button" class="close" data-action="hide" aria-label="Скрыть панель">×</button></span></h2>
   <fieldset><legend>Материал</legend><div class="segments" data-param="edition">
@@ -218,7 +221,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'keyGain', 'keySoft', 'lampSize', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');

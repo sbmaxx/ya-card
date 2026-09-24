@@ -29,6 +29,11 @@ export const lab = globalThis.__cardLab = {
     logoGloss: number('logoGloss', 1),
     nameGloss: number('nameGloss', 1),
     bodyGloss: number('bodyGloss', 1),
+    // Colour transparency per object: 0 — opaque, 1 — the plate shows through.
+    logoFirstSheer: number('logoFirstSheer', 0),
+    logoSheer: number('logoSheer', 0),
+    nameSheer: number('nameSheer', 0),
+    bodySheer: number('bodySheer', 0),
     keyGain: number('keyGain', .7),
     keySoft: number('keySoft', .05),
     lampSize: number('lampSize', 1),
