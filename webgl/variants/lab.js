@@ -137,8 +137,14 @@ style.textContent = direction.css + `
 document.head.append(style);
 document.title = `Lab · ${direction.title}`;
 
-const swatches = [['', 'Металл'], ['fc3f1d', 'Яндекс-красный'], ['111214', 'Чёрный'], ['f2f1ee', 'Белый'],
-    ['1f3c8a', 'Синий'], ['0f5a3c', 'Изумруд'], ['6d1320', 'Бордо'], ['c9a45c', 'Золото']];
+// Grouped by family: darks, whites, yellows, reds, blues, green.
+const swatches = [['', 'Металл'],
+    ['111214', 'Чёрный'], ['25282c', 'Антрацит'], ['3b3f45', 'Графит'], ['5d6168', 'Тёмно-серый'],
+    ['f2f1ee', 'Белый'], ['f1e9d6', 'Молочный'], ['e1e6ec', 'Холодный белый'], ['cfd2d6', 'Жемчужный'],
+    ['ffe066', 'Лимонный'], ['ffcc00', 'Жёлтый'], ['e0a526', 'Горчичный'], ['c9a45c', 'Золото'],
+    ['fc3f1d', 'Яндекс-красный'], ['6d1320', 'Бордо'],
+    ['8cc4ee', 'Небесный'], ['2f80d8', 'Лазурь'], ['1f3c8a', 'Синий'], ['14203f', 'Тёмно-синий'],
+    ['0f5a3c', 'Изумруд']];
 const labels = { vcut: 'V-резка', deboss: 'Углублённый', raised: 'Выпуклый' };
 const panel = document.createElement('aside');
 panel.className = 'lab';
