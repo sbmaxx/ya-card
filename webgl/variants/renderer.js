@@ -373,8 +373,10 @@ vec3 room(vec3 world, float rough) {
     // Wide and soft, so a hard phone tilt slides it off gradually instead of
     // leaving the plate facing an unlit room.
     float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(1.35, 1.05), blur + .22, uRoundLights);
-    float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02, uRoundLights);
-    col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .82 * flag);
+    // The flag is round and very soft: sliding across brushed steel with a
+    // phone's tilt it reads as a gentle shading, never as a dark block.
+    float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .24), blur + .20, 1.0);
+    col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .55 * flag);
     // Light walls (the paper backdrop) surround the card with brighter room.
     col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
     col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
@@ -596,7 +598,11 @@ void main() {
     vec3 hdr = color * uExposure;
     if (uBloomPass > .5) {
         // Store the part above white, compressed, for the quarter-resolution glow.
-        outColor = vec4(max(hdr - vec3(1.6), 0.0) * .25 * uOpacity * mix(1.0, uLetterGlow, letterMask), 1.0);
+        // The part above the threshold keeps the highlight's hue: subtracting the
+        // same amount from every channel left gold glowing orange-red.
+        float peak = max(hdr.r, max(hdr.g, hdr.b));
+        vec3 glow = hdr * max(peak - 1.6, 0.0) / max(peak, 1e-4);
+        outColor = vec4(glow * .25 * uOpacity * mix(1.0, uLetterGlow, letterMask), 1.0);
         return;
     }
     vec3 display = toSRGB(neutralTonemap(hdr));
