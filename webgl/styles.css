@@ -62,6 +62,14 @@ h1 span { display: block; }
   .details { margin-top: 32px; }
   .email, .telegram { display: block; }
 }
+@media (min-width: 701px) and (pointer: fine) {
+  .face { width: 684px; min-height: 378px; padding: 57.6px 70.2px; }
+  .brand { margin-bottom: 36px; }
+  .logo { width: 181.8px; }
+  h1 { font-size: 27.9px; line-height: 32.4px; }
+  .position, .details { font-size: 16.2px; line-height: 22.5px; }
+  .details { margin-top: 28.8px; }
+}
 /* A scrollable HTML card needs its footer in flow, so it cannot cover contacts. */
 :root:not(.webgl-ready):not(.webgl-loading) body { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; min-height: 100svh; }
 :root:not(.webgl-ready):not(.webgl-loading) main { grid-column: 1 / -1; order: 1; }

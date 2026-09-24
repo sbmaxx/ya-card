@@ -526,7 +526,7 @@ export class CardRenderer {
         const compact = vertical && Math.max(screen.width, screen.height) < 740;
         this.touchLandscape = touchLandscape;
         if (vertical !== this.vertical || compact !== this.compact) this.rebuild(vertical, compact);
-        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : vertical ? 400 : 760;
+        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : vertical ? 360 : 684;
         // A desktop camera with a fixed CSS-pixel focal length keeps both size
         // and perspective stable when the viewport grows. Touch keeps its fit.
         const focalLength = this.fixedCardWidth
@@ -638,8 +638,8 @@ export class CardRenderer {
         }
         const pixelsPerUnit = this.viewportHeight * this.projection[5] / 14;
         const fit = this.fixedCardWidth
-            ? Math.min(1, Math.max(1, this.viewportWidth - (this.vertical ? 56 : 96)) / (this.width * pixelsPerUnit),
-                Math.max(1, this.viewportHeight - 192) / (this.height * pixelsPerUnit))
+            ? Math.min(1, Math.max(1, this.viewportWidth - (this.vertical ? 56 : 96)) * .9 / (this.width * pixelsPerUnit),
+                Math.max(1, this.viewportHeight - 192) * .9 / (this.height * pixelsPerUnit))
             : this.touchLandscape
             ? Math.min((this.viewportWidth - 64) / (this.width * pixelsPerUnit),
                 (this.viewportHeight - 108) / (this.height * pixelsPerUnit))

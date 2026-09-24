@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-17`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-18`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 72889 |
-| index.html.gz | 30809 |
-| index.html.br | 27296 |
+| index.html | 73166 |
+| index.html.gz | 30887 |
+| index.html.br | 27317 |
 
 HTML SHA-256:
-`16a855e5f4d15ca3fa9e75c21be4e86385af099986c3791752ea055ac6156156`.
+`ad4871d40ec406241f27193f346eb0d28654cacb1fcec012fdeb0cd3241fd512`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -35,7 +35,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-17/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-18/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -177,3 +177,10 @@ bevel/depth is 1.40/1.65 layout pixels; name is 0.80/0.80 with a quieter rim.
 Two visual previews (detail/mobile, then refined mobile) and the normal build
 were used; no test suites were run, as requested. The upload hashes matched.
 Rollback restores release `20260924-16`.
+
+## Ten-percent desktop reduction
+
+Release `20260924-18` scales desktop cards down by 10%: approximately 684×378px
+wide and 360px portrait width. Constrained desktop fits also shrink by 10%.
+Touch sizing is unchanged. The normal build and upload hash checks passed;
+no test suites were run. Rollback restores release `20260924-17`.

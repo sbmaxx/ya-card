@@ -65,12 +65,12 @@ try {
     }
     const regular = reports.slice(0, 5), baseline = regular[0];
     for (const report of regular) {
-        assert.ok(report.flat.width >= 758 && report.flat.width <= 764, 'readable desktop width is approximately 760 CSS pixels');
+        assert.ok(report.flat.width >= 682 && report.flat.width <= 688, 'desktop width is approximately 684 CSS pixels');
         for (const pose of ['flat', 'tilted']) for (let i = 0; i < report[pose].points.length; i++) {
             report[pose].points[i].forEach((value, axis) => assert.ok(Math.abs(value - baseline[pose].points[i][axis]) < .1, 'size and perspective remain constant as the window grows'));
         }
     }
-    assert.ok(reports[5].flat.width < 760 && reports[6].flat.width < 760, 'only constrained windows shrink');
+    assert.ok(reports[5].flat.width < 684 && reports[6].flat.width < 684, 'only constrained windows shrink');
     assert.ok(Math.abs(reports[7].flat.width - reports[8].flat.width) < .1, 'narrow desktop portrait size also stays fixed');
     assert.deepEqual(errors, []);
     console.log(JSON.stringify(reports.map(r => ({ viewport: r.viewport, width: +r.flat.width.toFixed(2), height: +r.flat.height.toFixed(2) })), null, 2));
