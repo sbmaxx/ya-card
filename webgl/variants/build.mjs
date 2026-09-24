@@ -2,6 +2,7 @@ import { readFile, writeFile, mkdir, rm, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
 import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
+import { createHash } from 'node:crypto';
 import { build, transform } from 'esbuild';
 import { minify } from 'html-minifier-terser';
 import { cards } from '../data.js';
@@ -112,12 +113,16 @@ const HOME = {
     ru: { path: '/', locale: 'ru_RU', title: 'Роман Рождественский', first: 'Роман', last: 'Рождественский',
         description: 'Роман Рождественский — руководитель отдела поисковых интерфейсов, Яндекс. Контакты.',
         summary: 'Руководитель отдела поисковых интерфейсов, Яндекс', company: 'Яндекс',
-        job: 'Руководитель отдела поисковых интерфейсов', image: 'Металлическая визитка Романа Рождественского' },
+        job: 'Руководитель отдела поисковых интерфейсов', image: 'Металлическая поисковая строка с именем Романа Рождественского' },
     en: { path: '/en/', locale: 'en_US', title: 'Roman Rozhdestvenskiy', first: 'Roman', last: 'Rozhdestvenskiy',
         description: 'Roman Rozhdestvenskiy — head of search interfaces department at Yandex. Contacts.',
         summary: 'Head of search interfaces department, Yandex', company: 'Yandex',
-        job: 'Head of search interfaces department', image: 'Metal business card of Roman Rozhdestvenskiy' }
+        job: 'Head of search interfaces department', image: 'Metal search bar with the name Roman Rozhdestvenskiy' }
 };
+// Share images carry a content hash, so chats and social networks fetch a new
+// image when it changes instead of showing the cached one.
+const ogVersion = Object.fromEntries(await Promise.all(['ru', 'en'].map(async lang => [lang,
+    createHash('sha256').update(await readFile(resolve(here, `og/og-${lang}.jpg`))).digest('hex').slice(0, 8)])));
 const escapeHtml = value => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 function homeSource(lang) {
     const info = HOME[lang], other = HOME[lang === 'ru' ? 'en' : 'ru'];
@@ -135,7 +140,7 @@ function homeSource(lang) {
         meta('og:type', 'profile'), meta('og:site_name', info.title),
         meta('og:title', info.title), meta('og:description', info.summary), meta('og:url', SITE + info.path),
         meta('og:locale', info.locale), meta('og:locale:alternate', other.locale),
-        meta('og:image', `${SITE}/og-${lang}.jpg`), meta('og:image:width', '1200'), meta('og:image:height', '630'),
+        meta('og:image', `${SITE}/og-${lang}.jpg?v=${ogVersion[lang]}`), meta('og:image:width', '1200'), meta('og:image:height', '630'),
         meta('og:image:alt', info.image), meta('profile:first_name', info.first), meta('profile:last_name', info.last),
         '<meta name="twitter:card" content="summary_large_image">'
     ].join('\n');
@@ -167,7 +172,7 @@ function homeSource(lang) {
             source: homeSource(lang)
         }), homeOut);
     }
-    // Share images, captured from the built pages (see README).
+    // Share images: generated covers (see og/PROMPT.md), 1200×630.
     for (const lang of ['ru', 'en']) await copyFile(resolve(here, `og/og-${lang}.jpg`), resolve(homeOut, `og-${lang}.jpg`)).catch(() => console.warn(`og-${lang}.jpg missing`));
     await writeFile(resolve(homeOut, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /variants/\nDisallow: /plain/\n\nSitemap: ${SITE}/sitemap.xml\n`);
     const alternates = Object.entries(HOME).map(([code, { path }]) => `    <xhtml:link rel="alternate" hreflang="${code}" href="${SITE}${path}"/>`).join('\n');
