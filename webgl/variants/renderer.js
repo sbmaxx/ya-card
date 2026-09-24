@@ -1101,6 +1101,8 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     };
     // The lab can scale the name; the plans are drawn for the size in LAYOUTS.
     const nameScale = globalThis.__cardLab?.nameScale ?? direction.nameScale ?? 1;
+    // Role and contacts: Regular (400) or the name's Medium (500) — the font's range.
+    const bodyWeight = globalThis.__cardLab?.bodyWeight ?? 400;
     let nameSize = plan.nameSize * nameScale;
     const nameLines = fits(data.name, nameSize, 500) ? [data.name] : splitTwo(data.name);
     // A single long word can still be wider than the plate: shrink to fit.
@@ -1108,7 +1110,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     const widest = Math.max(...nameLines.map(line => context.measureText(line).width));
     if (widest > maxWidth) nameSize *= maxWidth / widest;
     const growth = nameSize - plan.nameSize;
-    const roleLines = fits(data.position, textSize, 400) ? [data.position] : (data.positionLines || splitTwo(data.position));
+    const roleLines = fits(data.position, textSize, bodyWeight) ? [data.position] : (data.positionLines || splitTwo(data.position));
     const ink = (value, size, weight = 400) => {
         context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
         const metrics = context.measureText(value);
@@ -1123,10 +1125,10 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         nameGap = nameSize * 1.12;
         nameY = logoY + logoHeight + logoGap + ink(nameLines[0], nameSize, 500).ascent;
         const nameBottom = nameY + (nameLines.length - 1) * nameGap + ink(nameLines.at(-1), nameSize, 500).descent;
-        const roleY = nameBottom + gap + ink(roleLines[0], textSize).ascent;
+        const roleY = nameBottom + gap + ink(roleLines[0], textSize, bodyWeight).ascent;
         roleYs = roleLines.map((_, i) => roleY + i * roleLeading);
-        const roleBottom = roleYs.at(-1) + ink(roleLines.at(-1), textSize).descent;
-        contactsY = roleBottom + gap + ink(data.email, textSize).ascent;
+        const roleBottom = roleYs.at(-1) + ink(roleLines.at(-1), textSize, bodyWeight).descent;
+        contactsY = roleBottom + gap + ink(data.email, textSize, bodyWeight).ascent;
     } else {
         // Landscape plans are drawn for one-line blocks.
         const planGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
@@ -1143,7 +1145,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     }
     const finalBaseline = contactsY + lineHeight;
     const blockTop = logoY;
-    const blockBottom = finalBaseline + ink(`t.me/${data.telegram}`, textSize).descent;
+    const blockBottom = finalBaseline + ink(`t.me/${data.telegram}`, textSize, bodyWeight).descent;
     // Centre the block on the plate. The portrait plate narrows into its point
     // over the last 13% of its height; the eye counts part of that point as
     // space below the text, so the block is centred on the top 92%. Landscape
@@ -1177,8 +1179,8 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         };
         const widest = Math.max(plan.center ? 0 : logoWidth,
             ...nameLines.map(line => inkWidth(line, nameSize, 500)),
-            ...roleLines.map(line => inkWidth(line, textSize)),
-            inkWidth(data.email, textSize), inkWidth(`t.me/${data.telegram}`, textSize));
+            ...roleLines.map(line => inkWidth(line, textSize, bodyWeight)),
+            inkWidth(data.email, textSize, bodyWeight), inkWidth(`t.me/${data.telegram}`, textSize, bodyWeight));
         x = (width - widest) / 2;
         if (!plan.center) logoX = x;
     }
@@ -1189,11 +1191,11 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    const bodyRects = roleLines.map((line, i) => text(line, roleYs[i], textSize));
+    const bodyRects = roleLines.map((line, i) => text(line, roleYs[i], textSize, undefined, bodyWeight));
     const y = contactsY;
     const size = textSize;
-    bodyRects.push(text(data.email, y, size, `mailto:${data.email}`));
-    bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`));
+    bodyRects.push(text(data.email, y, size, `mailto:${data.email}`, bodyWeight));
+    bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`, bodyWeight));
     const textRelief = [Math.min(...bodyRects.map(r => r[0])), Math.min(...bodyRects.map(r => r[1])),
         Math.max(...bodyRects.map(r => r[2])), Math.max(...bodyRects.map(r => r[3]))];
     return { canvas, links, width, height, titleRelief, logoRelief, textRelief, logoScale: logoWidth / 145 };

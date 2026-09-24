@@ -48,6 +48,8 @@ export const lab = globalThis.__cardLab = {
     logoDepth: number('logoDepth', 1),
     nameDepth: number('nameDepth', 1),
     nameScale: number('nameScale', 1.2),
+    // Role and contacts: 400 Regular or 500 Medium, as the name.
+    bodyWeight: number('bodyWeight', 400) >= 450 ? 500 : 400,
     bodyDepth: number('bodyDepth', 1),
     bodyTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),
