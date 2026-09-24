@@ -81,6 +81,10 @@ style.textContent = direction.css + `
 .lab::-webkit-scrollbar { width: 6px; }
 .lab::-webkit-scrollbar-thumb { background: #ffffff38; border-radius: 3px; }
 .lab::-webkit-scrollbar-track { background: transparent; }
+.lab .group { margin: 0 0 10px; padding: 10px 10px 4px; border-radius: 10px; background: #ffffff08; border: 1px solid #ffffff0f; }
+.lab .group h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #e8ebf0; }
+.lab .group .segments { margin-bottom: 8px; }
+.lab .group label.range { margin-bottom: 8px; }
 .lab .tint-row { margin-bottom: 9px; }
 .lab .tint-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; color: #9aa3b0; }
 .lab .mini { display: flex; gap: 1px; padding: 1px; border-radius: 6px; background: #ffffff10; }
@@ -137,6 +141,19 @@ const labels = { vcut: 'V-резка', deboss: 'Углублённый', raised:
 const panel = document.createElement('aside');
 panel.className = 'lab';
 panel.setAttribute('aria-label', 'Демо-стенд');
+// Panel building blocks: one group per lettering object with everything about it.
+const group = (title, body) => `<section class="group"><h3>${title}</h3>${body}</section>`;
+const shapeRow = (param, options, current) => `<div class="segments" data-param="${param}">
+    ${Object.entries(options).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === current}">${label}</button>`).join('')}
+  </div>`;
+const depthRow = (key, label) => `<label class="range">${label} <output data-for="${key}"></output><input type="range" name="${key}" min="0" max="3" step=".05" value="${lab[key]}"></label>`;
+const tintRow = (object, label) => `<div class="tint-row">
+    <div class="tint-head"><span>${label}</span><div class="mini" data-finish="${object}">
+      <button type="button" data-value="enamel" aria-pressed="${lab.finish[object] === 'enamel'}">Эмаль</button><button type="button" data-value="anod" aria-pressed="${lab.finish[object] === 'anod'}">Анод</button>
+    </div></div>
+    <div class="swatches" data-tint="${object}Tint">
+    ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+  </div></div>`;
 panel.innerHTML = `
   <h2>Демо-стенд <span class="meta"><output class="fps">— fps</output><button type="button" class="close" data-action="hide" aria-label="Скрыть панель">×</button></span></h2>
   <fieldset><legend>Материал</legend><div class="segments" data-param="edition">
@@ -149,34 +166,23 @@ panel.innerHTML = `
     <button type="button" data-value="classic" aria-pressed="${currentLayout === 'classic'}">Классика</button>
     <button type="button" data-value="accent" aria-pressed="${currentLayout === 'accent'}">Акцент на имени</button>
   </div></fieldset>
-  <fieldset><legend>Логотип</legend><div class="segments" data-param="relief">
-    ${Object.entries(labels).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentLogoShape}">${label}</button>`).join('')}
-  </div>
-    <label class="range" style="margin-top:8px">Глубина логотипа <output data-for="logoDepth"></output><input type="range" name="logoDepth" min="0" max="3" step=".05" value="${lab.logoDepth}"></label>
-  </fieldset>
-  <fieldset><legend>Имя <span style="color:#6f7884">· «Материал» — эмаль или лазер из пресета</span></legend><div class="segments" data-param="name">
-    ${Object.entries({ edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentNameShape}">${label}</button>`).join('')}
-  </div>
-    <label class="range" style="margin-top:8px">Глубина имени <output data-for="nameDepth"></output><input type="range" name="nameDepth" min="0" max="3" step=".05" value="${lab.nameDepth}"></label>
-  </fieldset>
-  <fieldset><legend>Должность и контакты</legend><div class="segments" data-param="body">
-    ${Object.entries({ edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentBodyShape}">${label}</button>`).join('')}
-  </div>
-    <label class="range" style="margin-top:8px">Глубина текста <output data-for="bodyDepth"></output><input type="range" name="bodyDepth" min="0" max="3" step=".05" value="${lab.bodyDepth}"></label>
-  </fieldset>
+  ${group('Логотип', `
+    ${shapeRow('relief', labels, currentLogoShape)}
+    ${depthRow('logoDepth', 'Глубина')}
+    ${tintRow('logo', 'Цвет')}
+    ${tintRow('logoFirst', 'Первая буква')}`)}
+  ${group('Имя', `
+    ${shapeRow('name', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentNameShape)}
+    ${depthRow('nameDepth', 'Глубина')}
+    ${tintRow('name', 'Цвет')}`)}
+  ${group('Должность и контакты', `
+    ${shapeRow('body', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentBodyShape)}
+    ${depthRow('bodyDepth', 'Глубина')}
+    ${tintRow('body', 'Цвет')}
+    <label class="range">Приглушение <output data-for="textMute"></output><input type="range" name="textMute" min="0" max=".8" step=".02" value="${lab.textMute}"></label>`)}
   <details class="text-fields"><summary>Текст карточки</summary>
     ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
   </details>
-  <fieldset><legend>Цвет букв</legend>
-    ${[['logoFirst', 'Я / Y'], ['logo', 'Логотип'], ['name', 'Имя'], ['body', 'Текст']].map(([object, label]) => `<div class="tint-row">
-      <div class="tint-head"><span>${label}</span><div class="mini" data-finish="${object}">
-        <button type="button" data-value="enamel" aria-pressed="${lab.finish[object] === 'enamel'}">Эмаль</button><button type="button" data-value="anod" aria-pressed="${lab.finish[object] === 'anod'}">Анод</button>
-      </div></div>
-      <div class="swatches" data-tint="${object}Tint">
-      ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
-    </div></div>`).join('')}
-    <label class="range" style="margin-top:8px">Приглушение текста <output data-for="textMute"></output><input type="range" name="textMute" min="0" max=".8" step=".02" value="${lab.textMute}"></label>
-  </fieldset>
   <div class="tuning"><fieldset><legend>Свет</legend>
     <label class="check"><input type="checkbox" name="manual" ${lab.manualLight ? 'checked' : ''}> Стоп-кадр света</label>
     <label class="range">Поворот <output data-for="yaw"></output><input type="range" name="yaw" min="-1.2" max="1.2" step=".01" value="${lab.yaw}"></label>
