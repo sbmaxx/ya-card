@@ -98,7 +98,7 @@ document.title = `Lab · ${direction.title}`;
 
 // Two rows: neutrals light to dark, then the reds used on ya.ru, light to dark.
 const BREAK = ['break'];
-const swatches = [['', 'Металл'],
+const swatches = [['', 'Полированный металл'], ['plate', 'Как пластина'],
     ['f2f1ee', 'Белый'], ['f1e9d6', 'Молочный'], ['e1e6ec', 'Холодный белый'], ['cfd2d6', 'Жемчужный'], ['b4b8bd', 'Светло-серый'],
     ['8a8e94', 'Серый'], ['5d6168', 'Тёмно-серый'], ['3b3f45', 'Графит'], ['25282c', 'Антрацит'], ['111214', 'Чёрный'], BREAK,
     ['fa7e6c', 'Светлый коралл'], ['f8604a', 'Коралловый'], ['fc3f1d', 'Яндекс-красный'], ['ff3333', 'Ярко-красный'],
@@ -126,7 +126,7 @@ const tintRow = (object, label) => `<div class="tint-row">
       <button type="button" data-value="enamel" aria-pressed="${lab.finish[object] === 'enamel'}">Эмаль</button><button type="button" data-value="anod" aria-pressed="${lab.finish[object] === 'anod'}">Анод</button>
     </div></div>
     <div class="swatches" data-tint="${object}Tint">
-    ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => hex === 'break' ? '<span class="break"></span>' : `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+    ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => hex === 'break' ? '<span class="break"></span>' : `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex === 'plate' ? 'repeating-linear-gradient(0deg,#c4c7cb 0 1px,#9ca0a5 1px 2px)' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
     <label class="pick" title="Свой цвет"><input type="color" aria-label="Свой цвет" value="#${customHex(lab[object + 'Tint'])}"></label><input class="hex" type="text" maxlength="7" spellcheck="false" aria-label="Цвет, HEX" placeholder="#rrggbb" value="${/^[0-9a-f]{6}$/i.test(lab[object + 'Tint'] || '') ? '#' + lab[object + 'Tint'] : ''}">
   </div></div>`;
 panel.innerHTML = `

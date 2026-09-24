@@ -41,11 +41,11 @@ export const lab = globalThis.__cardLab = {
     nameDepth: number('nameDepth', 1),
     nameScale: number('nameScale', 1.2),
     bodyDepth: number('bodyDepth', 1),
-    bodyTint: /^[0-9a-f]{6}$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
+    bodyTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),
-    logoTint: /^[0-9a-f]{6}$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
-    nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
-    logoFirstTint: /^([0-9a-f]{6}|metal)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
+    logoTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
+    nameTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
+    logoFirstTint: /^([0-9a-f]{6}|metal|plate)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
     // Finish per object; the old shared `tintFinish` becomes their default.
     finish: Object.fromEntries(['logoFirst', 'logo', 'name', 'body'].map(key => {
         const value = params.get(`${key}Finish`) || params.get('tintFinish');

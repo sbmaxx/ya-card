@@ -402,7 +402,9 @@ vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
 
 // Colour on a letter: enamel fills the flat faces and leaves polished bevels;
 // anodising colours the metal itself, bevels included.
-vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge, float shine) {
+vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge, float shine, vec3 plateLetter) {
+    // The plate's own material: letters pressed out of (or into) the same steel.
+    if (tint.a > 1.5) return plateLetter;
     if (tint.a < .5) return base;
     vec3 anod = metal(tint.rgb, facet, v, mix(.55, max(.06, rough), shine));
     return mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .10, shine)), anod, finish), mix(base, anod, finish), edge);
@@ -536,13 +538,21 @@ void main() {
             // Colour: enamel fills the flat faces and leaves polished bevels;
             // anodising colours the metal itself, bevels included.
             float letterEdge = smoothstep(.12, .45, slope) * resolved;
+            // Blind embossing: the plate's brushed finish on the relief normal.
+            vec3 plateLetter = vec3(0.0);
+            if (max(max(uLogoTint.a, uLogoFirstTint.a), max(uNameTint.a, uBodyTint.a)) > 1.5) {
+                float fv = max(dot(facet, v), 1e-3);
+                ${plate.film ? 'vec3 letterF0 = filmF0(fv, vUV);' : 'vec3 letterF0 = PLATE_F0;'}
+                plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, ${f(plate.aniso)}) * (1.0 + grooves * .05);
+                ${plate.coat ? `plateLetter += ${f(plate.coat)} * room(reflect(-v, facet), .10);` : ''}
+            }
             // The first letter of the wordmark is drawn red-only in the mask.
             vec3 inkColor = ink.rgb / max(ink.a, .001);
             float firstLetter = smoothstep(.6, .3, inkColor.g);
-            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x),
-                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x), firstLetter);
-            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y);
-            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z);
+            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter),
+                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter), firstLetter);
+            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter);
+            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter);
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
@@ -1518,8 +1528,10 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius * lampSize);
         gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
         gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
+        // Alpha: 0 — the process's own metal, 1 — a colour, 2 — the plate's material.
         const tintOf = hex => {
             if (!hex) return [0, 0, 0, 0];
+            if (hex === 'plate') return [0, 0, 0, 2];
             const linear = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
             return [0, 2, 4].map(i => linear(parseInt(hex.slice(i, i + 2), 16) / 255)).concat(1);
         };

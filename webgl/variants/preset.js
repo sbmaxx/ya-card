@@ -37,7 +37,7 @@ const NUMBERS = [
 ];
 // Colours: one digit for the kind, then four digits for a 24-bit colour.
 // Kinds: 0 — not set (edition default, or «same as logo» for the first letter),
-// 1 — bare metal, 2 — a colour.
+// 1 — bare metal, 2 — a colour, 3 — the plate's material.
 const TINTS = ['logoTint', 'nameTint', 'bodyTint', 'logoFirstTint'];
 // Added later, so read only if present: codes made before them still decode,
 // with these settings at their defaults. [key, min, step, default] as above.
@@ -61,7 +61,7 @@ export function encodePreset(params) {
         if (/^[0-9a-f]{6}$/i.test(value)) {
             const rgb = Number.parseInt(value, 16);
             code += digit(2) + [18, 12, 6, 0].map(shift => digit((rgb >> shift) & 63)).join('');
-        } else code += digit(value === 'metal' ? 1 : 0);
+        } else code += digit(value === 'metal' ? 1 : value === 'plate' ? 3 : 0);
     }
     code += encodeNumbers(params, LATER, digit);
     return code;
@@ -89,6 +89,7 @@ export function decodePreset(code) {
         for (const key of TINTS) {
             const kind = read();
             if (kind === 1) params.set(key, 'metal');
+            if (kind === 3) params.set(key, 'plate');
             if (kind === 2) params.set(key, (read() << 18 | read() << 12 | read() << 6 | read()).toString(16).padStart(6, '0'));
         }
         for (const [key, min, step] of LATER) {
