@@ -1,126 +1,133 @@
 # Промпт для превью (OpenGraph) rozhdestvenskiy.ru
 
 Нужны две картинки: `og-ru.jpg` для https://rozhdestvenskiy.ru/ и `og-en.jpg` для
-https://rozhdestvenskiy.ru/en/. Итоговый размер ровно 1200×630, JPEG, sRGB, до 300 КБ.
-Лучше генерировать вдвое крупнее (2400×1260) и потом уменьшить.
+https://rozhdestvenskiy.ru/en/. Размер ровно 1200×630, JPEG, sRGB, до 300 КБ
+(лучше генерировать 2400×1260 и уменьшить).
 
-Референсы для модели: текущие скриншоты `og-ru.jpg` и `og-en.jpg` из этой же папки.
-Приложи их к промпту: там точные форма, цвета и раскладка текста.
+Задача не повторить визитку, а сделать обложку, от которой хочется открыть ссылку:
+настроение и материал, а не чертёж. Ниже бриф (общий для всех вариантов) и четыре
+концепции — можно отдать модели одну или попросить все четыре и выбрать.
 
-Промпт ниже на английском: модели генерации картинок понимают его точнее.
-Если модель путает кириллицу, используй вариант B (пластина без текста) и наложи
-текст сам шрифтом Onest (Medium для имени, Regular для остального).
+Промпт на английском: модели понимают его точнее. Если модель портит кириллицу,
+проси картинку без текста («no text») и накладывай имя сам шрифтом Onest
+(`webgl/assets/Onest-card.woff2`), см. раздел «Текст» в конце.
 
-Когда картинки готовы: положить их сюда вместо текущих, затем пересобрать
-(`node variants/build.mjs` из `webgl/`) и выложить по `webgl/DEPLOYMENT.md`.
+Когда картинки готовы: положить сюда вместо текущих `og-ru.jpg` / `og-en.jpg`,
+пересобрать (`node variants/build.mjs` из `webgl/`) и выложить по `webgl/DEPLOYMENT.md`.
 
 ---
 
-## Вариант A — картинка целиком, с текстом
+## Бриф (вставлять перед любой концепцией)
 
 ```
-A premium product photograph of a single metal business card, for a link preview
-image. Landscape 1200×630 (1.91:1). Photorealistic, studio still life, shot on a
-medium-format camera with a 100 mm macro lens, f/8, everything on the card in focus.
+Cover image for a personal website link preview, 1200×630 (1.91:1).
+The site is a single interactive metal business card of a design and engineering
+lead at Yandex. The image should feel like the opening frame of a premium product
+film: quiet, precise, tactile, expensive. Photorealistic studio photography,
+not a 3D render, not an illustration.
 
-THE CARD
-- A thin plate of brushed stainless steel, about 0.8 mm thick, proportions 1.8 : 1.
-- Shape: a horizontal pentagon, like a luggage tag or a flag pointing right.
-  The top and bottom edges are straight and parallel and run for 87% of the width;
-  from there both edges converge to one blunt point at the middle of the right side.
-  The left side is a straight vertical edge. All five corners have a small radius
-  (about 1.3% of the width). No hole, no string.
-- Surface: satin stainless steel with a fine, straight, horizontal brushed grain
-  running along the length of the card. Light greyish silver, not chrome, not white.
-- Edge: a narrow 45° diamond-cut chamfer around the whole outline, mirror-polished,
-  catching a thin bright line of light along the top edge and the point.
+Visual language to borrow from the card (as motifs, not as a copy of the card):
+- Material: brushed stainless steel with a fine straight grain; mirror-polished
+  45° chamfered edges that catch a single thin line of light.
+- Silhouette: a thin plate whose right end narrows into a blunt point, like a tag
+  or a flag pointing right. It can be cropped, seen edge-on, or only hinted at.
+- One accent colour: deep anodised burgundy red (#890006), used sparingly — a glint,
+  a single letter, an edge. Everything else is steel and graphite.
+- Palette: graphite black (#0B0C0F), dark steel greys (#2A2C31, #5D6168),
+  satin silver, pale pearl (#CFD2D6), and that one burgundy accent.
+- Light: dark studio, one large soft light and one thin specular streak.
+  Deep, clean shadows. Fine grain. No lens flares, no bokeh balls, no bloom haze.
 
-THE LETTERING (all of it raised a fraction of a millimetre above the plate,
-with crisp polished bevels that catch the light and a very short soft shadow)
-Laid out left-aligned in a column, starting at about 9% from the left edge,
-vertically centred on the card:
-1. The wordmark «{LOGO}» — small, about 17% of the card width.
-   The first letter «{LOGO_FIRST}» is anodised deep burgundy red (#890006).
-   The rest of the word is anodised pale pearl grey (#CFD2D6).
-2. The name «{NAME}» on one line — the largest text, about 80% of the card width,
-   a clean geometric grotesque (Onest Medium). Raised, mirror-polished chrome
-   letters of the same steel: they read as bright silver outlines with darker faces
-   reflecting the dark studio.
-3. Under the name, small: «{ROLE}», raised, filled with graphite-grey enamel (#5D6168).
-4. A gap, then two small lines, same graphite enamel:
-   «sbmaxx@yandex-team.ru»
-   «t.me/sbmaxx»
-All text must be spelled exactly as quoted, in the same letter case, no extra words.
+Composition rules:
+- Leave generous calm negative space; this is shown small (300–500 px wide) in
+  chats, so the main shape must read at a glance.
+- Keep anything important inside the central 1000×520 area; edges may be cropped.
+- No people, no hands, no desk props, no watermark, no UI, no other brands.
 
-SCENE AND LIGHT
-- The card floats slightly in front of a seamless dark graphite studio backdrop
-  (#0B0C0F at the edges to a soft pool of light around #2A2C31 behind the card).
-- Card seen almost straight on, rotated no more than 8° in depth (the right point
-  slightly further away), tilted up a few degrees. No dramatic perspective.
-- One large soft overhead softbox: an even, gentle gradient across the steel,
-  brighter at the upper left, a thin specular line along the top chamfer.
-  A faint cool rim light from the right. Subtle, premium, calm.
-- A soft, diffuse shadow of the card on the backdrop, below and slightly to the right.
-- Very fine film grain; no bloom halos, no lens flare, no bokeh balls.
-
-COMPOSITION
-- The card is centred and occupies about 65% of the image width.
-- Keep the whole card inside the central 1000×520 area: previews crop the edges.
-- Everything else is the dark backdrop. No other objects, no hands, no props,
-  no watermark, no extra text, no logo other than the one on the card.
-
-STYLE REFERENCES: Apple product photography, Leica and Bang & Olufsen catalogue
-shots, engraved titanium credit cards. Minimal, expensive, precise.
-
-AVOID: gold or brass tones, rainbow reflections, chrome mirror finish on the whole
-plate, rounded rectangle card shape, a hole or string on the tag, misspelled text,
-Latin letters in the Russian text (or Cyrillic in the English one), busy background,
-wooden desk, marble, cartoon or 3D-render look, heavy vignette, text outside the card.
+Avoid: gold or brass, rainbow or holographic reflections, neon, glossy plastic,
+cartoon or CGI look, busy textures, wood, marble, heavy vignette, stock-photo feel.
 ```
 
-### Подстановки
+---
+
+## Концепции (добавить одну после брифа)
+
+### 1. Макро на кромке
+
+```
+Concept: an extreme macro of the polished chamfered edge of a steel plate, running
+diagonally across the frame from lower left to upper right. The brushed grain is
+visible, the chamfer carries one razor-thin line of light. Near the right third the
+edge turns into the blunt point of the tag. A single raised letter «{MARK}» in deep
+burgundy red anodised metal sits in sharp focus on the steel; everything else falls
+off into soft focus and darkness. The left 45% of the frame is dark graphite
+negative space{TEXT}.
+```
+
+### 2. Пластина из темноты
+
+```
+Concept: a thin brushed-steel plate emerges from total darkness at a steep angle,
+seen almost edge-on, only its pointed right end and the top chamfer lit by a single
+long softbox reflection that sweeps along it like a sunrise line. The plate is
+blank. A long, soft shadow falls behind it on a graphite surface. Minimal, cinematic,
+lots of black{TEXT}.
+```
+
+### 3. Две половины
+
+```
+Concept: a split composition. The right 55% of the frame is filled edge to edge by
+a close-up of brushed stainless steel, the grain running horizontally, lit with a
+gentle gradient from bright upper left to darker lower right; the pointed end of the
+plate cuts into the frame from the right, its polished chamfer glinting. A small
+burgundy anodised detail catches the light. The left 45% is flat dark graphite{TEXT}.
+```
+
+### 4. Парящая пластина
+
+```
+Concept: a single thin metal tag-shaped plate floats in a dark graphite studio,
+rotated in three quarters so we see its thickness and polished chamfer, pointed end
+towards the upper right. Its face is blank brushed steel reflecting one large soft
+light. It casts a soft, distant shadow on the seamless backdrop below. The plate
+occupies the right half of the frame; the left half is calm negative space{TEXT}.
+```
+
+---
+
+## Текст
+
+Вместо `{TEXT}` подставить один из вариантов.
+
+С текстом от модели (подходит, если она уверенно пишет нужные буквы):
+
+```
+, with typography set in that space: «{NAME}» in a clean geometric grotesque
+(like Onest or Inter), medium weight, pale silver, large and left-aligned; below it,
+much smaller and in muted grey, «{ROLE}». Text spelled exactly as quoted, no other
+text anywhere in the image
+```
+
+Без текста (надёжнее, текст накладывается потом): `. No text anywhere in the image`
 
 | | Русская (`og-ru.jpg`) | Английская (`og-en.jpg`) |
 |---|---|---|
-| `{LOGO}` | Яндекс | Yandex |
-| `{LOGO_FIRST}` | Я | Y |
 | `{NAME}` | Роман Рождественский | Roman Rozhdestvenskiy |
-| `{ROLE}` | руководитель отдела поисковых интерфейсов | head of search interfaces department |
+| `{ROLE}` | Руководитель отдела поисковых интерфейсов, Яндекс | Head of search interfaces, Yandex |
+| `{MARK}` | Я | Y |
 
-Для русской картинки добавь в конец промпта строку:
-`All text on the card is Russian, in Cyrillic: «Яндекс», «Роман Рождественский»,
-«руководитель отдела поисковых интерфейсов».`
+Для русской версии добавить: `All text is Russian, in Cyrillic.`
 
----
-
-## Вариант B — пластина без текста (текст накладывается потом)
-
-Тот же промпт, но раздел THE LETTERING заменить на:
-
-```
-THE CARD IS BLANK: no text, no logo, no engraving at all. Leave the left 75% of the
-plate as clean brushed steel, lit evenly enough that dark grey and burgundy lettering
-added later in post-production stays readable over its whole area.
-```
-
-Потом наложить текст (координаты для картинки 1200×630, если карточка по центру
-и шириной 65% кадра, то есть примерно x 210–990, y 100–530):
-
-| Строка | Шрифт | Размер | Цвет | Отступ слева | Базовая линия |
-|---|---|---|---|---|---|
-| Яндекс / Yandex | Onest Medium | 30 px | «Я»/«Y» #890006, остальное #CFD2D6 | 283 | 229 |
-| Имя | Onest Medium | 50 px | светлый металл #E6E8EB с тёмной обводкой 1 px | 283 | 319 |
-| Должность | Onest Regular | 17 px | #5D6168 | 283 | 358 |
-| Почта | Onest Regular | 17 px | #5D6168 | 283 | 405 |
-| Telegram | Onest Regular | 17 px | #5D6168 | 283 | 431 |
-
-Шрифт Onest лежит в `webgl/assets/Onest-card.woff2` (лицензия OFL рядом).
+Если текст накладываешь сам: имя — Onest Medium 52–60 px, цвет #E6E8EB;
+должность — Onest Regular 20–22 px, цвет #8A8E94; выравнивание по левому краю,
+отступ слева около 90 px, блок по вертикали в центре тёмной части кадра.
 
 ---
 
 ## Как проверить результат
 
-- Превью в Telegram и Slack показывают картинку шириной 300–500 px: имя должно
-  читаться и там. Уменьши картинку до 400 px и проверь.
-- Проверь буквы: «Рождественский», «Rozhdestvenskiy», `sbmaxx@yandex-team.ru`.
-- Карточка целиком внутри центральной зоны 1000×520, края не обрезаны.
+- Уменьши картинку до 400 px по ширине: главная форма и имя должны читаться.
+- Проверь буквы: «Рождественский», «Rozhdestvenskiy».
+- Ничего важного не выходит за центральную зону 1000×520.
+- Картинка не похожа на сток и не выглядит как 3D-рендер.
