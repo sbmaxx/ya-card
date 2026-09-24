@@ -169,6 +169,7 @@ panel.innerHTML = `
   ${group('Должность и контакты', `
     ${shapeRow('body', reliefLabels, currentBodyShape)}
     <label class="check"><input type="checkbox" name="bodyMedium" ${lab.bodyWeight === 500 ? 'checked' : ''}> Среднее начертание, как у имени</label>
+    <label class="range">Размер, +px <output data-for="bodySize"></output><input type="range" name="bodySize" min="0" max="3" step=".5" value="${lab.bodySize}"></label>
     ${depthRow('bodyDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="bodyGloss"></output><input type="range" name="bodyGloss" min="0" max="1" step=".05" value="${lab.bodyGloss}"></label>
     ${tintRow('body', 'Цвет')}
@@ -269,7 +270,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -390,7 +391,7 @@ panel.querySelectorAll('input[type=range]').forEach(input => {
         showValue(input);
         // Depth changes rebuild the relief maps (a few ms), once per frame at most.
         // Name size redraws the text and its relief; debounced like typing.
-        if (input.name === 'nameScale') {
+        if (input.name === 'nameScale' || input.name === 'bodySize') {
             clearTimeout(textTimer);
             textTimer = setTimeout(() => globalThis.__cardRenderer?.refreshText(), 60);
         }
@@ -463,7 +464,7 @@ function describeSettings() {
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
         `Первая буква: ${colour('logoFirst')}`,
         `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')}`,
-        `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${lab.bodyWeight === 500 ? 'среднее' : 'обычное'} · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
+        `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${lab.bodyWeight === 500 ? 'среднее' : 'обычное'} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
         `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)}`
     ];
     const text = textFields.filter(([key]) => lab.text[key]).map(([key, label]) => `${label}: ${lab.text[key]}`);

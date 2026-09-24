@@ -1091,7 +1091,10 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
     let logoX = plan.center ? (width - logoWidth) / 2 : x;
     const logoY = plan.logoY;
-    const textSize = vertical ? 12.5 : 13;
+    // Role and contacts; the lab can add a px or two. Their line spacing grows with them.
+    const baseTextSize = vertical ? 12.5 : 13;
+    const textSize = baseTextSize + (globalThis.__cardLab?.bodySize ?? 0);
+    const bodyGrow = textSize / baseTextSize;
     // Name and role stay on one line whenever they fit the plate; only a line
     // that does not fit is split in two, and everything below moves with it.
     const maxWidth = vertical ? width - 2 * 26 : 440;
@@ -1116,12 +1119,12 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         const metrics = context.measureText(value);
         return { ascent: metrics.actualBoundingBoxAscent, descent: Math.max(0, metrics.actualBoundingBoxDescent) };
     };
-    let nameY, nameGap, roleYs, contactsY, lineHeight = plan.lineHeight;
+    let nameY, nameGap, roleYs, contactsY, lineHeight = plan.lineHeight * bodyGrow;
     if (vertical) {
         // Portrait: a rhythm from the real glyph sizes rather than fixed baselines.
         // The same white space separates name → role and role → contacts; the
         // logo gets a little more; the name lines sit at a heading's leading.
-        const gap = 22, logoGap = 30, roleLeading = 17;
+        const gap = 22, logoGap = 30, roleLeading = 17 * bodyGrow;
         nameGap = nameSize * 1.12;
         nameY = logoY + logoHeight + logoGap + ink(nameLines[0], nameSize, 500).ascent;
         const nameBottom = nameY + (nameLines.length - 1) * nameGap + ink(nameLines.at(-1), nameSize, 500).descent;
@@ -1133,7 +1136,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         // Landscape plans are drawn for one-line blocks.
         const planGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
         nameGap = planGap * nameSize / plan.nameSize;
-        const roleGap = plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17;
+        const roleGap = (plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17) * bodyGrow;
         // A larger name keeps its gap to the logo (the baseline moves down by the
         // cap height it gained) and pushes everything below by its extra size.
         nameY = plan.name[0] + growth * .75;
