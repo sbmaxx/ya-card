@@ -4,62 +4,9 @@
 import { directions, direction } from './directions.js';
 import { encodePreset } from './preset.js';
 import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
+import { exported, params, textFields, lab } from './settings.js';
 
-// An exported file carries its settings as a preset and shows no panel.
-const exported = typeof globalThis.__cardPreset === 'string';
-const params = new URLSearchParams(exported ? globalThis.__cardPreset : location.search);
-// Editable card text: URL key, label, placeholder (the current card).
-const textFields = [
-    ['name_ru', 'Имя (RU)', 'Роман Рождественский'],
-    ['name_en', 'Имя (EN)', 'Roman Rozhdestvenskiy'],
-    ['role_ru', 'Должность (RU)', 'руководитель отдела поисковых интерфейсов'],
-    ['role_en', 'Должность (EN)', 'head of search interfaces department'],
-    ['email', 'Почта или логин', 'sbmaxx'],
-    ['telegram', 'Telegram', 'sbmaxx']
-];
-const number = (key, fallback) => {
-    const value = Number.parseFloat(params.get(key));
-    return Number.isFinite(value) ? value : fallback;
-};
-const lab = globalThis.__cardLab = {
-    exported,
-    exposure: number('exposure', 1),
-    bloom: number('bloom', .3),
-    letterGlow: number('letterGlow', 1),
-    keyGain: number('keyGain', .7),
-    keySoft: number('keySoft', .05),
-    lampSize: number('lampSize', 1),
-    keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'round',
-    lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
-    lightSetup: Object.hasOwn(LIGHT_SETUPS, params.get('lightSetup')) ? params.get('lightSetup') : 'studio',
-    idle: number('idle', 1),
-    gyro: number('gyro', 1),
-    logoDepth: number('logoDepth', 1),
-    nameDepth: number('nameDepth', 1),
-    nameScale: number('nameScale', 1.2),
-    bodyDepth: number('bodyDepth', 1),
-    bodyTint: /^[0-9a-f]{6}$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
-    textMute: number('textMute', .3),
-    logoTint: /^[0-9a-f]{6}$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
-    nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
-    logoFirstTint: /^([0-9a-f]{6}|metal)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
-    // Finish per object; the old shared `tintFinish` becomes their default.
-    finish: Object.fromEntries(['logoFirst', 'logo', 'name', 'body'].map(key => {
-        const value = params.get(`${key}Finish`) || params.get('tintFinish');
-        return [key, value === 'anod' ? 'anod' : 'enamel'];
-    })),
-    text: Object.fromEntries(textFields.map(([key]) => [key, params.get(key) || ''])),
-    backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : (direction.backdrop || 'studio'),
-    manualLight: params.get('light') === 'manual',
-    yaw: number('yaw', 0),
-    pitch: number('pitch', 0)
-};
-
-if (exported) {
-    // Production file: settings only. The page colour follows the backdrop.
-    const backdrop = BACKDROPS[lab.backdrop];
-    if (backdrop) document.documentElement.style.backgroundColor = backdrop.css;
-} else {
+if (!exported) {
 const style = document.createElement('style');
 style.textContent = direction.css + `
 .lab { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 30;

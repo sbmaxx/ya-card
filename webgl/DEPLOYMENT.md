@@ -7,18 +7,20 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-19`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-20`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 75733 |
-| index.html.gz | 31846 |
-| index.html.br | 28127 |
+| index.html | 107826 |
+| index.html.gz | 43775 |
+| index.html.br | 38279 |
+| plain/index.html | 25193 |
+| card.txt | 294 |
 
 HTML SHA-256:
-`ff015fea22c50a5f8693521a7e340d952abbce956ff908ae30f13d404f22fa9a`.
+`48dc73a16d1444c4842da8d36cdb4afff62bdaf19b9912af82b2da13d08bc9b8`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -29,13 +31,24 @@ recorded below; this visual release does not rerun the regression suites.
 The HTML, styles, JavaScript, Onest font, logos and favicons are contained in one document;
 compressed files are alternative encodings, not additional client requests.
 
+## Studio-lab homepage (20260924-20)
+
+The homepage is now built from the studio lab (`webgl/variants/`): one look chosen
+on `/variants/lab/`, baked in as a preset (`HOME_LOOK` in `variants/build.mjs`, the
+lab's short-link code). Only that edition is bundled; the lab panel is not.
+Build: `node variants/build.mjs` from `webgl/`; output `dist/home/`. Without WebGL 2,
+or if the scene has not started after 20 s on screen, the page opens `/plain/`
+(the same HTML card without scripts); `/card.txt` is the text version. Both are
+new files in the document root. The rollback script restores the previous
+homepage files and removes them.
+
 ## Rollback
 
 The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-19/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-20/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.

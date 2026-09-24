@@ -89,14 +89,14 @@ export function decodePreset(code) {
     return params;
 }
 
-// Expand `?c=` before anything else reads the query. Other parameters (the
-// card text) and the hash stay as they are.
+// Expand `?c=` before anything else reads the query. Parameters written next
+// to the code (the card text, `panel=1`) win over it; the hash stays.
 if (typeof location !== 'undefined' && typeof globalThis.__cardPreset !== 'string') {
     const query = new URLSearchParams(location.search);
     const expanded = decodePreset(query.get('c'));
     if (expanded) {
         query.delete('c');
-        for (const [key, value] of expanded) query.set(key, value);
+        for (const [key, value] of expanded) if (!query.has(key)) query.set(key, value);
         history.replaceState(null, '', `?${query}${location.hash}`);
     }
 }
