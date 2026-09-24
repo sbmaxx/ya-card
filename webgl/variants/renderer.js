@@ -493,10 +493,33 @@ vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough) {
     return albedo * room(n, 1.0) * 2.2 * (1.0 - coat) + coat * room(reflect(-v, n), rough);
 }
 
-float hash(float x) { return fract(sin(x * 91.3458) * 47453.5453); }
-float grain(float g) {
-    float i = floor(g), t = fract(g);
-    return mix(hash(i), hash(i + 1.0), t * t * (3.0 - 2.0 * t));
+// Integer hash: exact at any coordinate (a sine hash loses precision on
+// phone GPUs far from the origin and starts to repeat).
+float hashI(int a, int b) {
+    uint h = uint(a) * 0x9E3779B1u ^ uint(b) * 0x85EBCA77u;
+    h ^= h >> 15; h *= 0x2C1B3C6Du; h ^= h >> 12; h *= 0x297A2D39u; h ^= h >> 15;
+    return float(h) * (1.0 / 4294967295.0);
+}
+// One scratch: its depth wanders along its length in steps of «len» px, and
+// every row starts its pattern somewhere else, so scratches begin and fade out.
+float scratch(int row, float along, float len, int seed) {
+    float x = along / len + hashI(row, seed) * 97.0;
+    float cell = floor(x), t = fract(x);
+    int c = int(cell);
+    return mix(hashI(row * 7 + seed, c), hashI(row * 7 + seed, c + 1), t * t * (3.0 - 2.0 * t));
+}
+// A layer of parallel scratches, «groove» counting rows across the grain.
+float scratches(float groove, float along, float len, int seed) {
+    float row = floor(groove), t = fract(groove);
+    int r = int(row);
+    return mix(scratch(r, along, len, seed), scratch(r + 1, along, len, seed), t * t * (3.0 - 2.0 * t));
+}
+// Smooth 2-D value noise for the sheet's slightly uneven sheen.
+float cloud(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    ivec2 c = ivec2(i);
+    return mix(mix(hashI(c.x, c.y), hashI(c.x + 1, c.y), f.x), mix(hashI(c.x, c.y + 1), hashI(c.x + 1, c.y + 1), f.x), f.y);
 }
 
 ${plate.film ? `
@@ -596,18 +619,35 @@ void main() {
         vec2 radial = surfacePx - uBrushCenter * uLayoutSize;
         float radius = length(radial);
         vec3 across = normalize(T * radial.x + B * radial.y + 1e-4);
-        float groove = radius;` : `
+        float groove = radius;
+        float along = atan(radial.y, radial.x) * radius;` : `
         vec3 across = B;
-        float groove = surfacePx.y;`}
+        float groove = surfacePx.y;
+        float along = surfacePx.x;`}
+        // Hairline brushing, as on a real sheet: scratches of every length and
+        // depth, broken along their run, in three sizes, and now and then a
+        // deeper one. Each layer fades out once its rows are finer than a pixel.
         float fine = fwidth(groove);
-        float texture1 = (grain(groove * 2.3) - .5) * (1.0 - smoothstep(.25, .6, fine * 2.3));
-        float texture2 = (grain(groove * .9 + 17.0) - .5) * (1.0 - smoothstep(.25, .6, fine * .9));
-        float grooves = texture1 * .8 + texture2 * .6;
-        float plateRough = ${f(plate.rough)} * (1.0 + grooves * .12);
+        float layer1 = (scratches(groove * 2.3, along, 38.0, 11) - .5) * (1.0 - smoothstep(.25, .6, fine * 2.3));
+        float layer2 = (scratches(groove * .9, along, 95.0, 23) - .5) * (1.0 - smoothstep(.25, .6, fine * .9));
+        // Single scratches are finer than a pixel, on screen as in the hand; what
+        // the eye sees are bundles of them, 0.3–1 mm wide, a little brighter or
+        // duller, running for a few centimetres. Those carry the texture.
+        float bundles = (scratches(groove * .28, along, 160.0, 41) - .5) * (1.0 - smoothstep(.25, .6, fine * .28));
+        float bands = (scratches(groove * .11, along, 330.0, 53) - .5);
+        float deep = smoothstep(.92, .985, scratches(groove * .4, along, 240.0, 37)) * (1.0 - smoothstep(.25, .6, fine * .4));
+        float grooves = layer1 * .8 + layer2 * .6 + bundles * .9 + bands * .6 + deep * .7;
+        // The sheet's sheen is a touch uneven over a fifth of the card.
+        float sheen = cloud(surfacePx / 170.0) - .5;
+        float plateRough = ${f(plate.rough)} * (1.0 + grooves * .12 + sheen * .16);
         float nv = max(dot(n, v), 1e-3);
         ${plate.film ? 'vec3 plateF0 = filmF0(nv, vUV);' : 'vec3 plateF0 = PLATE_F0;'}
-        color = fresnel(plateF0, nv) * brushed(n, v, across, plateRough, ${f(plate.aniso)}, 1.0);
-        color *= 1.0 + grooves * .05;
+        // Bundles lie at slightly different angles across the grain (~1–2°): a
+        // passing highlight breaks into streaks over them, as on real brushed
+        // steel, while away from the highlights the metal stays calm.
+        vec3 plateN = normalize(n + across * (layer2 * .3 + bundles + bands * .6) * .035);
+        color = fresnel(plateF0, nv) * brushed(plateN, v, across, plateRough, ${f(plate.aniso)}, 1.0);
+        color *= 1.0 + grooves * .05 + sheen * .05;
         ${plate.coat ? `
         // PVD coatings keep a faint clear reflection above the dark metal.
         color += ${f(plate.coat)} * roomFor(reflect(-v, n), .10, 1.0);` : ''}
