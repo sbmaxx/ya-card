@@ -19,6 +19,7 @@ const lab = globalThis.__cardLab = {
     textMute: number('textMute', .3),
     logoTint: /^[0-9a-f]{6}$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
     nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
+    logoFirstTint: /^([0-9a-f]{6}|metal)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
     tintFinish: params.get('tintFinish') === 'anod' ? 'anod' : 'enamel',
     backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : 'studio',
     manualLight: params.get('light') === 'manual',
@@ -116,8 +117,8 @@ panel.innerHTML = `
     <label class="range" style="margin-top:8px">Глубина имени <output data-for="nameDepth"></output><input type="range" name="nameDepth" min="0" max="3" step=".05" value="${lab.nameDepth}"></label>
   </fieldset>
   <fieldset><legend>Цвет букв</legend>
-    ${['logoTint', 'nameTint'].map(key => `<div class="swatches" data-tint="${key}"><span>${key === 'logoTint' ? 'Логотип' : 'Имя'}</span>
-      ${swatches.map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[key]}" style="--swatch:${hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+    ${[['logoFirstTint', 'Я / Y'], ['logoTint', 'Логотип'], ['nameTint', 'Имя']].map(([key, label]) => `<div class="swatches" data-tint="${key}"><span>${label}</span>
+      ${(key === 'logoFirstTint' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[key]}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
     </div>`).join('')}
     <div class="segments" data-live="tintFinish" style="margin-top:6px">
       <button type="button" data-value="enamel" aria-pressed="${lab.tintFinish === 'enamel'}">Эмаль</button>
@@ -158,6 +159,9 @@ const writeUrl = () => {
     for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
+    if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
+    else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
+    next.set('panel', panel.hidden ? '0' : '1');
     next.set('tintFinish', lab.tintFinish);
     history.replaceState(null, '', `?${next}${location.hash}`);
 };
@@ -226,6 +230,7 @@ const setHidden = hidden => {
     // Hit testing reads the canvas's live screen rect, so the CSS move is safe.
     document.documentElement.classList.toggle('lab-sheet-open', !hidden);
     sessionStorage.setItem('card-lab-open', hidden ? '0' : '1');
+    writeUrl();
 };
 panel.addEventListener('click', event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
@@ -236,8 +241,10 @@ panel.addEventListener('click', event => {
 toggle.addEventListener('click', () => setHidden(false));
 // On phones the panel starts collapsed; the choice is kept across reloads within the session.
 const phone = matchMedia('(max-width: 700px)').matches;
+// `?panel=0|1` wins, then the session's last choice, then the device default.
+const fromUrl = params.get('panel');
 const remembered = sessionStorage.getItem('card-lab-open');
-setHidden(remembered === null ? phone : remembered === '0');
+setHidden(fromUrl === '0' || fromUrl === '1' ? fromUrl === '0' : remembered === null ? phone : remembered === '0');
 window.addEventListener('keydown', event => {
     if (event.key.toLowerCase() === 'h' && !event.metaKey && !event.ctrlKey && !event.target.closest('input')) setHidden(!panel.hidden);
 });

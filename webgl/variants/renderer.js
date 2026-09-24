@@ -186,6 +186,7 @@ uniform float uMirror;
 uniform float uFloorY;
 uniform vec4 uLogoTint;
 uniform vec4 uNameTint;
+uniform vec4 uLogoFirstTint;
 uniform float uTintFinish;
 uniform float uTextMute;
 uniform float uRoomBase;
@@ -259,6 +260,16 @@ vec3 metal(vec3 f0, vec3 n, vec3 v, float rough) {
 }
 
 // Gloss dielectric (enamel, lacquer): coloured diffuse under a sharp 4% coat.
+vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
+
+// Colour on a letter: enamel fills the flat faces and leaves polished bevels;
+// anodising colours the metal itself, bevels included.
+vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge) {
+    if (tint.a < .5) return base;
+    vec3 anod = metal(tint.rgb, facet, v, max(.06, rough));
+    return mix(mix(gloss(tint.rgb * 1.9, n, v, .10), anod, finish), mix(base, anod, finish), edge);
+}
+
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough) {
     float nv = max(dot(n, v), 1e-3);
     float coat = .04 + .96 * pow(1.0 - nv, 5.0);
@@ -383,14 +394,12 @@ void main() {
             // Colour: enamel fills the flat faces and leaves polished bevels;
             // anodising colours the metal itself, bevels included.
             float letterEdge = smoothstep(.12, .45, slope) * resolved;
-            if (uLogoTint.a > .5) {
-                vec3 anod = metal(uLogoTint.rgb, facet, v, max(.06, letterRough));
-                logoColor = mix(mix(gloss(uLogoTint.rgb * 1.9, n, v, .10), anod, uTintFinish), mix(logoColor, anod, uTintFinish), letterEdge);
-            }
-            if (uNameTint.a > .5) {
-                vec3 anod = metal(uNameTint.rgb, facet, v, max(.06, letterRough));
-                nameColor = mix(mix(gloss(uNameTint.rgb * 1.9, n, v, .10), anod, uTintFinish), mix(nameColor, anod, uTintFinish), letterEdge);
-            }
+            // The first letter of the wordmark is drawn red-only in the mask.
+            vec3 inkColor = ink.rgb / max(ink.a, .001);
+            float firstLetter = smoothstep(.6, .3, inkColor.g);
+            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish, n, facet, v, letterRough, letterEdge),
+                            tinted(logoColor, uLogoFirstTint, uTintFinish, n, facet, v, letterRough, letterEdge), firstLetter);
+            nameColor = tinted(nameColor, uNameTint, uTintFinish, n, facet, v, letterRough, letterEdge);
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
@@ -817,7 +826,7 @@ function geometry(width, height, vertical) {
 
 function logoImage(lang) {
     const logo = logos[lang];
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo.viewBox}" width="${logo.viewBox.split(' ')[2]}" height="${logo.viewBox.split(' ')[3]}"><path d="${logo.text}" fill="#fff"/><path d="${logo.ya}" fill="#fff"/></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo.viewBox}" width="${logo.viewBox.split(' ')[2]}" height="${logo.viewBox.split(' ')[3]}"><path d="${logo.text}" fill="#fff"/><path d="${logo.ya}" fill="#f00"/></svg>`;
     return new Promise((resolve, reject) => {
         const image = new Image();
         image.onload = () => resolve(image);
@@ -946,7 +955,7 @@ export class CardRenderer {
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1342,7 +1351,11 @@ export class CardRenderer {
             const linear = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
             return [0, 2, 4].map(i => linear(parseInt(hex.slice(i, i + 2), 16) / 255)).concat(1);
         };
-        gl.uniform4f(this.uniforms.uLogoTint, ...tintOf(lab ? lab.logoTint : direction.logoTint));
+        const logoTint = lab ? lab.logoTint : direction.logoTint;
+        const firstTint = lab ? lab.logoFirstTint : (direction.logoFirstTint ?? 'same');
+        gl.uniform4f(this.uniforms.uLogoTint, ...tintOf(logoTint));
+        // `same` follows the rest of the wordmark; '' is bare metal.
+        gl.uniform4f(this.uniforms.uLogoFirstTint, ...tintOf(firstTint === 'same' ? logoTint : firstTint));
         gl.uniform4f(this.uniforms.uNameTint, ...tintOf(lab ? lab.nameTint : direction.nameTint));
         gl.uniform1f(this.uniforms.uTintFinish, (lab ? lab.tintFinish : direction.tintFinish) === 'anod' ? 1 : 0);
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
