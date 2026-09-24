@@ -278,6 +278,8 @@ uniform vec4 uBodyTint;
 uniform vec4 uTintFinish;
 uniform float uTextMute;
 uniform float uLetterGlow;
+// Lettering gloss: x logo, y name, z role and contacts (1 — as finished, 0 — matte).
+uniform vec3 uGloss;
 uniform float uRoomBase;
 uniform float uBounce;
 in vec3 vPosition;
@@ -400,10 +402,10 @@ vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
 
 // Colour on a letter: enamel fills the flat faces and leaves polished bevels;
 // anodising colours the metal itself, bevels included.
-vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge) {
+vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge, float shine) {
     if (tint.a < .5) return base;
-    vec3 anod = metal(tint.rgb, facet, v, max(.06, rough));
-    return mix(mix(gloss(tint.rgb * 1.9, n, v, .10), anod, finish), mix(base, anod, finish), edge);
+    vec3 anod = metal(tint.rgb, facet, v, mix(.55, max(.06, rough), shine));
+    return mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .10, shine)), anod, finish), mix(base, anod, finish), edge);
 }
 
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough) {
@@ -537,10 +539,10 @@ void main() {
             // The first letter of the wordmark is drawn red-only in the mask.
             vec3 inkColor = ink.rgb / max(ink.a, .001);
             float firstLetter = smoothstep(.6, .3, inkColor.g);
-            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge),
-                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge), firstLetter);
-            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge);
-            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge);
+            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x),
+                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x), firstLetter);
+            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y);
+            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z);
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
@@ -565,18 +567,22 @@ void main() {
 // GLSL for one lettering process. Produces `<name>Color`.
 function letteringCode(name, m, flat = false) {
     const out = `${name}Color`;
+    // Gloss from the lab (1 — as finished, 0 — matte): blends the roughness
+    // towards a satin-matte .55. Component: x logo, y name, z role and contacts.
+    const g = `uGloss.${{ logo: 'x', name: 'y', text: 'z' }[name]}`;
+    const shine = rough => `mix(.55, ${rough}, ${g})`;
     if (m.process === 'vcut') return `
             // Diamond V-cut: both walls are polished; the lower groove is occluded.
             float ${name}Wall = smoothstep(.02, .20, slope);
-            vec3 ${out} = metal(${name.toUpperCase()}_F0, facet, v, max(${f(m.rough)}, letterRough)) * mix(1.0, .9, ${name}Wall);`;
+            vec3 ${out} = metal(${name.toUpperCase()}_F0, facet, v, ${shine(`max(${f(m.rough)}, letterRough)`)}) * mix(1.0, .9, ${name}Wall);`;
     if (m.process === 'enamel') return `
             // Cut-and-fill: gloss enamel sits a hair below a polished lip.
             float ${name}Lip = smoothstep(.25, .55, slope) * resolved;
-            vec3 ${out} = mix(gloss(${v3(m.albedo)}, n, v, .12),
-                metal(${v3(m.lip)}, facet, v, max(.04, letterRough)), ${name}Lip * .55);`;
+            vec3 ${out} = mix(gloss(${v3(m.albedo)}, n, v, ${shine('.12')}),
+                metal(${v3(m.lip)}, facet, v, ${shine('max(.04, letterRough)')}), ${name}Lip * .55);`;
     if (m.process === 'ablate') return `
             // Laser ablation: coating removed, bare frosted steel below.
-            vec3 ${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`});
+            vec3 ${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${shine(flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`)});
             ${out} += ${name.toUpperCase()}_F0 * room(n, 1.0) * .35;`;
     return `
             // Laser annealing: dark oxide with a faint, rough sheen.
@@ -1033,7 +1039,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1473,12 +1479,14 @@ export class CardRenderer {
                 (this.viewportHeight - 108) / (this.height * pixelsPerUnit))
             : this.vertical ? Math.min(1, (this.viewportWidth - 56) / (this.width * pixelsPerUnit))
                 : Math.min(1, this.aspect * 1.23) * .81;
+        // The lab's card size scales the fitted card (default .8 of the fit).
+        const cardSize = lab ? lab.cardSize : (direction.cardSize ?? .8);
         if (reduced) { this.zoom = zoom; this.zoomVelocity = 0; }
         else [this.zoom, this.zoomVelocity] = follow(this.zoom, this.zoomVelocity, zoom, 10, dt);
         const lift = this.lift + (this.touchLandscape ? 24 / pixelsPerUnit : 0) - introPose * .18;
         // The plate turns in from slightly in front, never behind the backdrop.
         const tilt = modelMatrix(this.rotationX + introPose * .22, this.rotationY - introPose * .55,
-            this.zoom * fit * (1 - introPose * .06), lift, this.rotationZ + introPose * .04, flipDepth + introPose * .35);
+            this.zoom * fit * cardSize * (1 - introPose * .06), lift, this.rotationZ + introPose * .04, flipDepth + introPose * .35);
         const flip = modelMatrix(this.vertical ? 0 : this.flipAngle, this.vertical ? this.flipAngle : 0, 1, 0);
         this.model = multiplyMatrices(tilt, flip);
         this.hoveredLink = this.hoverPointer && !dragging && !freezeHover
@@ -1526,6 +1534,7 @@ export class CardRenderer {
         gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
         gl.uniform1f(this.uniforms.uLetterGlow, lab ? lab.letterGlow : (direction.letterGlow ?? 1));
+        gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 

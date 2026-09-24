@@ -39,16 +39,23 @@ const NUMBERS = [
 // Kinds: 0 — not set (edition default, or «same as logo» for the first letter),
 // 1 — bare metal, 2 — a colour.
 const TINTS = ['logoTint', 'nameTint', 'bodyTint', 'logoFirstTint'];
+// Added later, so read only if present: codes made before them still decode,
+// with these settings at their defaults. [key, min, step, default] as above.
+const LATER = [
+    ['cardSize', .5, .01, .8], ['logoGloss', 0, .05, 1], ['nameGloss', 0, .05, 1], ['bodyGloss', 0, .05, 1]
+];
+
+const encodeNumbers = (params, fields, digit) => fields.map(([key, min, step, fallback]) => {
+    const value = Number.parseFloat(params.get(key));
+    const index = Math.max(0, Math.min(4095, Math.round(((Number.isFinite(value) ? value : fallback) - min) / step)));
+    return digit(index >> 6) + digit(index & 63);
+}).join('');
 
 export function encodePreset(params) {
     let code = VERSION;
     const digit = value => DIGITS[Math.max(0, Math.min(63, value))];
     for (const [key, options] of CHOICES) code += digit(Math.max(0, options.indexOf(params.get(key) ?? options[0])));
-    for (const [key, min, step, fallback] of NUMBERS) {
-        const value = Number.parseFloat(params.get(key));
-        const index = Math.max(0, Math.min(4095, Math.round(((Number.isFinite(value) ? value : fallback) - min) / step)));
-        code += digit(index >> 6) + digit(index & 63);
-    }
+    code += encodeNumbers(params, NUMBERS, digit);
     for (const key of TINTS) {
         const value = params.get(key) || '';
         if (/^[0-9a-f]{6}$/i.test(value)) {
@@ -56,6 +63,7 @@ export function encodePreset(params) {
             code += digit(2) + [18, 12, 6, 0].map(shift => digit((rgb >> shift) & 63)).join('');
         } else code += digit(value === 'metal' ? 1 : 0);
     }
+    code += encodeNumbers(params, LATER, digit);
     return code;
 }
 
@@ -82,6 +90,11 @@ export function decodePreset(code) {
             const kind = read();
             if (kind === 1) params.set(key, 'metal');
             if (kind === 2) params.set(key, (read() << 18 | read() << 12 | read() << 6 | read()).toString(16).padStart(6, '0'));
+        }
+        for (const [key, min, step] of LATER) {
+            if (at >= code.length) break;
+            const index = read() * 64 + read();
+            params.set(key, String(Number((min + index * step).toFixed(4))));
         }
     } catch {
         return null;

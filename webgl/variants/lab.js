@@ -53,6 +53,13 @@ style.textContent = direction.css + `
 .lab .swatches button { appearance: none; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab .swatches .break { flex-basis: 100%; height: 0; }
+.lab .swatches .pick { position: relative; flex: none; width: 16px; height: 16px; border-radius: 50%; overflow: hidden; cursor: pointer;
+  border: 1px solid #ffffff33; background: conic-gradient(#f33, #fc0, #3c3, #3cf, #33f, #c3f, #f33); }
+.lab .swatches .pick.active { outline: 2px solid #fff; outline-offset: 2px; }
+.lab .swatches .pick input { position: absolute; inset: -4px; width: 24px; height: 24px; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.lab .swatches .hex { flex: none; width: 66px; margin-left: 2px; padding: 2px 6px; border-radius: 6px; border: 1px solid #ffffff1c;
+  background: #ffffff0d; color: #e8ebf0; font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.lab .swatches .hex:focus { outline: none; border-color: #ffffff55; }
 .lab details.text-fields { margin: 0 0 12px; }
 .lab details.text-fields summary { cursor: pointer; color: #9aa3b0; margin-bottom: 6px; }
 .lab .field { display: grid; gap: 3px; margin-bottom: 7px; color: #9aa3b0; }
@@ -113,12 +120,14 @@ const shapeRow = (param, options, current) => `<div class="segments" data-param=
     ${Object.entries(options).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === current}">${label}</button>`).join('')}
   </div>`;
 const depthRow = (key, label) => `<label class="range">${label} <output data-for="${key}"></output><input type="range" name="${key}" min="0" max="3" step=".05" value="${lab[key]}"></label>`;
+const customHex = value => /^[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : '888888';
 const tintRow = (object, label) => `<div class="tint-row">
     <div class="tint-head"><span>${label}</span><div class="mini" data-finish="${object}">
       <button type="button" data-value="enamel" aria-pressed="${lab.finish[object] === 'enamel'}">Эмаль</button><button type="button" data-value="anod" aria-pressed="${lab.finish[object] === 'anod'}">Анод</button>
     </div></div>
     <div class="swatches" data-tint="${object}Tint">
     ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => hex === 'break' ? '<span class="break"></span>' : `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+    <label class="pick" title="Свой цвет"><input type="color" aria-label="Свой цвет" value="#${customHex(lab[object + 'Tint'])}"></label><input class="hex" type="text" maxlength="7" spellcheck="false" aria-label="Цвет, HEX" placeholder="#rrggbb" value="${/^[0-9a-f]{6}$/i.test(lab[object + 'Tint'] || '') ? '#' + lab[object + 'Tint'] : ''}">
   </div></div>`;
 panel.innerHTML = `
   <h2>Демо-стенд <span class="meta"><output class="fps">— fps</output><button type="button" class="close" data-action="hide" aria-label="Скрыть панель">×</button></span></h2>
@@ -135,16 +144,19 @@ panel.innerHTML = `
   ${group('Логотип', `
     ${shapeRow('relief', labels, currentLogoShape)}
     ${depthRow('logoDepth', 'Глубина')}
+    <label class="range">Блеск <output data-for="logoGloss"></output><input type="range" name="logoGloss" min="0" max="1" step=".05" value="${lab.logoGloss}"></label>
     ${tintRow('logo', 'Цвет')}
     ${tintRow('logoFirst', 'Первая буква')}`)}
   ${group('Имя', `
     ${shapeRow('name', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentNameShape)}
     <label class="range">Размер имени <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
     ${depthRow('nameDepth', 'Глубина')}
+    <label class="range">Блеск <output data-for="nameGloss"></output><input type="range" name="nameGloss" min="0" max="1" step=".05" value="${lab.nameGloss}"></label>
     ${tintRow('name', 'Цвет')}`)}
   ${group('Должность и контакты', `
     ${shapeRow('body', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentBodyShape)}
     ${depthRow('bodyDepth', 'Глубина')}
+    <label class="range">Блеск <output data-for="bodyGloss"></output><input type="range" name="bodyGloss" min="0" max="1" step=".05" value="${lab.bodyGloss}"></label>
     ${tintRow('body', 'Цвет')}
     <label class="range">Приглушение <output data-for="textMute"></output><input type="range" name="textMute" min="0" max=".8" step=".02" value="${lab.textMute}"></label>`)}
   <details class="text-fields"><summary>Текст карточки</summary>
@@ -170,6 +182,7 @@ panel.innerHTML = `
   </fieldset>
   <fieldset><legend>Картинка</legend>
     <label class="range">Экспозиция <output data-for="exposure"></output><input type="range" name="exposure" min=".4" max="2" step=".01" value="${lab.exposure}"></label>
+    <label class="range">Размер карточки <output data-for="cardSize"></output><input type="range" name="cardSize" min=".5" max="1.2" step=".01" value="${lab.cardSize}"></label>
     <label class="range">Свечение всего <output data-for="bloom"></output><input type="range" name="bloom" min="0" max="1.5" step=".01" value="${lab.bloom}"></label>
     <label class="range">Свечение букв <output data-for="letterGlow"></output><input type="range" name="letterGlow" min="0" max="2" step=".05" value="${lab.letterGlow}"></label>
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
@@ -205,7 +218,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'keyGain', 'keySoft', 'lampSize', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'keyGain', 'keySoft', 'lampSize', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -250,13 +263,45 @@ panel.querySelectorAll('.text-fields input').forEach(input => input.addEventList
     textTimer = setTimeout(() => { globalThis.__cardRenderer?.refreshText(); writeUrl(); }, 200);
 }));
 panel.addEventListener('keydown', event => event.stopPropagation());
-panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click', event => {
-    const button = event.target.closest('button');
-    if (!button) return;
-    lab[row.dataset.tint] = button.dataset.value;
-    row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
-    writeUrl();
-}));
+// A swatch, or any colour from the picker or a HEX code. The swatch matching
+// the colour (if any) lights up; the picker and the field always show it.
+const showTint = row => {
+    const value = lab[row.dataset.tint];
+    const hex = /^[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : '';
+    let matched = false;
+    row.querySelectorAll('button').forEach(b => {
+        const on = b.dataset.value.toLowerCase() === (hex || value);
+        matched ||= on;
+        b.setAttribute('aria-pressed', String(on));
+    });
+    row.querySelector('.pick').classList.toggle('active', Boolean(hex) && !matched);
+    if (hex) row.querySelector('input[type=color]').value = `#${hex}`;
+    const field = row.querySelector('.hex');
+    if (document.activeElement !== field) field.value = hex ? `#${hex}` : '';
+};
+panel.querySelectorAll('[data-tint]').forEach(row => {
+    row.addEventListener('click', event => {
+        const button = event.target.closest('button');
+        if (!button) return;
+        lab[row.dataset.tint] = button.dataset.value;
+        showTint(row);
+        writeUrl();
+    });
+    row.querySelector('input[type=color]').addEventListener('input', event => {
+        lab[row.dataset.tint] = event.target.value.slice(1);
+        showTint(row);
+        writeUrl();
+    });
+    row.querySelector('.hex').addEventListener('input', event => {
+        const value = event.target.value.trim().replace(/^#/, '');
+        const full = /^[0-9a-f]{3}$/i.test(value) ? value.replace(/./g, c => c + c) : value;
+        if (!/^[0-9a-f]{6}$/i.test(full)) return;
+        lab[row.dataset.tint] = full.toLowerCase();
+        showTint(row);
+        writeUrl();
+    });
+    showTint(row);
+});
 panel.querySelector('[data-live="lightSetup"]').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
