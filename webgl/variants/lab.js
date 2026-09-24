@@ -2,7 +2,7 @@
 // Edition and relief rebuild the shader, so they reload; the rest is live.
 // All settings live in the URL, so a particular look can be shared as a link.
 import { directions, direction } from './directions.js';
-import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES } from './renderer.js';
+import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
 
 // An exported file carries its settings as a preset and shows no panel.
 const exported = typeof globalThis.__cardPreset === 'string';
@@ -28,6 +28,7 @@ const lab = globalThis.__cardLab = {
     keySoft: number('keySoft', .05),
     keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'round',
     lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
+    lightSetup: Object.hasOwn(LIGHT_SETUPS, params.get('lightSetup')) ? params.get('lightSetup') : 'studio',
     idle: number('idle', 1),
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
@@ -187,6 +188,10 @@ panel.innerHTML = `
   <details class="text-fields"><summary>Текст карточки</summary>
     ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
   </details>
+  ${group('Тип света', `
+    <div class="segments" data-live="lightSetup">
+      ${Object.entries(LIGHT_SETUPS).map(([id, setup]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.lightSetup}">${setup.title}</button>`).join('')}
+    </div>`)}
   ${group('Ключевой свет', `
     <div class="segments" data-live="keyShape">
       ${Object.entries(KEY_SHAPES).map(([id, shape]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.keyShape}">${shape.title}</button>`).join('')}
@@ -243,6 +248,7 @@ const writeUrl = () => {
     next.set('panel', panel.hidden ? '0' : '1');
     next.set('keyShape', lab.keyShape);
     next.set('lamps', lab.lamps);
+    next.set('lightSetup', lab.lightSetup);
     for (const [key] of textFields) if (lab.text[key]) next.set(key, lab.text[key]); else next.delete(key);
     next.delete('tintFinish');
     for (const [key, value] of Object.entries(lab.finish)) next.set(`${key}Finish`, value);
@@ -292,6 +298,13 @@ panel.querySelector('[data-live="lamps"]').addEventListener('click', event => {
     if (!button) return;
     lab.lamps = button.dataset.value;
     panel.querySelectorAll('[data-live="lamps"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    writeUrl();
+});
+panel.querySelector('[data-live="lightSetup"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.lightSetup = button.dataset.value;
+    panel.querySelectorAll('[data-live="lightSetup"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
 });
 panel.querySelector('[data-live="keyShape"]').addEventListener('click', event => {

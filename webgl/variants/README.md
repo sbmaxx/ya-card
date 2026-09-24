@@ -20,6 +20,10 @@ is not used by these pages and is unchanged.
   fill, ceiling and side strips) plus a bounce card with a black flag. Panel edges
   soften with roughness and keep their energy, so a mirror shows a crisp panel and
   satin a broad gradient. No environment textures and no requests.
+- Lighting setups (`?lightSetup=`, lab «Тип света»): studio, softbox, drama, rim,
+  ring, window, neon. Lamps are uniform arrays, so a setup switches live; the key
+  softbox keeps the lab's shape, softness and brightness, and the shadow, pool and
+  beam follow the setup's key.
 - The room rotates with the light path, the intro sweep and (on phones) the device
   orientation; the SVG shadow and background glow follow the same key direction.
 - Brushed metal: seven reflection samples across the groove direction (anisotropic

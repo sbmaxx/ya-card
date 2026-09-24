@@ -82,29 +82,104 @@ function panel(center, roll, size, color) {
 }
 const studio = look.studio;
 const scale = (color, k) => color.map(value => value * k);
-const KEY_DIRECTION = unit([-.24, .30, 1]);
-const lights = [
-    // Long diagonal key strip above left. Its trajectory is animated by rotating the room.
-    panel(KEY_DIRECTION, -.52, [.50, .075], scale(studio.key, 8)),
-    // Soft wide key wrap: gives satin a large, gentle gradient instead of a hot spot.
-    panel([-.30, .36, 1], -.40, [.40, .30], scale(studio.key, .8)),
-    // Narrow cool fill on the right.
-    panel([.62, -.04, 1], .10, [.045, .55], scale(studio.fill, 4.2)),
-    // Ceiling strips: the upper chamfer reflects straight up.
-    panel([-.40, 1, .10], 0, [.55, .30], scale(studio.key, 5.5)),
-    panel([.55, 1, -.25], 0, [.30, .30], scale(studio.fill, 3.2)),
-    // Tall side strips for the left/right and diagonal chamfers.
-    panel([-1, .05, .05], 0, [.22, .70], scale(studio.key, 4.5)),
-    panel([1, -.10, .20], 0, [.14, .60], scale(studio.fill, 3.0)),
-    panel([.70, .70, .10], .5, [.10, .40], scale(studio.key, 3.0)),
-    panel([.70, -.70, .10], -.5, [.10, .40], scale(studio.fill, 1.6))
-];
-// The first panel is the key softbox: its reflection is the travelling light
-// on the plate. Shape, edge softness and brightness are uniforms (lab controls);
-// the second panel, its wide wrap, follows the same brightness.
-const lightCode = lights.map(({ c, right, up, size, color }, i) => i === 0
-    ? `    col += ${v3(color)} * uKeyGain * keyPanel(d, ${v3(c)}, blur);`
-    : `    col += ${v3(color)}${i === 1 ? ' * uKeyGain' : ''} * panel(d, ${v3(c)}, ${v3(right)}, ${v3(up)}, vec2(${f(size[0])}, ${f(size[1])}), blur);`).join('\n');
+// Lighting setups. Each lamp: centre direction, roll, gnomonic half-size,
+// colour ('key' / 'fill' = the edition's studio tones, or linear RGB), power.
+// `wrap` lamps follow the key brightness; `shape: 'rect'` keeps a lamp
+// rectangular even when the studio lamps are round (window panes).
+// The key is the travelling softbox; the lab can change its shape.
+const MAX_LIGHTS = 12;
+const ring = (count, radius, size, color, power) => Array.from({ length: count }, (_, i) => {
+    const a = i / count * Math.PI * 2;
+    return { c: [Math.cos(a) * radius, Math.sin(a) * radius, 1], roll: a, size: [size, size], color, power };
+});
+export const LIGHT_SETUPS = {
+    studio: {
+        title: 'Студия', key: { c: [-.24, .30, 1], power: 8 }, bounce: 1,
+        lights: [
+            // Soft wide key wrap: gives satin a large, gentle gradient instead of a hot spot.
+            { c: [-.30, .36, 1], roll: -.40, size: [.40, .30], color: 'key', power: .8, wrap: true },
+            // Narrow cool fill on the right.
+            { c: [.62, -.04, 1], roll: .10, size: [.045, .55], color: 'fill', power: 4.2 },
+            // Ceiling: the upper chamfer reflects straight up.
+            { c: [-.40, 1, .10], size: [.55, .30], color: 'key', power: 5.5 },
+            { c: [.55, 1, -.25], size: [.30, .30], color: 'fill', power: 3.2 },
+            // Tall side strips for the left/right and diagonal chamfers.
+            { c: [-1, .05, .05], size: [.22, .70], color: 'key', power: 4.5 },
+            { c: [1, -.10, .20], size: [.14, .60], color: 'fill', power: 3.0 },
+            { c: [.70, .70, .10], roll: .5, size: [.10, .40], color: 'key', power: 3.0 },
+            { c: [.70, -.70, .10], roll: -.5, size: [.10, .40], color: 'fill', power: 1.6 }
+        ]
+    },
+    softbox: {
+        // One large overhead softbox and a white room: low contrast, even satin.
+        title: 'Софтбокс', key: { c: [-.16, .30, 1], power: 4.5 }, bounce: 1.25,
+        lights: [
+            { c: [-.05, .42, 1], size: [.62, .36], color: 'key', power: .6, wrap: true },
+            { c: [.58, .02, 1], size: [.30, .45], color: 'fill', power: .9 },
+            { c: [-.58, .02, 1], size: [.30, .45], color: 'key', power: .8 },
+            { c: [0, 1, .15], size: [.80, .60], color: 'key', power: 2.8 },
+            { c: [-1, .10, .10], size: [.40, .80], color: 'key', power: 2.4 },
+            { c: [1, .10, .10], size: [.40, .80], color: 'fill', power: 2.2 }
+        ]
+    },
+    drama: {
+        // Hard key high on the left, almost nothing else: deep blacks, one flash.
+        title: 'Драма', key: { c: [-.52, .46, 1], power: 12 }, bounce: .3,
+        lights: [
+            { c: [-.62, .56, 1], size: [.16, .12], color: 'key', power: .6, wrap: true },
+            { c: [1, .15, -.10], size: [.05, .60], color: 'fill', power: 3.2 },
+            { c: [-.30, 1, .05], size: [.30, .12], color: 'key', power: 2.4 }
+        ]
+    },
+    rim: {
+        // Lamps behind and above: the chamfers glow, the face stays dark until tilted.
+        title: 'Контровой', key: { c: [-.10, .95, .30], power: 9 }, shadow: [-.12, .35, 1], bounce: .35,
+        lights: [
+            { c: [-1, .20, -.20], size: [.08, .80], color: 'key', power: 8 },
+            { c: [1, .20, -.20], size: [.08, .80], color: 'fill', power: 7 },
+            { c: [0, 1, -.30], size: [.80, .08], color: 'key', power: 7 },
+            { c: [0, -1, -.20], size: [.60, .06], color: 'fill', power: 2.5 },
+            { c: [.40, .30, 1], size: [.10, .10], color: 'fill', power: 1.4 }
+        ]
+    },
+    ring: {
+        // A ring light around the lens: a halo around the dark flag in every mirror.
+        title: 'Кольцо', key: { c: [-.20, .26, 1], power: 3 }, shadow: [-.06, .14, 1], bounce: .7,
+        lights: [
+            ...ring(10, .24, .04, 'key', 5),
+            { c: [0, 1, .10], size: [.50, .30], color: 'key', power: 2.5 }
+        ]
+    },
+    window: {
+        // Daylight through a four-pane window on the left, a warm room on the right.
+        title: 'Окно', key: { c: [-.40, .24, 1], power: 7, color: [.90, .96, 1.06] }, bounce: .9,
+        lights: [
+            ...[[-.86, .38], [-.62, .38], [-.86, .10], [-.62, .10]].map(([x, y]) =>
+                ({ c: [x, y, 1], size: [.10, .12], color: [.88, .95, 1.08], power: 3.4, shape: 'rect' })),
+            { c: [-1, .15, .10], size: [.30, .60], color: [.85, .93, 1.05], power: 3.5, shape: 'rect' },
+            { c: [.70, -.10, 1], size: [.35, .50], color: [1, .86, .70], power: .9 },
+            { c: [0, 1, .10], size: [.60, .40], color: [1, .92, .84], power: 1.8 },
+            { c: [1, 0, .10], size: [.40, .70], color: [1, .86, .70], power: 1.6 }
+        ]
+    },
+    neon: {
+        // Two coloured tubes and a cool key: the metal picks up magenta and cyan.
+        title: 'Неон', key: { c: [-.24, .30, 1], power: 6, color: [.86, .92, 1] }, bounce: .35,
+        lights: [
+            { c: [.60, .05, 1], roll: .12, size: [.03, .60], color: [1, .10, .55], power: 9 },
+            { c: [-.72, -.10, 1], roll: -.10, size: [.03, .55], color: [.05, .75, 1], power: 8 },
+            { c: [-.20, 1, .10], size: [.60, .04], color: [.55, .20, 1], power: 7 },
+            { c: [-1, .05, .05], size: [.05, .70], color: [.05, .75, 1], power: 6 },
+            { c: [1, -.10, .20], size: [.05, .60], color: [1, .10, .55], power: 6 }
+        ]
+    }
+};
+for (const setup of Object.values(LIGHT_SETUPS)) {
+    setup.key.c = unit(setup.key.c);
+    setup.shadowDirection = setup.shadow ? unit(setup.shadow) : setup.key.c;
+    setup.lamps = setup.lights.map(light => panel(light.c, light.roll || 0, light.size, [0, 0, 0]));
+}
+const toneOf = color => color === 'fill' ? studio.fill : color === 'key' || !color ? studio.key : color;
 // Key softbox shapes: half-size and corner radius in gnomonic units, roll, and
 // a gain that keeps the emitted light (area × intensity) comparable.
 export const KEY_SHAPES = {
@@ -115,8 +190,6 @@ export const KEY_SHAPES = {
 for (const shape of Object.values(KEY_SHAPES)) {
     const area = 4 * shape.size[0] * shape.size[1] - (4 - Math.PI) * shape.radius ** 2;
     shape.gain = .15 / area;
-    const axes = panel(KEY_DIRECTION, shape.roll, shape.size, [0, 0, 0]);
-    shape.right = axes.right; shape.up = axes.up;
 }
 
 const toneCode = `vec3 neutralTonemap(vec3 color) {
@@ -248,6 +321,15 @@ uniform vec3 uKeyUp;
 uniform vec2 uKeySize;
 uniform float uKeyRadius;
 uniform float uKeySoft;
+uniform vec3 uKeyCenter;
+uniform vec3 uKeyColor;
+// The rest of the setup's lamps: xy half-size, z roundness (-1 = studio default).
+uniform int uLightCount;
+uniform vec3 uLightCenter[${MAX_LIGHTS}];
+uniform vec3 uLightRight[${MAX_LIGHTS}];
+uniform vec3 uLightUp[${MAX_LIGHTS}];
+uniform vec3 uLightShape[${MAX_LIGHTS}];
+uniform vec3 uLightColor[${MAX_LIGHTS}];
 
 // The key softbox as a rounded rectangle (a circle at full radius). uKeySoft is
 // the studio's diffuser: it widens the edge of every light on top of roughness.
@@ -267,7 +349,7 @@ float keyPanel(vec3 d, vec3 c, float blur) {
 
 uniform float uRoundLights;
 
-float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur) {
+float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur, float roundness) {
     float z = dot(d, c);
     vec2 p = vec2(dot(d, r), dot(d, u)) / max(z, .08);
     // Studio lights are round (octaboxes) by default; capsules — fully rounded
@@ -276,8 +358,8 @@ float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur) {
     float radius = min(size.x, size.y);
     vec2 q = abs(p) - size + radius;
     float capsule = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
-    float sd = mix(capsule, length(p) - disc, uRoundLights);
-    vec2 shape = mix(size, vec2(disc), uRoundLights);
+    float sd = mix(capsule, length(p) - disc, roundness);
+    vec2 shape = mix(size, vec2(disc), roundness);
     float edge = blur + uKeySoft;
     float inside = smoothstep(edge, -edge, sd);
     // Real softboxes are a little brighter in the middle than at the frame.
@@ -297,12 +379,17 @@ vec3 room(vec3 world, float rough) {
     col += vec3(.10, .10, .095) * exp(-d.y * d.y * mix(40.0, 5.0, rough)) * smoothstep(.3, -.2, d.z);
     // A dim bounce card around the camera with a black flag in its centre:
     // satin averages the two into a mid tone, a mirror sees the dark flag.
-    float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.95, .70), blur + .08);
-    float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02);
+    float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.95, .70), blur + .08, uRoundLights);
+    float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02, uRoundLights);
     col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .82 * flag);
     // Light walls (the paper backdrop) surround the card with brighter room.
     col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
-${lightCode}
+    col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
+    for (int i = 0; i < ${MAX_LIGHTS}; i++) {
+        if (i >= uLightCount) break;
+        vec3 shape = uLightShape[i];
+        col += uLightColor[i] * panel(d, uLightCenter[i], uLightRight[i], uLightUp[i], shape.xy, blur, shape.z < 0.0 ? uRoundLights : shape.z);
+    }
     return col;
 }
 
@@ -1082,8 +1169,9 @@ export class CardRenderer {
         this.patternUniforms = locate(this.patternProgram, ['uKind', 'uAspect']);
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
+        this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1263,6 +1351,27 @@ export class CardRenderer {
     // On touch screens the backdrop melts into flat colours read from itself
     // just inside the fade; the same colours go to the page, the scene and thin
     // fixed edge strips, so the scene continues into Safari's bars.
+    // Setup lamps as uniform arrays; re-sent only when the setup or key changes.
+    uploadLights(setup, keyShape, keyGain) {
+        const { gl } = this, u = this.uniforms;
+        const signature = `${setup.title}|${keyShape.title}|${keyGain}`;
+        if (this.lightSignature === signature) return;
+        this.lightSignature = signature;
+        const key = panel(setup.key.c, keyShape.roll, keyShape.size, [0, 0, 0]);
+        gl.uniform3f(u.uKeyCenter, ...key.c);
+        gl.uniform3f(u.uKeyRight, ...key.right);
+        gl.uniform3f(u.uKeyUp, ...key.up);
+        gl.uniform3fv(u.uKeyColor, scale(toneOf(setup.key.color), setup.key.power));
+        const count = Math.min(MAX_LIGHTS, setup.lights.length);
+        const pack = read => new Float32Array(setup.lights.slice(0, count).flatMap(read));
+        gl.uniform1i(u.uLightCount, count);
+        gl.uniform3fv(u.uLightCenter, pack((_, i) => setup.lamps[i].c));
+        gl.uniform3fv(u.uLightRight, pack((_, i) => setup.lamps[i].right));
+        gl.uniform3fv(u.uLightUp, pack((_, i) => setup.lamps[i].up));
+        gl.uniform3fv(u.uLightShape, pack(light => [...light.size, light.shape === 'rect' ? 0 : -1]));
+        gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1))));
+    }
+
     sampleEdges(backdrop) {
         if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; return; }
         this.edgeFrames = (this.edgeFrames || 0) + 1;
@@ -1457,7 +1566,9 @@ export class CardRenderer {
         const roomYaw = lightYaw + gyroY * 1.8, roomPitch = lightPitch - gyroX * 1.8;
         this.room = roomMatrix(roomYaw, roomPitch);
         // Shadow and background follow the key: world key = roomᵀ · key.
-        const r = this.room, k = KEY_DIRECTION;
+        const setup = LIGHT_SETUPS[lab ? lab.lightSetup : direction.lightSetup] || LIGHT_SETUPS.studio;
+        this.lightSetup = setup;
+        const r = this.room, k = setup.shadowDirection;
         const keyWorld = [r[0] * k[0] + r[1] * k[1] + r[2] * k[2], r[3] * k[0] + r[4] * k[1] + r[5] * k[2], r[6] * k[0] + r[7] * k[1] + r[8] * k[2]];
         this.keyLight = keyWorld.map(value => value * 8);
         this.keyDirection = keyWorld;
@@ -1539,12 +1650,12 @@ export class CardRenderer {
         if (backdrop && backdrop.kind === KIND.stage && this.vertical) backdrop = BACKDROPS.studio;
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
-        gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
+        gl.uniform1f(this.uniforms.uBounce, (backdrop ? backdrop.bounce : 1) * setup.bounce);
         const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.round;
         gl.uniform1f(this.uniforms.uRoundLights, (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1);
-        gl.uniform1f(this.uniforms.uKeyGain, (lab ? lab.keyGain : (direction.keyGain ?? .7)) * keyShape.gain);
-        gl.uniform3f(this.uniforms.uKeyRight, ...keyShape.right);
-        gl.uniform3f(this.uniforms.uKeyUp, ...keyShape.up);
+        const keyGain = (lab ? lab.keyGain : (direction.keyGain ?? .7)) * keyShape.gain;
+        gl.uniform1f(this.uniforms.uKeyGain, keyGain);
+        this.uploadLights(setup, keyShape, keyGain);
         gl.uniform2f(this.uniforms.uKeySize, ...keyShape.size);
         gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius);
         gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
