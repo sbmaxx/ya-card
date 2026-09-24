@@ -50,7 +50,9 @@ if (exported) {
 const style = document.createElement('style');
 style.textContent = direction.css + `
 .lab { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 30;
-  width: 300px; max-height: calc(100svh - 32px); overflow: hidden auto; padding: 14px 14px 12px; border-radius: 14px;
+  width: 312px; max-height: calc(100svh - 32px); overflow: hidden auto;
+  /* A thin scrollbar in its own gutter never covers the controls. */
+  scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: #ffffff38 transparent; padding: 14px 14px 12px; border-radius: 14px;
   background: #0b0d12d9; border: 1px solid #ffffff1c; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   color: #e8ebf0; font: 12px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; box-shadow: 0 12px 40px #0008; }
 .lab[hidden] { display: none; }
@@ -72,9 +74,12 @@ style.textContent = direction.css + `
 .lab .actions button { flex: 1; appearance: none; border: 1px solid #ffffff22; border-radius: 8px; padding: 7px 6px; background: #ffffff0d; color: #e8ebf0; font: inherit; cursor: pointer; }
 .lab .actions button:hover { background: #ffffff1c; }
 .lab p { margin: 8px 0 0; color: #7d8794; font-size: 11px; }
-.lab .swatches { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
-.lab .swatches span { width: 62px; color: #9aa3b0; }
-.lab .swatches button { appearance: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
+.lab::-webkit-scrollbar { width: 6px; }
+.lab::-webkit-scrollbar-thumb { background: #ffffff38; border-radius: 3px; }
+.lab::-webkit-scrollbar-track { background: transparent; }
+.lab .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 7px; }
+.lab .swatches span { width: 52px; flex: none; color: #9aa3b0; }
+.lab .swatches button { appearance: none; flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab details.text-fields { margin: 0 0 12px; }
 .lab details.text-fields summary { cursor: pointer; color: #9aa3b0; margin-bottom: 6px; }
