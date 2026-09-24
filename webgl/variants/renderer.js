@@ -215,9 +215,9 @@ vec3 toSRGB(vec3 c) {
 // light and receiving the card's real, blurred shadow. Colours are linear.
 export const BACKDROPS = {
     studio: { title: 'Графит', wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
-        grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d' },
+        grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', edge: '#0e1014' },
     dark: { title: 'Тёмный графит', wall: [.016, .017, .020], floor: [.006, .0065, .008], pool: [.075, .077, .082],
-        grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f' }
+        grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f', edge: '#07080a' }
 };
 const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
 export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
@@ -711,7 +711,9 @@ float tallness() {
 // screen it stretches upwards and downwards to fill it.
 vec3 wallColor(vec2 uv) {
     vec2 drift = vec2(sin(uTime * .21), cos(uTime * .17 + 1.3)) * vec2(.035, .03);
-    vec2 d = (screenUnits(uv) - screenUnits(uPool + drift)) * vec2(.85, mix(1.1, .62, tallness()));
+    // An upright phone centres the pool vertically: the frame stays symmetric.
+    vec2 pool = mix(uPool, vec2(uPool.x, .5), tallness());
+    vec2 d = (screenUnits(uv) - screenUnits(pool + drift)) * vec2(.85, mix(1.1, .62, tallness()));
     float breath = 1.0 + .08 * sin(uTime * .33) + .04 * sin(uTime * .57 + 2.0);
     return uWall + uPoolColor * breath * exp(-dot(d, d) * 2.6);
 }
@@ -721,8 +723,8 @@ void main() {
     float tall = tallness();
     // Cyclorama: the wall curves softly into a darker floor below the card.
     vec3 wall = wallColor(vUV);
-    float floorScale = mix(1.0, 1.7, tall);
-    vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12 * floorScale, -.62 * floorScale, p.y));
+    // No floor on an upright phone: the dark frame is the same above and below.
+    vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y) * (1.0 - tall));
     color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, mix(1.0, .62, tall))));
     color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
     vec3 display = toSRGB(neutralTonemap(color));
@@ -979,27 +981,47 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     if (widest > maxWidth) nameSize *= maxWidth / widest;
     const growth = nameSize - plan.nameSize;
     const roleLines = fits(data.position, textSize, 400) ? [data.position] : (data.positionLines || splitTwo(data.position));
-    // Plans are drawn for two-line portrait and one-line landscape blocks.
-    const planGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
-    const nameGap = planGap * nameSize / plan.nameSize;
-    const roleGap = plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17;
-    // A larger name keeps its gap to the logo (the baseline moves down by the
-    // cap height it gained) and pushes everything below by its extra size.
-    const nameY = plan.name[0] + growth * .75;
-    const nameShift = nameY + (nameLines.length - 1) * nameGap + growth * .25
-        - (plan.name[0] + (plan.name.length - 1) * planGap);
-    const roleShift = nameShift + (roleLines.length - plan.role.length) * roleGap;
-    const contactsY = plan.contacts + roleShift;
-    const finalBaseline = contactsY + plan.lineHeight;
-    context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
-    const finalMetrics = context.measureText(`t.me/${data.telegram}`);
+    const ink = (value, size, weight = 400) => {
+        context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+        const metrics = context.measureText(value);
+        return { ascent: metrics.actualBoundingBoxAscent, descent: Math.max(0, metrics.actualBoundingBoxDescent) };
+    };
+    let nameY, nameGap, roleYs, contactsY, lineHeight = plan.lineHeight;
+    if (vertical) {
+        // Portrait: a rhythm from the real glyph sizes rather than fixed baselines.
+        // The same white space separates name → role and role → contacts; the
+        // logo gets a little more; the name lines sit at a heading's leading.
+        const gap = 22, logoGap = 30, roleLeading = 17;
+        nameGap = nameSize * 1.12;
+        nameY = logoY + logoHeight + logoGap + ink(nameLines[0], nameSize, 500).ascent;
+        const nameBottom = nameY + (nameLines.length - 1) * nameGap + ink(nameLines.at(-1), nameSize, 500).descent;
+        const roleY = nameBottom + gap + ink(roleLines[0], textSize).ascent;
+        roleYs = roleLines.map((_, i) => roleY + i * roleLeading);
+        const roleBottom = roleYs.at(-1) + ink(roleLines.at(-1), textSize).descent;
+        contactsY = roleBottom + gap + ink(data.email, textSize).ascent;
+    } else {
+        // Landscape plans are drawn for one-line blocks.
+        const planGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
+        nameGap = planGap * nameSize / plan.nameSize;
+        const roleGap = plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17;
+        // A larger name keeps its gap to the logo (the baseline moves down by the
+        // cap height it gained) and pushes everything below by its extra size.
+        nameY = plan.name[0] + growth * .75;
+        const nameShift = nameY + (nameLines.length - 1) * nameGap + growth * .25
+            - (plan.name[0] + (plan.name.length - 1) * planGap);
+        const roleShift = nameShift + (roleLines.length - plan.role.length) * roleGap;
+        roleYs = roleLines.map((_, i) => plan.role[0] + nameShift + i * roleGap);
+        contactsY = plan.contacts + roleShift;
+    }
+    const finalBaseline = contactsY + lineHeight;
     const blockTop = logoY;
-    const blockBottom = finalBaseline + finalMetrics.actualBoundingBoxDescent;
-    // Centre the block on the rectangular part of the plate: the portrait
-    // plate narrows into its point over the last 13% of the height. A touch
-    // above the geometric centre reads as centred.
-    const usable = vertical ? height * .87 : height;
-    const yOffset = (usable - blockTop - blockBottom) / 2 - usable * .015;
+    const blockBottom = finalBaseline + ink(`t.me/${data.telegram}`, textSize).descent;
+    // Centre the block on the plate. The portrait plate narrows into its point
+    // over the last 13% of its height; the eye counts part of that point as
+    // space below the text, so the block is centred on the top 92%. Landscape
+    // sits a touch above the geometric centre, which reads as centred.
+    const usable = vertical ? height * .92 : height;
+    const yOffset = (usable - blockTop - blockBottom) / 2 - (vertical ? 0 : usable * .015);
     function text(value, y, size, url, weight = 400) {
         y += yOffset;
         context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
@@ -1024,9 +1046,9 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    const bodyRects = roleLines.map((line, i) => text(line, plan.role[0] + nameShift + i * roleGap, textSize));
+    const bodyRects = roleLines.map((line, i) => text(line, roleYs[i], textSize));
     const y = contactsY;
-    const size = textSize, lineHeight = plan.lineHeight;
+    const size = textSize;
     bodyRects.push(text(data.email, y, size, `mailto:${data.email}`));
     bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`));
     const textRelief = [Math.min(...bodyRects.map(r => r[0])), Math.min(...bodyRects.map(r => r[1])),
@@ -1218,6 +1240,17 @@ export class CardRenderer {
         const vertical = innerWidth <= 700 && !touchLandscape;
         const compact = vertical && Math.max(screen.width, screen.height) < 740;
         this.touchLandscape = touchLandscape;
+        // Safe-area insets in CSS px, read from a probe styled with env().
+        let probe = document.querySelector('.safe-probe');
+        if (!probe) {
+            probe = Object.assign(document.createElement('div'), { className: 'safe-probe' });
+            probe.setAttribute('aria-hidden', 'true');
+            probe.style.cssText = 'position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;'
+                + 'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
+            document.body.append(probe);
+        }
+        const insets = getComputedStyle(probe);
+        this.safeInsets = { top: parseFloat(insets.paddingTop) || 0, bottom: parseFloat(insets.paddingBottom) || 0 };
         if (vertical !== this.vertical || compact !== this.compact) this.rebuild(vertical, compact);
         this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : vertical ? 360 : 684;
         const focalLength = this.fixedCardWidth
@@ -1257,13 +1290,6 @@ export class CardRenderer {
         this.targets = [make(width, height, true), make(width, height), make(w8, h8), make(w8, h8), make(width, height), make(width, height)];
     }
 
-    // Safari paints the status bar and the area under its toolbars with the page
-    // colour. Read the rendered frame's top and bottom edge and continue them.
-    // Safari (iOS 26) paints its status bar and toolbar areas with a flat colour
-    // sampled from fixed elements at the screen edges, never from canvas pixels.
-    // On touch screens the backdrop melts into flat colours read from itself
-    // just inside the fade; the same colours go to the page, the scene and thin
-    // fixed edge strips, so the scene continues into Safari's bars.
     // Setup lamps as uniform arrays; re-sent only when the setup or key changes.
     // `size` scales every lamp; the light it emits (area × intensity) stays the same.
     uploadLights(setup, keyShape, keyGain, size) {
@@ -1286,44 +1312,24 @@ export class CardRenderer {
         gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2)));
     }
 
-    sampleEdges(backdrop, light) {
+    // Touch screens: the backdrop sits in a fixed dark frame. The safe areas
+    // (status bar, home indicator) are flat dark, then a 160 px ramp leads into
+    // the lit backdrop — the same distance at the top and at the bottom. The dark
+    // colour is a constant per backdrop and also goes to the page, the scene and
+    // thin fixed edge strips: Safari (iOS 26) tints its bars from those, once.
+    applyEdges(backdrop) {
         if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; return; }
-        // The page colour is fixed per backdrop, size and light setup: Safari takes
-        // the bar tint once and does not follow later changes, so it must not
-        // move with the light, the intro or the phone's tilt.
-        const key = `${backdrop.title}:${this.lightSetup ? this.lightSetup.title : ''}:${this.canvas.width}x${this.canvas.height}`;
+        const height = this.viewportHeight, { top, bottom } = this.safeInsets || { top: 0, bottom: 0 };
+        const key = `${backdrop.edge}:${height}:${top}:${bottom}`;
         if (key === this.edgeKey) return;
         this.edgeKey = key;
-        // Flat bands of 7% / 9% of the height (Safari's bars), each with a 12% ramp.
-        const fade = [.07, .09, .12, .12];
-        const gl = this.gl, u = this.backdropUniforms, width = this.canvas.width, height = this.canvas.height;
-        // A throwaway frame of the bare backdrop with the light at rest.
-        light(this.lightSetup ? this.lightSetup.shadowDirection : this.keyDirection);
-        gl.uniform4f(u.uEdgeFade, 0, 0, 0, 0);
-        gl.uniform1f(u.uShadowFade, 0);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-        const row = new Uint8Array(width * 4);
-        // Average a whole row.
-        const read = y => {
-            gl.readPixels(0, Math.round(y), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, row);
-            const sum = [0, 0, 0];
-            for (let i = 0; i < row.length; i += 4) { sum[0] += row[i]; sum[1] += row[i + 1]; sum[2] += row[i + 2]; }
-            return sum.map(value => value / width);
-        };
-        // One colour for both edges: whatever Safari samples for either bar —
-        // the page, the scene or an edge strip — it gets the same colour, and the
-        // scene ramps into exactly that colour at the top and at the bottom.
-        // Sampled at the very edges of the frame, where the vignette and the floor
-        // have darkened the backdrop, so the bands continue it rather than
-        // spreading the brighter middle over a third of the screen.
-        const top = read(height * .98), bottom = read(height * .02);
-        const edge = top.map((value, i) => Math.round((value + bottom[i]) / 2));
-        this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
-        if (edge.join() === this.edgeCss) return;
-        this.edgeCss = edge.join();
-        const color = `rgb(${edge.join(',')})`;
-        const root = document.documentElement;
-        root.style.backgroundColor = color;
+        const ramp = 160, pad = 8;
+        const rgb = [1, 3, 5].map(i => parseInt(backdrop.edge.slice(i, i + 2), 16) / 255);
+        this.edges = { fade: [(top + pad) / height, (bottom + pad) / height, ramp / height, ramp / height], top: rgb, bottom: rgb };
+        if (backdrop.edge === this.edgeCss) return;
+        this.edgeCss = backdrop.edge;
+        const color = backdrop.edge;
+        document.documentElement.style.backgroundColor = color;
         document.body.style.backgroundColor = color;
         const scene = document.querySelector('.scene');
         if (scene) scene.style.backgroundColor = color;
@@ -1665,7 +1671,7 @@ export class CardRenderer {
             gl.uniform1f(u.uTime, reduced ? 0 : this.time);
             // The pool sits behind the card, offset towards the key light.
             const light = k => gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
-            this.sampleEdges(backdrop, light);
+            this.applyEdges(backdrop);
             const edge = this.edges || { fade: [0, 0, 0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
             gl.uniform4f(u.uEdgeFade, ...edge.fade);
             gl.uniform3f(u.uEdgeTop, ...edge.top);
