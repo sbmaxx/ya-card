@@ -124,6 +124,8 @@ import { CardRenderer } from './renderer.js';
         if (animate || settling) schedule();
     }
     function syncAmbient() {
+        // Pages whose backdrop is rendered in WebGL have no CSS ambient layer.
+        if (!ambient) return;
         ambient.style.setProperty('--ambient-opacity', renderer.ambientOpacity.toFixed(4));
         if (renderer.ambientShift) {
             ambient.style.setProperty('--ambient-x', `${renderer.ambientShift[0].toFixed(3)}vw`);
@@ -387,6 +389,8 @@ import { CardRenderer } from './renderer.js';
             schedule();
         } catch (error) {
             console.warn('WebGL card unavailable; showing HTML contacts.', error);
+            // Pages may name a separate plain version instead of the inline fallback.
+            if (window.cardFallbackUrl) { location.replace(window.cardFallbackUrl + location.hash); return; }
             showFallback();
         }
     }
@@ -412,6 +416,12 @@ import { CardRenderer } from './renderer.js';
         event.preventDefault();
         contextLost = true;
         cancelAnimationFrame(frame); frame = 0;
+        // With a separate plain version, wait for restoration behind the loader.
+        if (window.cardFallbackUrl) {
+            root.classList.remove('webgl-ready');
+            root.classList.add('webgl-loading');
+            return;
+        }
         showFallback();
     });
     canvas.addEventListener('webglcontextrestored', async () => {

@@ -9,7 +9,7 @@
 // - `ablate`  — laser ablation: the coating is removed and bare frosted steel shows.
 const directions = {
     steel: {
-        id: 'steel', title: 'Steel', caption: 'Продольная шлифовка · алмазная V-резка · эмаль',
+        id: 'steel', backdrop: 'studio', title: 'Steel', caption: 'Продольная шлифовка · алмазная V-резка · эмаль',
         look: {
             plate: { f0: [.60, .60, .62], rough: .32, aniso: .26, brush: 'linear' },
             chamfer: { f0: [.93, .93, .95], rough: .03 },
@@ -30,7 +30,7 @@ const directions = {
         `
     },
     noir: {
-        id: 'noir', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
+        id: 'noir', backdrop: 'stage', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
         look: {
             plate: { f0: [.05, .051, .056], rough: .30, aniso: .22, brush: 'linear', coat: .012 },
             chamfer: { f0: [.94, .94, .96], rough: .025 },
@@ -52,7 +52,7 @@ const directions = {
         `
     },
     gold: {
-        id: 'gold', title: 'Champagne', caption: 'Шлифованное золото · зеркальная V-резка · чёрная эмаль',
+        id: 'gold', backdrop: 'beam', title: 'Champagne', caption: 'Шлифованное золото · зеркальная V-резка · чёрная эмаль',
         look: {
             plate: { f0: [.92, .70, .42], rough: .32, aniso: .26, brush: 'linear' },
             chamfer: { f0: [1.0, .82, .52], rough: .03 },
@@ -73,7 +73,7 @@ const directions = {
         `
     },
     aurora: {
-        id: 'aurora', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
+        id: 'aurora', backdrop: 'velvet', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
         look: {
             plate: { film: true, rough: .28, aniso: .18, brush: 'linear' },
             chamfer: { f0: [.62, .60, .58], rough: .03 },
@@ -97,7 +97,7 @@ const directions = {
 
 // Edition pages have the id compiled in; the lab page reads `?edition=`.
 const compiled = typeof __CARD_VARIANT__ === 'string' ? __CARD_VARIANT__ : null;
-const requested = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('edition');
+const requested = typeof location === 'undefined' ? null : new URLSearchParams(globalThis.__cardPreset ?? location.search).get('edition');
 export const direction = directions[compiled && compiled !== 'lab' ? compiled
     : Object.hasOwn(directions, requested) ? requested : 'steel'];
 export { directions };

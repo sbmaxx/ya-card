@@ -4,12 +4,24 @@
 import { directions, direction } from './directions.js';
 import { currentLogoShape, currentNameShape, currentLayout, BACKDROPS } from './renderer.js';
 
-const params = new URLSearchParams(location.search);
+// An exported file carries its settings as a preset and shows no panel.
+const exported = typeof globalThis.__cardPreset === 'string';
+const params = new URLSearchParams(exported ? globalThis.__cardPreset : location.search);
+// Editable card text: URL key, label, placeholder (the current card).
+const textFields = [
+    ['name_ru', 'Имя (RU)', 'Роман Рождественский'],
+    ['name_en', 'Имя (EN)', 'Roman Rozhdestvenskiy'],
+    ['role_ru', 'Должность (RU)', 'руководитель отдела поисковых интерфейсов'],
+    ['role_en', 'Должность (EN)', 'head of search interfaces department'],
+    ['email', 'Почта или логин', 'sbmaxx'],
+    ['telegram', 'Telegram', 'sbmaxx']
+];
 const number = (key, fallback) => {
     const value = Number.parseFloat(params.get(key));
     return Number.isFinite(value) ? value : fallback;
 };
 const lab = globalThis.__cardLab = {
+    exported,
     exposure: number('exposure', 1),
     bloom: number('bloom', .45),
     idle: number('idle', 1),
@@ -21,16 +33,22 @@ const lab = globalThis.__cardLab = {
     nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
     logoFirstTint: /^([0-9a-f]{6}|metal)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
     tintFinish: params.get('tintFinish') === 'anod' ? 'anod' : 'enamel',
-    backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : 'studio',
+    text: Object.fromEntries(textFields.map(([key]) => [key, params.get(key) || ''])),
+    backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : (direction.backdrop || 'studio'),
     manualLight: params.get('light') === 'manual',
     yaw: number('yaw', 0),
     pitch: number('pitch', 0)
 };
 
+if (exported) {
+    // Production file: settings only. The page colour follows the backdrop.
+    const backdrop = BACKDROPS[lab.backdrop];
+    if (backdrop) document.documentElement.style.backgroundColor = backdrop.css;
+} else {
 const style = document.createElement('style');
 style.textContent = direction.css + `
 .lab { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 30;
-  width: 300px; max-height: calc(100svh - 32px); overflow: auto; padding: 14px 14px 12px; border-radius: 14px;
+  width: 300px; max-height: calc(100svh - 32px); overflow: hidden auto; padding: 14px 14px 12px; border-radius: 14px;
   background: #0b0d12d9; border: 1px solid #ffffff1c; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   color: #e8ebf0; font: 12px/1.35 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; box-shadow: 0 12px 40px #0008; }
 .lab[hidden] { display: none; }
@@ -56,6 +74,12 @@ style.textContent = direction.css + `
 .lab .swatches span { width: 62px; color: #9aa3b0; }
 .lab .swatches button { appearance: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
+.lab details.text-fields { margin: 0 0 12px; }
+.lab details.text-fields summary { cursor: pointer; color: #9aa3b0; margin-bottom: 6px; }
+.lab .field { display: grid; gap: 3px; margin-bottom: 7px; color: #9aa3b0; }
+.lab .field input { width: 100%; box-sizing: border-box; padding: 7px 9px; border-radius: 7px; border: 1px solid #ffffff22;
+  background: #ffffff0d; color: #e8ebf0; font: 12px/1.3 -apple-system, BlinkMacSystemFont, sans-serif; }
+.lab .field input:focus { outline: none; border-color: #ffffff55; background: #ffffff14; }
 .lab .close { appearance: none; border: 0; background: #ffffff14; color: #cfd6df; width: 26px; height: 26px; border-radius: 50%;
   font: 16px/26px -apple-system, sans-serif; cursor: pointer; margin-left: 10px; padding: 0; }
 .lab .close:hover { background: #ffffff26; }
@@ -100,7 +124,7 @@ panel.innerHTML = `
     ${Object.values(directions).map(d => `<button type="button" data-value="${d.id}" aria-pressed="${d.id === direction.id}">${d.title}</button>`).join('')}
   </div></fieldset>
   <fieldset><legend>Фон</legend><div class="segments" data-live="backdrop">
-    ${Object.entries(BACKDROPS).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b ? b.title : 'Пустота'}</button>`).join('')}
+    ${Object.entries(BACKDROPS).filter(([id]) => id !== 'stage' || !matchMedia('(max-width: 700px)').matches).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b.title}</button>`).join('')}
   </div></fieldset>
   <fieldset><legend>Композиция</legend><div class="segments" data-param="layout">
     <button type="button" data-value="classic" aria-pressed="${currentLayout === 'classic'}">Классика</button>
@@ -116,6 +140,9 @@ panel.innerHTML = `
   </div>
     <label class="range" style="margin-top:8px">Глубина имени <output data-for="nameDepth"></output><input type="range" name="nameDepth" min="0" max="3" step=".05" value="${lab.nameDepth}"></label>
   </fieldset>
+  <details class="text-fields"><summary>Текст карточки</summary>
+    ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
+  </details>
   <fieldset><legend>Цвет букв</legend>
     ${[['logoFirstTint', 'Я / Y'], ['logoTint', 'Логотип'], ['nameTint', 'Имя']].map(([key, label]) => `<div class="swatches" data-tint="${key}"><span>${label}</span>
       ${(key === 'logoFirstTint' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[key]}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
@@ -137,6 +164,7 @@ panel.innerHTML = `
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
   </fieldset></div>
+  <div class="actions"><button type="button" data-action="export">Скачать HTML</button></div>
   <div class="actions"><button type="button" data-action="intro">Интро заново</button><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="hide">Скрыть</button></div>
   <p>H — скрыть/показать панель. Колесо — зум, перетаскивание — поворот, клик — переворот.</p>`;
 const toggle = document.createElement('button');
@@ -162,6 +190,7 @@ const writeUrl = () => {
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
     else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
     next.set('panel', panel.hidden ? '0' : '1');
+    for (const [key] of textFields) if (lab.text[key]) next.set(key, lab.text[key]); else next.delete(key);
     next.set('tintFinish', lab.tintFinish);
     history.replaceState(null, '', `?${next}${location.hash}`);
 };
@@ -180,8 +209,8 @@ const applyBackdrop = id => {
     lab.backdrop = id;
     const backdrop = BACKDROPS[id];
     document.documentElement.classList.toggle('backdrop-light', Boolean(backdrop && backdrop.light));
+    // Page colour before the first frame; the renderer then matches the edges.
     document.documentElement.style.backgroundColor = backdrop ? backdrop.css : '';
-    document.body.style.backgroundColor = backdrop ? backdrop.css : '';
     panel.querySelectorAll('[data-live="backdrop"] button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.value === id)));
 };
 panel.querySelector('[data-live="backdrop"]').addEventListener('click', event => {
@@ -189,6 +218,14 @@ panel.querySelector('[data-live="backdrop"]').addEventListener('click', event =>
     if (button) { applyBackdrop(button.dataset.value); writeUrl(); }
 });
 applyBackdrop(lab.backdrop);
+// Text edits rebuild textures after a short pause in typing.
+let textTimer = 0;
+panel.querySelectorAll('.text-fields input').forEach(input => input.addEventListener('input', () => {
+    lab.text[input.name] = input.value;
+    clearTimeout(textTimer);
+    textTimer = setTimeout(() => { globalThis.__cardRenderer?.refreshText(); writeUrl(); }, 200);
+}));
+panel.addEventListener('keydown', event => event.stopPropagation());
 panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
@@ -237,6 +274,7 @@ panel.addEventListener('click', event => {
     if (action === 'intro') { writeUrl(); location.reload(); }
     if (action === 'reset') location.search = `edition=${direction.id}`;
     if (action === 'hide') setHidden(true);
+    if (action === 'export') exportHtml();
 });
 toggle.addEventListener('click', () => setHidden(false));
 // On phones the panel starts collapsed; the choice is kept across reloads within the session.
@@ -249,6 +287,56 @@ window.addEventListener('keydown', event => {
     if (event.key.toLowerCase() === 'h' && !event.metaKey && !event.ctrlKey && !event.target.closest('input')) setHidden(!panel.hidden);
 });
 
+// Export: this page's own self-contained HTML with the current settings baked
+// in as a preset, without the panel, navigation or noindex; the accessible HTML
+// copy of the card gets the edited text and serves as the no-WebGL fallback.
+async function exportHtml() {
+    writeUrl();
+    const source = await (await fetch(location.pathname, { cache: 'no-store' })).text();
+    const doc = new DOMParser().parseFromString(source, 'text/html');
+    const preset = new URLSearchParams(location.search);
+    preset.delete('panel');
+    doc.querySelector('.edition-link')?.remove();
+    doc.querySelector('meta[name="robots"]')?.remove();
+    const boot = [...doc.head.querySelectorAll('script')].find(script => script.textContent.includes('cardBootTimeout'));
+    if (boot) {
+        boot.textContent = boot.textContent
+            .replace(/location\.replace\([^)]*\)/, 'document.documentElement.classList.remove("webgl-loading")')
+            .replace(/,?\s*window\.cardFallbackUrl\s*=\s*["'][^"']*["']/, '');
+        boot.insertAdjacentHTML('beforebegin', `<script>window.__cardPreset=${JSON.stringify(preset.toString())}<\/script>`);
+    }
+    const text = lab.text;
+    for (const lang of ['ru', 'en']) {
+        const face = doc.querySelector(`.face--${lang}`);
+        if (!face) continue;
+        const name = text[`name_${lang}`], role = text[`role_${lang}`];
+        if (name) face.querySelector('h1').innerHTML = name.trim().split(/\s+/).map(word => `<span>${word.replace(/</g, '&lt;')}</span>`).join(' ');
+        if (role) face.querySelector('.position').textContent = role.trim().replace(/^./, c => c.toUpperCase());
+        const login = (text.email || '').trim();
+        if (login) {
+            const email = login.includes('@') ? login : `${login}@yandex-team.ru`;
+            const link = face.querySelector('.email');
+            link.href = `mailto:${email}`;
+            link.firstChild.textContent = `${email} `;
+        }
+        const telegram = (text.telegram || '').trim().replace(/^(https?:\/\/)?t\.me\//, '').replace(/^@/, '');
+        if (telegram) {
+            const link = face.querySelector('.telegram');
+            link.href = `https://t.me/${telegram}`;
+            link.firstChild.textContent = `t.me/${telegram} `;
+        }
+    }
+    if (text.name_ru) doc.title = text.name_ru.trim();
+    const html = '<!doctype html>\n' + doc.documentElement.outerHTML;
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const anchor = Object.assign(document.createElement('a'), { href: url, download: `card-${direction.id}.html` });
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    globalThis.__cardLastExport = html;
+}
+
 // Display frame rate, measured on the main thread.
 const fps = panel.querySelector('.fps');
 let frames = 0, since = performance.now();
@@ -260,9 +348,10 @@ let frames = 0, since = performance.now();
         fps.textContent = rate;
         toggle.textContent = `Стенд · ${rate}`;
         const warm = globalThis.__cardRenderer?.settleStats;
-        if (warm) fps.title = `Прогрев до показа: ${warm.frames} кадров, ${Math.round(warm.total)} мс; кадр ${warm.first.toFixed(1)} → ${warm.last.toFixed(1)} мс`;
+        if (warm) fps.title = `Прогрев до показа: ${warm.frames} кадров, ${Math.round(warm.total)} мс; интервал ${warm.last.toFixed(1)} мс`;
         frames = 0; since = now;
     }
     requestAnimationFrame(count);
 })(since);
 writeUrl();
+}

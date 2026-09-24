@@ -15,7 +15,7 @@ const LOGO_SHAPES = {
     deboss: { shape: 'deboss', depth: 1.5, bevel: 1.1 },
     raised: { shape: 'raised', depth: 1.5, bevel: 1.1 }
 };
-const requestedShape = new URLSearchParams(location.search).get('relief');
+const requestedShape = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('relief');
 const logoShape = Object.hasOwn(LOGO_SHAPES, requestedShape) ? requestedShape : direction.relief.logo;
 export const currentLogoShape = logoShape;
 // Name relief: `edition` keeps the finish's own process (enamel, ablation…);
@@ -26,7 +26,7 @@ const NAME_SHAPES = {
     deboss: { shape: 'deboss', depth: .7, bevel: .55 },
     raised: { shape: 'raised', depth: .7, bevel: .55 }
 };
-const requestedName = new URLSearchParams(location.search).get('name');
+const requestedName = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('name');
 const nameShape = Object.hasOwn(NAME_SHAPES, requestedName) ? requestedName : 'edition';
 export const currentNameShape = nameShape;
 const nameLook = nameShape === 'edition' ? look.name : look.logo;
@@ -115,7 +115,6 @@ vec3 toSRGB(vec3 c) {
 const KIND = { plain: 0, stone: 1, marble: 2, velvet: 3, concrete: 4, beam: 5, stage: 6 };
 const tint = direction.tint || [.8, .85, 1];
 export const BACKDROPS = {
-    void: null,
     stage: { title: 'Сцена', kind: KIND.stage, wall: [.010, .011, .013], floor: [.004, .004, .005], pool: [.11, .115, .125],
         accent: [0, 0, 0], grain: .018, shadow: .7, roomBase: .012, bounce: 1.0, css: '#08090b', light: false },
     studio: { title: 'Графит', kind: KIND.plain, wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
@@ -133,8 +132,8 @@ export const BACKDROPS = {
     paper: { title: 'Бумага', kind: KIND.plain, wall: [.56, .55, .53], floor: [.40, .395, .38], pool: [.30, .29, .275],
         accent: [0, 0, 0], grain: .014, shadow: .52, roomBase: .20, bounce: 1.9, css: '#c9c7c2', light: true }
 };
-const requestedBackdrop = new URLSearchParams(location.search).get('backdrop');
-export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'void');
+const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
+export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
 
 const vertexSource = `#version 300 es
 layout(location = 0) in vec3 aPosition;
@@ -847,13 +846,40 @@ const LAYOUTS = {
         portrait: { logo: 78, logoY: 76, center: false, name: [152, 185], nameSize: 27, role: [216, 233], contacts: 284, lineHeight: 22 }
     }
 };
-const requestedLayout = new URLSearchParams(location.search).get('layout');
+const requestedLayout = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('layout');
 export const currentLayout = Object.hasOwn(LAYOUTS, requestedLayout) ? requestedLayout : (direction.layout || 'classic');
+
+// Card text. The demo stand may override any field; the rest comes from data.js.
+function cardContent(lang) {
+    const base = cards[lang];
+    const edit = (globalThis.__cardLab && globalThis.__cardLab.text) || {};
+    const role = (edit[`role_${lang}`] || '').trim();
+    // Two balanced lines for the portrait layout.
+    const splitTwo = value => {
+        const words = value.split(/\s+/);
+        let best = [value], score = Infinity;
+        for (let i = 1; i < words.length; i++) {
+            const a = words.slice(0, i).join(' '), b = words.slice(i).join(' ');
+            if (Math.abs(a.length - b.length) < score) { score = Math.abs(a.length - b.length); best = [a, b]; }
+        }
+        return best;
+    };
+    const login = (edit.email || '').trim() || 'sbmaxx@yandex-team.ru';
+    const telegram = ((edit.telegram || '').trim() || 'sbmaxx').replace(/^(https?:\/\/)?t\.me\//, '').replace(/^@/, '');
+    return {
+        name: (edit[`name_${lang}`] || '').trim() || base.name,
+        position: role || base.position,
+        positionLines: role ? splitTwo(role) : base.positionLines,
+        email: login.includes('@') ? login : `${login}@yandex-team.ru`,
+        telegram,
+        companyUrl: base.companyUrl
+    };
+}
 
 function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const plan = LAYOUTS[currentLayout][vertical ? 'portrait' : 'landscape'];
     const width = vertical ? 300 : 545, height = vertical ? (compact ? 460 : portraitHeight) : 300;
-    const data = cards[lang];
+    const data = cardContent(lang);
     const canvas = document.createElement('canvas');
     const textureSize = length => Math.min(maxSize, 2 ** Math.ceil(Math.log2(length * 2.5)));
     canvas.width = textureSize(width);
@@ -873,7 +899,7 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const textSize = vertical ? 12.5 : 13;
     const finalBaseline = plan.contacts + plan.lineHeight;
     context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
-    const finalMetrics = context.measureText('t.me/sbmaxx');
+    const finalMetrics = context.measureText(`t.me/${data.telegram}`);
     const blockTop = logoY;
     const blockBottom = finalBaseline + finalMetrics.actualBoundingBoxDescent;
     const yOffset = (height - blockTop - blockBottom) / 2;
@@ -905,8 +931,8 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     (vertical ? data.positionLines : [data.position]).forEach((line, i) => text(line, plan.role[i], textSize));
     const y = plan.contacts;
     const size = textSize, lineHeight = plan.lineHeight;
-    text('sbmaxx@yandex-team.ru', y, size, 'mailto:sbmaxx@yandex-team.ru');
-    text('t.me/sbmaxx', y + lineHeight, size, 'https://t.me/sbmaxx');
+    text(data.email, y, size, `mailto:${data.email}`);
+    text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`);
     return { canvas, links, width, height, titleRelief, logoRelief, logoScale: logoWidth / 145 };
 }
 
@@ -924,6 +950,8 @@ export class CardRenderer {
     static async create(canvas) {
         const gl = canvas.getContext('webgl2', { alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
         if (!gl) throw new Error('WebGL 2 unavailable');
+        // Let the loader reach the screen before compilation and warm-up start.
+        await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         performance.mark('card:create');
         const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
@@ -936,6 +964,10 @@ export class CardRenderer {
         renderer.resize();
         renderer.warmUp();
         await renderer.settle();
+        // A deliberate pause: the loader holds for a moment even on fast devices,
+        // then hands over to the intro.
+        const hold = 1400 - performance.now();
+        if (hold > 0) await new Promise(resolve => setTimeout(resolve, hold));
         performance.mark('card:ready');
         return renderer;
     }
@@ -1044,24 +1076,31 @@ export class CardRenderer {
     // Keep rendering hidden frames until their cost stops falling: drivers finish
     // deferred compilation, the GPU clocks up and uploads complete. Only then is
     // the scene shown and the intro clock started. The loader covers this time.
-    async settle(limit = 3000) {
-        const gl = this.gl, probe = new Uint8Array(4), times = [];
+    async settle(minimum = 1000, limit = 4000) {
+        const gl = this.gl, probe = new Uint8Array(4), intervals = [];
         const start = performance.now();
+        let previous = start, frames = 0;
+        const median = values => [...values].sort((a, b) => a - b)[values.length >> 1];
         while (performance.now() - start < limit) {
-            await new Promise(resolve => requestAnimationFrame(resolve));
-            const flipped = times.length % 2 === 1 && times.length < 6;
-            const t0 = performance.now();
+            const now = await new Promise(resolve => requestAnimationFrame(resolve));
+            intervals.push(now - previous);
+            previous = now;
+            // Both faces early on, so every pipeline state has been used.
+            const flipped = frames % 2 === 1 && frames < 6;
             this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 });
-            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
-            times.push(performance.now() - t0);
-            if (times.length >= 8) {
-                const last = times.slice(-4);
-                if (Math.max(...last) <= Math.min(...last) * 1.35 + 1.5) break;
-            }
+            // The first frames wait for the GPU so deferred work cannot hide.
+            if (frames < 3) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+            frames++;
+            if (now - start < minimum || intervals.length < 16) continue;
+            // Steady: the last frames arrive at the best cadence seen so far.
+            const recent = intervals.slice(-12);
+            const best = Math.min(...intervals.slice(3));
+            if (median(recent) <= best * 1.2 + 1 && Math.max(...recent) <= median(recent) * 1.5 + 2) break;
         }
         this.flipAngle = this.flipFrom = this.flipTarget = 0;
         this.flipProgress = 1;
-        this.settleStats = { frames: times.length, first: times[0], last: times[times.length - 1], total: performance.now() - start };
+        const recent = intervals.slice(-12);
+        this.settleStats = { frames, total: performance.now() - start, interval: median(recent), first: intervals[1] || 0, last: median(recent) };
     }
 
     resize() {
@@ -1119,6 +1158,31 @@ export class CardRenderer {
         const w8 = Math.max(1, Math.round(width / 2)), h8 = Math.max(1, Math.round(height / 2));
         // Shadow at 1/4 as well: at 1/8 its bilinear upscale showed steps.
         this.targets = [make(width, height, true), make(width, height), make(w8, h8), make(w8, h8), make(width, height), make(width, height)];
+    }
+
+    // Safari paints the status bar and the area under its toolbars with the page
+    // colour. Read the rendered frame's top and bottom edge and continue them.
+    matchSafeAreas(backdrop) {
+        const root = document.documentElement;
+        root.classList.toggle('webgl-backdrop', Boolean(backdrop));
+        const key = backdrop ? `${backdrop.title}:${this.canvas.width}x${this.canvas.height}` : 'none';
+        if (key === this.safeAreaKey) return;
+        this.safeAreaKey = key;
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (!backdrop) {
+            root.style.removeProperty('--edge-top');
+            root.style.removeProperty('--edge-bottom');
+            return;
+        }
+        const gl = this.gl, pixel = new Uint8Array(4);
+        const hex = y => {
+            gl.readPixels(this.canvas.width >> 1, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return '#' + [0, 1, 2].map(i => pixel[i].toString(16).padStart(2, '0')).join('');
+        };
+        const top = hex(this.canvas.height - 1), bottom = hex(0);
+        root.style.setProperty('--edge-top', top);
+        root.style.setProperty('--edge-bottom', bottom);
+        if (meta) meta.content = top;
     }
 
     // Backdrop surface pattern: baked once per kind and canvas size.
@@ -1206,6 +1270,11 @@ export class CardRenderer {
         this.buildRelief();
     }
 
+    // Card text changed on the demo stand: redraw textures, relief and links.
+    refreshText() {
+        this.rebuild(this.vertical, this.compact);
+    }
+
     // Relief maps only; the demo stand calls this when a depth slider moves.
     buildRelief() {
         const gl = this.gl;
@@ -1250,7 +1319,7 @@ export class CardRenderer {
         const lab = globalThis.__cardLab;
         const gyroGain = lab ? lab.gyro : 1;
         gyroX *= gyroGain; gyroY *= gyroGain;
-        this.wantsHighFrameRate = Boolean(lab) || (this.intro < 1 && !reduced) || (g.active && performance.now() - g.lastMove < 600);
+        this.wantsHighFrameRate = Boolean(lab && !lab.exported) || (this.intro < 1 && !reduced) || (g.active && performance.now() - g.lastMove < 600);
 
         const lightPhase = this.time * Math.PI * 2 / variation.lightPeriod + variation.lightPhase;
         let lightYaw = Math.sin(lightPhase) * .20 * variation.lightTravel + introLight * 1.15;
@@ -1340,7 +1409,9 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uExposure, look.studio.exposure * (lab ? lab.exposure : 1));
         gl.uniform3f(this.uniforms.uKeyDirection, ...this.keyDirection);
         gl.uniform1f(this.uniforms.uOpacity, introFade);
-        const backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
+        let backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
+        // The stage needs room below the card for its reflection; portrait has none.
+        if (backdrop && backdrop.kind === KIND.stage && this.vertical) backdrop = BACKDROPS.studio;
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
@@ -1487,6 +1558,7 @@ export class CardRenderer {
         gl.bindVertexArray(null);
         gl.activeTexture(gl.TEXTURE0);
 
+        this.matchSafeAreas(backdrop);
         return this.intro < 1 || this.flipProgress < 1 || Math.abs(targetX - this.rotationX) + Math.abs(targetY - this.rotationY)
             + Math.abs(zoom - this.zoom) + Math.abs(this.zoomVelocity)
             + Math.abs(targetZ - this.rotationZ) + Math.abs(this.velocityZ)
