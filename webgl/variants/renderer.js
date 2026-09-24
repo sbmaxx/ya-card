@@ -399,6 +399,18 @@ vec3 roomFor(vec3 world, float rough, float face) {
     // blurs light along the grain anyway, and a plate tilted to the floor
     // should not go dim.
     float tent = .52 + .14 * d.x * clamp(uKeyCenter.x * 4.0, -1.0, 1.0) + .06 * d.y;
+    // The tent surrounds the front of the card; behind it is the graphite
+    // backdrop. Turned far over (a hand spin), the near edge of the plate still
+    // mirrors the lit studio and the far edge the dark backdrop: a gradient
+    // across the plate that reads as a solid metal slab, not flat grey paper.
+    tent *= mix(.32, 1.0, smoothstep(-.85, .25, d.z));
+    // Behind the card, where only a hand spin sends the face's reflection
+    // (a turn or a tilt never reaches past ~95° from the camera): the key's
+    // pool of light on the backdrop, and a ring light around it. A spinning
+    // plate crosses the ring twice per half turn, so a soft band of light runs
+    // over the metal as it turns — what makes a spinning slab read as solid.
+    tent += .30 * smoothstep(.45, 1.0, dot(d, vec3(-.33, .14, -.93)));
+    tent += 1.1 * (1.0 - smoothstep(.0, .09, abs(-d.z - .82)));
     float wall = mix(.45 * (1.0 - smoothstep(.45, .95, abs(d.y))), tent, face);
     col += vec3(${f(studio.bounce)}) * uBounce * max(bounce, wall);
     // Light walls (the paper backdrop) surround the card with brighter room.

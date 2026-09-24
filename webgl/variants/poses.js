@@ -18,7 +18,9 @@ export const POSES = [
     { name: 'наклон −25°', rx: -25 }, { name: 'наклон +25°', rx: 25 },
     { name: 'диагональ ↗', rx: -18, ry: 30 }, { name: 'диагональ ↙', rx: 18, ry: -30 },
     { name: 'телефон от себя', gyro: [-22, 0] }, { name: 'телефон на себя', gyro: [22, 0] },
-    { name: 'телефон влево', gyro: [0, -22] }, { name: 'телефон вправо', gyro: [0, 22] }
+    { name: 'телефон влево', gyro: [0, -22] }, { name: 'телефон вправо', gyro: [0, 22] },
+    // Mid hand spin: the plate held part way through a turn over.
+    { name: 'вращение 45°', spin: 45 }, { name: 'вращение 70°', spin: 70 }
 ];
 
 // What counts as a problem; shown in red on the sheet.
@@ -109,6 +111,7 @@ export function measurePoses(renderer, poses = POSES, { cell = 300 } = {}) {
     const side = ((Math.round(renderer.flipTarget / Math.PI) % 2) + 2) % 2;
     const saved = {
         rotation: [renderer.rotationX, renderer.rotationY, renderer.rotationZ],
+        spin: renderer.spin, flip: [renderer.flipAngle, renderer.flipFrom, renderer.flipTarget, renderer.flipProgress],
         gyro: { ...renderer.gyro }, hover: renderer.hoverPointer,
         light: lab && [lab.manualLight, lab.yaw, lab.pitch]
     };
@@ -134,6 +137,8 @@ export function measurePoses(renderer, poses = POSES, { cell = 300 } = {}) {
             renderer.rotationX = restX + (pose.rx || 0) * Math.PI / 180 + g.x * gain * .2 * (pose.gyro ? 1 : 0);
             renderer.rotationY = restY + (pose.ry || 0) * Math.PI / 180 + g.y * gain * .2 * (pose.gyro ? 1 : 0);
             renderer.rotationZ = renderer.vertical ? 0 : restZ;
+            // A spin held by the finger: the angle is taken as given.
+            renderer.spin = pose.spin ? { dragging: true, angle: saved.flip[2] + pose.spin * Math.PI / 180, velocity: 0 } : null;
             frame();
             context.drawImage(canvas, 0, 0);
             const back = side === 1;
@@ -163,6 +168,8 @@ export function measurePoses(renderer, poses = POSES, { cell = 300 } = {}) {
         }
     } finally {
         [renderer.rotationX, renderer.rotationY, renderer.rotationZ] = saved.rotation;
+        renderer.spin = saved.spin;
+        [renderer.flipAngle, renderer.flipFrom, renderer.flipTarget, renderer.flipProgress] = saved.flip;
         Object.assign(renderer.gyro, saved.gyro);
         renderer.hoverPointer = saved.hover;
         if (lab) [lab.manualLight, lab.yaw, lab.pitch] = saved.light;
@@ -217,9 +224,9 @@ globalThis.__cardPoses = (poses, options) => {
 };
 globalThis.__cardPoseSheet = showPoseSheet;
 // The whole sheet as an image, for saving or comparing releases.
-globalThis.__cardPoseImage = (type = 'image/jpeg', quality = .88) => {
+globalThis.__cardPoseImage = (poses = POSES, { type = 'image/jpeg', quality = .88, cell } = {}) => {
     const renderer = globalThis.__cardRenderer;
-    return renderer ? measurePoses(renderer).sheet.toDataURL(type, quality) : null;
+    return renderer ? measurePoses(renderer, poses, cell ? { cell } : {}).sheet.toDataURL(type, quality) : null;
 };
 
 // `?poses=1`: open the sheet once the intro is over.
