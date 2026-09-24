@@ -1060,6 +1060,7 @@ const ease = t => t * t * (3 - 2 * t);
 const easeOutCubic = t => 1 - (1 - t) ** 3;
 const easeInOutCubic = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
 // Flip: accelerate, pass the target by a few degrees, settle — the plate has mass.
+const mod2 = n => ((n % 2) + 2) % 2;
 function flipCurve(t) {
     if (t < .78) return easeInOutCubic(t / .78) * 1.035;
     const k = (t - .78) / .22;
@@ -1187,6 +1188,7 @@ export class CardRenderer {
             this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 });
         }
         this.flipAngle = this.flipFrom = this.flipTarget = 0;
+        this.spin = null;
         this.flipProgress = 1;
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
         performance.mark('card:warm');
@@ -1217,6 +1219,7 @@ export class CardRenderer {
             if (median(recent) <= best * 1.2 + 1 && Math.max(...recent) <= median(recent) * 1.5 + 2) break;
         }
         this.flipAngle = this.flipFrom = this.flipTarget = 0;
+        this.spin = null;
         this.flipProgress = 1;
         const recent = intervals.slice(-12);
         this.settleStats = { frames, total: performance.now() - start, interval: median(recent), first: intervals[1] || 0, last: median(recent) };
@@ -1494,17 +1497,24 @@ export class CardRenderer {
             + Math.sin(idleTime * .89 + variation.phaseY) * .022) * idleStrength;
         const breathY = (Math.cos(idleTime * .43 + variation.phaseY) * .145
             + Math.sin(idleTime * .71 + variation.phaseX + .9) * .025) * idleStrength;
-        const nextFlip = flipped ? Math.PI : 0;
-        if (nextFlip !== this.flipTarget) {
-            this.flipFrom = this.flipAngle;
-            this.flipTarget = nextFlip;
-            this.flipProgress = 0;
+        let flipDepth;
+        if (this.spin) {
+            flipDepth = this.stepSpin(dt, reduced);
+        } else {
+            // The flip angle is unbounded (a spin can end several turns away): the
+            // side is its parity. A tap or a key turns the plate on by half a turn.
+            const side = mod2(Math.round(this.flipTarget / Math.PI));
+            if (side !== (flipped ? 1 : 0)) {
+                this.flipFrom = this.flipAngle;
+                this.flipTarget += Math.PI;
+                this.flipProgress = 0;
+            }
+            this.flipProgress = reduced ? 1 : Math.min(1, this.flipProgress + dt / 1.5);
+            const progress = this.flipProgress;
+            this.flipAngle = progress >= 1 ? this.flipTarget : this.flipFrom + (this.flipTarget - this.flipFrom) * flipCurve(progress);
+            // The plate comes toward the viewer while it turns over.
+            flipDepth = progress >= 1 ? 0 : Math.sin(Math.PI * Math.min(1, progress / .85)) * .45;
         }
-        this.flipProgress = reduced ? 1 : Math.min(1, this.flipProgress + dt / 1.5);
-        const progress = this.flipProgress;
-        this.flipAngle = progress >= 1 ? this.flipTarget : this.flipFrom + (this.flipTarget - this.flipFrom) * flipCurve(progress);
-        // The plate comes toward the viewer while it turns over.
-        const flipDepth = progress >= 1 ? 0 : Math.sin(Math.PI * Math.min(1, progress / .85)) * .45;
         const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX + gyroX * .2);
         const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY + gyroY * .2);
         // A tall portrait plate shows any roll as a slanted left edge of the text:
@@ -1702,7 +1712,7 @@ export class CardRenderer {
         gl.activeTexture(gl.TEXTURE0);
 
         this.matchSafeAreas(backdrop);
-        return this.intro < 1 || this.flipProgress < 1 || Math.abs(targetX - this.rotationX) + Math.abs(targetY - this.rotationY)
+        return this.intro < 1 || this.flipProgress < 1 || Boolean(this.spin) || Math.abs(targetX - this.rotationX) + Math.abs(targetY - this.rotationY)
             + Math.abs(zoom - this.zoom) + Math.abs(this.zoomVelocity)
             + Math.abs(targetZ - this.rotationZ) + Math.abs(this.velocityZ)
             + Math.abs(this.velocityX) + Math.abs(this.velocityY) > .0005;
@@ -1774,8 +1784,63 @@ export class CardRenderer {
             Math.max(...xs) - Math.min(...xs) + 120, Math.max(...ys) - Math.min(...ys) + 120];
     }
 
+    // Turning the plate over by hand: the angle follows the finger, and on
+    // release it coasts with the finger's speed, slows down and settles on the
+    // nearest side. `onSpinSettle(side)` reports where it came to rest.
+    spinStart() {
+        this.spin = { angle: this.flipAngle, velocity: 0, dragging: true };
+        this.flipFrom = this.flipTarget = this.flipAngle;
+        this.flipProgress = 1;
+    }
+    spinDrag(angle, velocity) {
+        if (!this.spin) return;
+        this.spin.angle = angle;
+        // Even a hard fling ends in about two full turns.
+        this.spin.velocity = Math.max(-26, Math.min(26, velocity));
+    }
+    spinRelease() {
+        if (this.spin) this.spin.dragging = false;
+    }
+    get spinning() {
+        return Boolean(this.spin);
+    }
+    stepSpin(dt, reduced) {
+        const spin = this.spin;
+        if (!spin.dragging) {
+            const rest = k => k * Math.PI;
+            if (reduced) {
+                spin.angle = rest(Math.round(spin.angle / Math.PI));
+                spin.velocity = 0;
+            } else if (Math.abs(spin.velocity) > 4) {
+                // Coasting: air and bearing friction bleed the speed off.
+                spin.angle += spin.velocity * dt;
+                spin.velocity *= Math.exp(-dt * 2.2);
+            } else {
+                // Settling: a damped spring to the side the motion is heading for.
+                const target = rest(Math.round((spin.angle + spin.velocity * .18) / Math.PI));
+                const steps = Math.max(1, Math.ceil(dt / (1 / 240)));
+                for (let i = 0; i < steps; i++) {
+                    const h = dt / steps;
+                    spin.velocity += (-70 * (spin.angle - target) - 13 * spin.velocity) * h;
+                    spin.angle += spin.velocity * h;
+                }
+            }
+            const target = rest(Math.round(spin.angle / Math.PI));
+            if (reduced || (Math.abs(spin.angle - target) < .002 && Math.abs(spin.velocity) < .03)) {
+                this.spin = null;
+                this.flipAngle = this.flipFrom = this.flipTarget = target;
+                this.flipProgress = 1;
+                this.onSpinSettle?.(mod2(Math.round(target / Math.PI)));
+                return 0;
+            }
+        }
+        this.flipAngle = spin.angle;
+        // Mid-turn the plate comes toward the viewer, as in a tap flip.
+        return Math.abs(Math.sin(spin.angle)) * .35;
+    }
+
     surfacePoint(clientX, clientY) {
-        if (!this.model || this.flipProgress < 1) return null;
+        if (!this.model || this.flipProgress < 1 || this.spin) return null;
         const rect = this.canvas.getBoundingClientRect();
         const focal = this.projection[5];
         const ray = [(2 * (clientX - rect.left) / rect.width - 1) * this.aspect / focal, (1 - 2 * (clientY - rect.top) / rect.height) / focal, -1];

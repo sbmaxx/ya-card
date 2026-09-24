@@ -112,7 +112,7 @@ import { CardRenderer } from './renderer.js';
         frame = 0;
         if (!renderer || contextLost || document.hidden) return;
         const animate = !reducedMotion.matches;
-        const interacting = gesture || renderer.flipProgress < 1 || motionSettling || renderer.wantsHighFrameRate || now - lastPointerMove < 500;
+        const interacting = gesture || renderer.flipProgress < 1 || renderer.spinning || motionSettling || renderer.wantsHighFrameRate || now - lastPointerMove < 500;
         const interval = interacting ? 1000 / 60 : 1000 / 30;
         if (now - lastDraw < interval - 1) { schedule(); return; }
         const delta = Math.max(.001, (now - previousTime) / 1000);
@@ -215,14 +215,19 @@ import { CardRenderer } from './renderer.js';
         bounds = scene.getBoundingClientRect();
         pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
         scene.setPointerCapture(event.pointerId);
-        if (pointers.size === 1) gesture = {
-            x: event.clientX, y: event.clientY,
-            rx: (renderer.rotationX - renderer.restPose[0]) * 180 / Math.PI,
-            ry: (renderer.rotationY - renderer.restPose[1]) * 180 / Math.PI,
-            onCard: Boolean(renderer.surfacePoint(event.clientX, event.clientY)),
-            url: renderer.hitTest(event.clientX, event.clientY),
-            moved: false, pinch: false
-        };
+        if (pointers.size === 1) {
+            // A plate still spinning from a fling can be caught and held.
+            const caught = Boolean(renderer.spinning);
+            gesture = {
+                x: event.clientX, y: event.clientY,
+                rx: (renderer.rotationX - renderer.restPose[0]) * 180 / Math.PI,
+                ry: (renderer.rotationY - renderer.restPose[1]) * 180 / Math.PI,
+                onCard: caught || Boolean(renderer.surfacePoint(event.clientX, event.clientY)),
+                url: caught ? null : renderer.hitTest(event.clientX, event.clientY),
+                moved: caught, pinch: false, mode: null, samples: []
+            };
+            if (caught) startSpin(event);
+        }
         if (pointers.size === 2) {
             gesture.pinch = true;
             gesture.moved = true;
@@ -243,8 +248,30 @@ import { CardRenderer } from './renderer.js';
                 if (gesture.moved && gesture.onCard) {
                     root.classList.add('is-dragging');
                     userControlled = true;
-                    rx = clamp(gesture.rx + dy * 0.22, -40, 40);
-                    ry = clamp(gesture.ry + dx * 0.22, -40, 40);
+                    // A landscape plate turns over top to bottom, a portrait one side
+                    // to side. A drag mostly across that axis turns it over by hand;
+                    // otherwise it tilts, as before.
+                    const along = renderer.vertical ? dx : dy;
+                    const across = renderer.vertical ? dy : dx;
+                    if (!gesture.mode) {
+                        gesture.mode = Math.abs(along) > Math.abs(across) * 1.1 ? 'spin' : 'tilt';
+                        if (gesture.mode === 'spin') startSpin(event);
+                    }
+                    if (gesture.mode === 'spin') {
+                        const position = renderer.vertical ? event.clientX : event.clientY;
+                        const now = performance.now();
+                        gesture.samples.push({ time: now, position });
+                        while (gesture.samples.length > 2 && now - gesture.samples[0].time > 90) gesture.samples.shift();
+                        const first = gesture.samples[0];
+                        const speed = now - first.time > 8 ? (position - first.position) / (now - first.time) * 1000 : 0;
+                        renderer.spinDrag(gesture.spinAngle + (position - gesture.spinFrom) * SPIN_PER_PIXEL, speed * SPIN_PER_PIXEL);
+                        // The other axis still tilts.
+                        if (renderer.vertical) rx = clamp(gesture.rx + dy * 0.22, -40, 40);
+                        else ry = clamp(gesture.ry + dx * 0.22, -40, 40);
+                    } else {
+                        rx = clamp(gesture.rx + dy * 0.22, -40, 40);
+                        ry = clamp(gesture.ry + dx * 0.22, -40, 40);
+                    }
                     schedule();
                 }
             }
@@ -294,8 +321,23 @@ import { CardRenderer } from './renderer.js';
             schedule();
         }
     });
+    // Half a turn per 260 px of drag; a fling carries the finger's speed.
+    const SPIN_PER_PIXEL = Math.PI / 260;
+    function startSpin(event) {
+        gesture.mode = 'spin';
+        renderer.spinStart();
+        gesture.spinAngle = renderer.flipAngle;
+        gesture.spinFrom = renderer.vertical ? event.clientX : event.clientY;
+        gesture.samples = [{ time: performance.now(), position: gesture.spinFrom }];
+    }
     function release(event) {
         if (!pointers.has(event.pointerId)) return;
+        if (gesture?.mode === 'spin' && pointers.size === 1) {
+            // A finger that stopped before lifting leaves no speed behind.
+            const last = gesture.samples.at(-1);
+            if (!last || performance.now() - last.time > 90) renderer.spinDrag(renderer.flipAngle, 0);
+            renderer.spinRelease();
+        }
         lastPointerMove = performance.now();
         suppressClick = Boolean(gesture?.moved || event.type !== 'pointerup');
         pointers.delete(event.pointerId);
@@ -384,6 +426,12 @@ import { CardRenderer } from './renderer.js';
     async function initialize() {
         try {
             renderer = await CardRenderer.create(canvas);
+            // A hand spin ends on a side: that side's language becomes current.
+            renderer.onSpinSettle = side => {
+                const next = side ? 'en' : 'ru';
+                if (next !== lang) navigate(next);
+                schedule();
+            };
             root.classList.remove('webgl-fallback');
             root.classList.add('webgl-loading');
             canvas.hidden = false;
