@@ -9,8 +9,7 @@ saves it as a standalone production file. The production homepage
 - Editions (`?edition=`): `steel` — linear brushed steel, diamond V-cut logo, black
   enamel name; `noir` — black PVD, laser ablation to bare steel; `gold` — brushed
   champagne gold; `aurora` — anodised titanium, thin-film interference.
-- Backdrops (`?backdrop=`): `studio` (graphite), `dark` (dark graphite), `beam`,
-  `gradient` (#3ED0FF → #A445FF, top to bottom).
+- Backdrops (`?backdrop=`): `studio` (graphite) and `dark` (dark graphite).
 - The old gallery (`/variants/`) and edition pages (`/variants/steel/` …) are HTML
   redirects to the lab.
 
@@ -24,8 +23,8 @@ saves it as a standalone production file. The production homepage
   satin a broad gradient. No environment textures and no requests.
 - Lighting setups (`?lightSetup=`, lab «Тип света»): studio, softbox, drama, rim,
   ring, window, neon. Lamps are uniform arrays, so a setup switches live; the key
-  softbox keeps the lab's shape, softness and brightness, and the shadow, pool and
-  beam follow the setup's key.
+  softbox keeps the lab's shape, softness and brightness, and the shadow and the
+  backdrop's light pool follow the setup's key.
 - The room rotates with the light path, the intro sweep and (on phones) the device
   orientation; the SVG shadow and background glow follow the same key direction.
 - Brushed metal: seven reflection samples across the groove direction (anisotropic

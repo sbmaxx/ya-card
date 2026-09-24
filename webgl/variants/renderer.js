@@ -212,25 +212,13 @@ vec3 toSRGB(vec3 c) {
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
 }`;
 
-// Backdrops: rendered with the card, lit by the same key light and receiving
-// the card's real, blurred shadow; the room the metal reflects follows them.
-// `kind` selects a surface; the beam's haze is baked once into a texture.
-const KIND = { plain: 0, beam: 1, gradient: 2 };
-const tint = direction.tint || [.8, .85, 1];
-// Backdrops. `wall`/`floor`/`pool` are linear; for the gradient, `wall` is the
-// top colour and `floor` the bottom one. `roomHigh`/`roomLow` tint the walls
-// of the studio the metal reflects, so the plate picks up the backdrop.
+// Backdrops: a graphite cyclorama rendered with the card, lit by the same key
+// light and receiving the card's real, blurred shadow. Colours are linear.
 export const BACKDROPS = {
-    studio: { title: 'Графит', kind: KIND.plain, wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
-        accent: [0, 0, 0], grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d' },
-    dark: { title: 'Тёмный графит', kind: KIND.plain, wall: [.016, .017, .020], floor: [.006, .0065, .008], pool: [.075, .077, .082],
-        accent: [0, 0, 0], grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f' },
-    beam: { title: 'Луч', kind: KIND.beam, wall: [.010, .011, .014], floor: [.005, .005, .006], pool: tint.map(v => v * .05),
-        accent: tint.map(v => v * .55), grain: .02, shadow: .6, roomBase: .015, bounce: 1.1, css: '#07080b' },
-    // #3ED0FF → #A445FF, top to bottom.
-    gradient: { title: 'Градиент', kind: KIND.gradient, wall: [0.0482, 0.6308, 1.0], floor: [0.3712, 0.0595, 1.0], pool: [.18, .18, .18],
-        accent: [0, 0, 0], grain: .012, shadow: .45, roomBase: .05, bounce: 1.1, css: '#7189ff', edges: ['3ed0ff', 'a445ff'],
-        roomHigh: [0.0482, 0.6308, 1.0], roomLow: [0.3712, 0.0595, 1.0] }
+    studio: { title: 'Графит', wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
+        grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d' },
+    dark: { title: 'Тёмный графит', wall: [.016, .017, .020], floor: [.006, .0065, .008], pool: [.075, .077, .082],
+        grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f' }
 };
 const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
 export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
@@ -291,8 +279,6 @@ uniform vec4 uBodyTint;
 uniform vec4 uTintFinish;
 uniform float uTextMute;
 uniform float uRoomBase;
-uniform vec3 uRoomHigh;
-uniform vec3 uRoomLow;
 uniform float uBounce;
 in vec3 vPosition;
 in vec3 vNormal;
@@ -378,7 +364,7 @@ vec3 room(vec3 world, float rough) {
     float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02, uRoundLights);
     col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .82 * flag);
     // Light walls (the paper backdrop) surround the card with brighter room.
-    col += uRoomBase * mix(uRoomLow, uRoomHigh, smoothstep(-.6, .6, d.y)) * smoothstep(-.9, .3, d.y);
+    col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
     col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
     for (int i = 0; i < ${MAX_LIGHTS}; i++) {
         if (i >= uLightCount) break;
@@ -647,48 +633,20 @@ const shadowFragment = `#version 300 es
 precision mediump float;
 out vec4 outColor;
 void main() { outColor = vec4(1.0); }`;
-const noiseCode = `float hash(vec2 p) {
+const hashCode = `float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
-}
-float noise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), u.x), u.y);
-}
-float fbm(vec2 p) {
-    float v = 0.0, a = .5;
-    for (int i = 0; i < 5; i++) { v += a * noise(p); p = p * 2.03 + 11.7; a *= .5; }
-    return v;
-}`;
-
-// Surface pattern, baked once per backdrop and size: R albedo variation,
-// G accent (vein, pore, haze), BA the surface normal for raking light.
-const patternFragment = `#version 300 es
-precision highp float;
-uniform float uAspect;
-in vec2 vUV;
-out vec4 outColor;
-${noiseCode}
-void main() {
-    vec2 q = (vUV - .5) * vec2(uAspect, 1.0);
-    // Slow haze for the light beam.
-    outColor = vec4(fbm(q * vec2(1.4, 2.6) + 4.0), fbm(q * 4.0 + 9.0), .5, .5);
 }`;
 
 const backdropFragment = `#version 300 es
 precision highp float;
 uniform sampler2D uShadow;
-uniform sampler2D uPattern;
 uniform vec2 uResolution;
 uniform vec2 uPool;
 uniform vec3 uWall;
 uniform vec3 uFloor;
 uniform vec3 uPoolColor;
-uniform vec3 uAccent;
-uniform vec3 uKeyDirection;
-uniform float uKind;
 uniform float uGrain;
 uniform float uShadowStrength;
 uniform float uShadowFade;
@@ -700,51 +658,24 @@ uniform vec3 uEdgeBottom;
 in vec2 vUV;
 out vec4 outColor;
 ${toneCode}
-${noiseCode}
+${hashCode}
 
-// Wall lighting at a screen position: base tone, key light pool, pattern.
-vec3 wallColor(vec2 uv, vec2 p) {
+// Wall lighting at a screen position: base tone and the key light's pool.
+vec3 wallColor(vec2 uv) {
     float aspect = uResolution.x / uResolution.y;
-    vec3 color = uWall;
     vec2 d = (uv - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
-    float pool = exp(-dot(d, d) * 2.6);
-    color += uPoolColor * pool;
-    vec4 pattern = texture(uPattern, uv);
-    if (uKind > .5 && uKind < 1.5) {
-        // A soft volumetric beam from the key, falling towards the card.
-        vec2 origin = vec2(.5 + uKeyDirection.x * 1.3, .5 + uKeyDirection.y * 1.3 + .25);
-        vec2 axis = normalize(vec2(.5, .48) - origin);
-        vec2 rel = (uv - origin) * vec2(aspect, 1.0);
-        float along = dot(rel, normalize(axis * vec2(aspect, 1.0)));
-        float across = length(rel - normalize(axis * vec2(aspect, 1.0)) * along);
-        float width = .10 + along * .32;
-        float beam = exp(-across * across / (width * width)) * smoothstep(0.0, .25, along) * exp(-along * .55);
-        color += uAccent * beam * (.55 + .9 * pattern.r) + uAccent * .12 * pattern.g * pool;
-    }
-    return color;
+    return uWall + uPoolColor * exp(-dot(d, d) * 2.6);
 }
 
 void main() {
     float aspect = uResolution.x / uResolution.y;
     vec2 p = (vUV - .5) * vec2(aspect, 1.0);
-    vec3 display;
-    if (uKind > 1.5) {
-        // Colour gradient, shown as specified: no tone mapping, a soft pool of
-        // light behind the card, a light vignette and the card's shadow.
-        vec3 color = mix(uFloor, uWall, smoothstep(0.0, 1.0, vUV.y));
-        vec2 d = (vUV - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
-        color *= 1.0 + uPoolColor * exp(-dot(d, d) * 2.6);
-        color *= 1.0 - .30 * smoothstep(.45, 1.3, length(p * vec2(.78, 1.0)));
-        color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
-        display = toSRGB(color);
-    } else {
-        // Cyclorama: the wall curves softly into a darker floor below the card.
-        float floorAmount = smoothstep(-.12, -.62, p.y);
-        vec3 color = mix(wallColor(vUV, p), uFloor + (wallColor(vUV, p) - uWall) * .6, floorAmount);
-        color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
-        color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
-        display = toSRGB(neutralTonemap(color));
-    }
+    // Cyclorama: the wall curves softly into a darker floor below the card.
+    vec3 wall = wallColor(vUV);
+    vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y));
+    color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
+    color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
+    vec3 display = toSRGB(neutralTonemap(color));
     display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
     // Touch screens: the backdrop is only a core in the middle. Above and below
     // it ramps into the flat page colour, which continues under Safari's bars.
@@ -1056,7 +987,7 @@ export class CardRenderer {
         const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
             compilePrograms(gl, [[vertexSource, fragmentSource], [screenVertex, blurFragment], [screenVertex, compositeFragment],
-                [shadowVertex, shadowFragment], [screenVertex, backdropFragment], [screenVertex, patternFragment]])
+                [shadowVertex, shadowFragment], [screenVertex, backdropFragment]])
                 .then(result => { performance.mark('card:compiled'); return result; }),
             Promise.all([document.fonts.load('400 12px "Card Onest"'), document.fonts.load('500 20px "Card Onest"')]).catch(() => {})
         ]);
@@ -1077,18 +1008,16 @@ export class CardRenderer {
         this.gl = gl;
         this.halfThickness = HALF_THICKNESS;
         this.images = images;
-        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram, this.patternProgram] = programs;
+        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
         if (globalThis.__cardLab) globalThis.__cardRenderer = this;
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
-        this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uPattern', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uAccent', 'uKeyDirection', 'uKind', 'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom']);
-        this.patternUniforms = locate(this.patternProgram, ['uAspect']);
-        this.pattern = null;
+        this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
+            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uRoomHigh', 'uRoomLow', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1316,24 +1245,20 @@ export class CardRenderer {
         // One colour for both edges: whatever Safari samples for either bar —
         // the page, the scene or an edge strip — it gets the same colour, and the
         // scene ramps into exactly that colour at the top and at the bottom.
-        // The colour gradient ends in its own two colours instead.
-        const split = Boolean(backdrop.edges);
         const top = read(height * (1 - fade[0] - fade[2]) - 1), bottom = read(height * (fade[1] + fade[3]));
-        const shared = top.map((value, i) => (value + bottom[i]) / 2);
-        const hex = value => [0, 2, 4].map(i => parseInt(value.slice(i, i + 2), 16));
-        const edges = (split ? backdrop.edges.map(hex) : [shared, shared]).map(color => color.map(Math.round));
-        this.edges = { fade, top: edges[0].map(v => v / 255), bottom: edges[1].map(v => v / 255) };
-        if (edges.join('|') === this.edgeCss) return;
-        this.edgeCss = edges.join('|');
-        const [topColor, bottomColor] = edges.map(color => `rgb(${color.join(',')})`);
+        const edge = top.map((value, i) => Math.round((value + bottom[i]) / 2));
+        this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
+        if (edge.join() === this.edgeCss) return;
+        this.edgeCss = edge.join();
+        const color = `rgb(${edge.join(',')})`;
         const root = document.documentElement;
-        root.style.backgroundColor = bottomColor;
-        document.body.style.backgroundColor = bottomColor;
+        root.style.backgroundColor = color;
+        document.body.style.backgroundColor = color;
         const scene = document.querySelector('.scene');
-        if (scene) scene.style.background = split ? `linear-gradient(${topColor} 50%, ${bottomColor} 50%)` : topColor;
+        if (scene) scene.style.backgroundColor = color;
         const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = topColor;
-        for (const [side, color] of [['top', topColor], ['bottom', bottomColor]]) {
+        if (meta) meta.content = color;
+        for (const side of ['top', 'bottom']) {
             let strip = document.querySelector(`.safe-edge-${side}`);
             if (!strip) {
                 strip = Object.assign(document.createElement('div'), { className: `safe-edge safe-edge-${side}` });
@@ -1346,30 +1271,6 @@ export class CardRenderer {
 
     matchSafeAreas(backdrop) {
         document.documentElement.classList.toggle('webgl-backdrop', Boolean(backdrop));
-    }
-
-    // Backdrop surface pattern: baked once per kind and canvas size.
-    bakePattern(kind) {
-        const gl = this.gl;
-        const width = this.canvas.width, height = this.canvas.height;
-        if (this.pattern && this.pattern.kind === kind && this.pattern.width === width && this.pattern.height === height) return;
-        if (this.pattern) { gl.deleteTexture(this.pattern.texture); gl.deleteFramebuffer(this.pattern.framebuffer); }
-        const texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-        for (const [key, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
-            [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, value);
-        const framebuffer = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-        gl.viewport(0, 0, width, height);
-        gl.disable(gl.DEPTH_TEST);
-        gl.disable(gl.BLEND);
-        gl.useProgram(this.patternProgram);
-        gl.bindVertexArray(this.screenArray);
-        gl.uniform1f(this.patternUniforms.uAspect, width / height);
-        gl.drawArrays(gl.TRIANGLES, 0, 3);
-        this.pattern = { kind, width, height, texture, framebuffer };
     }
 
     deleteTargets() {
@@ -1581,8 +1482,6 @@ export class CardRenderer {
         const backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
-        gl.uniform3fv(this.uniforms.uRoomHigh, (backdrop && backdrop.roomHigh) || [1, 1, 1]);
-        gl.uniform3fv(this.uniforms.uRoomLow, (backdrop && backdrop.roomLow) || [1, 1, 1]);
         gl.uniform1f(this.uniforms.uBounce, (backdrop ? backdrop.bounce : 1) * setup.bounce);
         const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.round;
         gl.uniform1f(this.uniforms.uRoundLights, (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1);
@@ -1661,7 +1560,6 @@ export class CardRenderer {
                 pass(shadowB, shadowA, 0, radius);
             }
         }
-        if (backdrop && backdrop.kind === KIND.beam) this.bakePattern(backdrop.kind);
         // 3. Backdrop, then the card at full resolution with native MSAA.
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -1674,23 +1572,14 @@ export class CardRenderer {
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, shadowA.texture);
             gl.uniform1i(u.uShadow, 0);
-            gl.activeTexture(gl.TEXTURE1);
-            gl.bindTexture(gl.TEXTURE_2D, this.pattern ? this.pattern.texture : shadowA.texture);
-            gl.uniform1i(u.uPattern, 1);
-            gl.activeTexture(gl.TEXTURE0);
             gl.uniform2f(u.uResolution, this.canvas.width, this.canvas.height);
-            gl.uniform1f(u.uKind, backdrop.kind);
-            gl.uniform3f(u.uAccent, ...backdrop.accent);
             gl.uniform3f(u.uWall, ...backdrop.wall);
             gl.uniform3f(u.uFloor, ...backdrop.floor);
             gl.uniform3f(u.uPoolColor, ...backdrop.pool);
             gl.uniform1f(u.uGrain, backdrop.grain);
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
             // The pool sits behind the card, offset towards the key light.
-            const light = k => {
-                gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
-                gl.uniform3f(u.uKeyDirection, ...k);
-            };
+            const light = k => gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
             this.sampleEdges(backdrop, light);
             const edge = this.edges || { fade: [0, 0, 0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
             gl.uniform4f(u.uEdgeFade, ...edge.fade);

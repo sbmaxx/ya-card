@@ -52,7 +52,7 @@ const directions = {
         `
     },
     gold: {
-        id: 'gold', backdrop: 'beam', title: 'Champagne', caption: 'Шлифованное золото · зеркальная V-резка · чёрная эмаль',
+        id: 'gold', backdrop: 'studio', title: 'Champagne', caption: 'Шлифованное золото · зеркальная V-резка · чёрная эмаль',
         look: {
             plate: { f0: [.92, .70, .42], rough: .32, aniso: .26, brush: 'linear' },
             chamfer: { f0: [1.0, .82, .52], rough: .03 },
@@ -73,7 +73,7 @@ const directions = {
         `
     },
     aurora: {
-        id: 'aurora', backdrop: 'gradient', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
+        id: 'aurora', backdrop: 'dark', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
         look: {
             plate: { film: true, rough: .28, aniso: .18, brush: 'linear' },
             chamfer: { f0: [.62, .60, .58], rough: .03 },
