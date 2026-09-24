@@ -12,7 +12,15 @@ const template = await readFile(resolve(root, 'index.html'), 'utf8');
 const baseCss = await readFile(resolve(root, 'styles.css'), 'utf8');
 const font = await readFile(resolve(root, 'assets/Onest-card.woff2'));
 const license = await readFile(resolve(root, 'assets/Onest-OFL.txt'), 'utf8');
-const editionCss = '.edition-link{position:fixed;top:calc(20px + env(safe-area-inset-top,0px));left:calc(24px + env(safe-area-inset-left,0px));z-index:10;font:11px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;letter-spacing:1px;text-decoration:none;color:#ffffff99}.edition-link:hover{opacity:.75}';
+// Minimal loader: a hairline with a travelling glint, shown only if loading
+// takes longer than a moment. It disappears when the first frame is ready.
+const loaderCss = `.webgl-loading .scene::before{content:'';position:fixed;left:50%;top:50%;width:140px;height:1px;margin:0 0 0 -70px;opacity:0;z-index:5;
+background:linear-gradient(90deg,transparent,#ffffffd0 50%,transparent) no-repeat,#ffffff1f;background-size:45% 100%,100% 100%;
+animation:card-loader-in .4s .3s forwards,card-loader 1.3s .3s cubic-bezier(.45,0,.2,1) infinite}
+@keyframes card-loader-in{to{opacity:1}}
+@keyframes card-loader{from{background-position:-80% 0,0 0}to{background-position:180% 0,0 0}}
+@media(prefers-reduced-motion:reduce){.webgl-loading .scene::before{animation:card-loader-in .4s .3s forwards}}`;
+const editionCss = loaderCss + '.edition-link{position:fixed;top:calc(20px + env(safe-area-inset-top,0px));left:calc(24px + env(safe-area-inset-left,0px));z-index:10;font:11px/1.4 -apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;letter-spacing:1px;text-decoration:none;color:#ffffff99}.edition-link:hover{opacity:.75}';
 
 // Every edition as its own page, plus /lab/: all editions behind a demo panel.
 const pages = [...Object.entries(directions), ['lab', null]];

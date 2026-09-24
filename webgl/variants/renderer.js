@@ -69,10 +69,44 @@ const lights = [
 const lightCode = lights.map(({ c, right, up, size, color }) =>
     `    col += ${v3(color)} * panel(d, ${v3(c)}, ${v3(right)}, ${v3(up)}, vec2(${f(size[0])}, ${f(size[1])}), blur);`).join('\n');
 
+const toneCode = `vec3 neutralTonemap(vec3 color) {
+    const float start = .76;
+    const float desaturation = .15;
+    float x = min(color.r, min(color.g, color.b));
+    float offset = x < .08 ? x - 6.25 * x * x : .04;
+    color -= offset;
+    float peak = max(color.r, max(color.g, color.b));
+    if (peak < start) return color;
+    const float d = 1.0 - start;
+    float newPeak = 1.0 - d * d / (peak + d - start);
+    color *= newPeak / peak;
+    float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
+    return mix(color, vec3(newPeak), g);
+}
+
+vec3 toSRGB(vec3 c) {
+    c = clamp(c, 0.0, 1.0);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
+}`;
+
+// Backdrops: a studio cyclorama rendered with the card, lit by the same key and
+// receiving the card's real, blurred shadow. `void` keeps the CSS page background.
+export const BACKDROPS = {
+    void: null,
+    studio: { title: 'Графит', wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
+        grain: .022, stone: 0, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', light: false },
+    paper: { title: 'Бумага', wall: [.56, .55, .53], floor: [.40, .395, .38], pool: [.30, .29, .275],
+        grain: .014, stone: 0, shadow: .52, roomBase: .20, bounce: 1.9, css: '#c9c7c2', light: true },
+    stone: { title: 'Камень', wall: [.034, .034, .036], floor: [.015, .015, .016], pool: [.13, .125, .12],
+        grain: .018, stone: 1, shadow: .82, roomBase: .018, bounce: 1.1, css: '#101112', light: false }
+};
+const requestedBackdrop = new URLSearchParams(location.search).get('backdrop');
+export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'void');
+
 const vertexSource = `#version 300 es
-in vec3 aPosition;
-in vec3 aNormal;
-in vec2 aUV;
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec3 aNormal;
+layout(location = 2) in vec2 aUV;
 uniform mat4 uModel;
 uniform mat4 uProjection;
 uniform vec2 uUVBasis;
@@ -114,6 +148,8 @@ uniform vec4 uFocusRect;
 uniform float uLogoScale;
 uniform vec2 uBrushCenter;
 uniform vec3 uKeyDirection;
+uniform float uRoomBase;
+uniform float uBounce;
 in vec3 vPosition;
 in vec3 vNormal;
 in vec2 vUV;
@@ -153,7 +189,9 @@ vec3 room(vec3 world, float rough) {
     // satin averages the two into a mid tone, a mirror sees the dark flag.
     float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.95, .70), blur + .08);
     float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02);
-    col += vec3(${f(studio.bounce)}) * (bounce - .82 * flag);
+    col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .82 * flag);
+    // Light walls (the paper backdrop) surround the card with brighter room.
+    col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
 ${lightCode}
     return col;
 }
@@ -209,26 +247,7 @@ vec3 filmF0(float nv, vec2 uv) {
     return mix(vec3(.22, .21, .24), vec3(.70, .67, .72), r);
 }` : ''}
 
-vec3 neutralTonemap(vec3 color) {
-    const float start = .76;
-    const float desaturation = .15;
-    float x = min(color.r, min(color.g, color.b));
-    float offset = x < .08 ? x - 6.25 * x * x : .04;
-    color -= offset;
-    float peak = max(color.r, max(color.g, color.b));
-    if (peak < start) return color;
-    const float d = 1.0 - start;
-    float newPeak = 1.0 - d * d / (peak + d - start);
-    color *= newPeak / peak;
-    float g = 1.0 - 1.0 / (desaturation * (peak - newPeak) + 1.0);
-    return mix(color, vec3(newPeak), g);
-}
-
-vec3 toSRGB(vec3 c) {
-    c = clamp(c, 0.0, 1.0);
-    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
-}
-
+${toneCode}
 float inRect(vec4 r) {
     return step(r.x, vUV.x) * step(r.y, vUV.y) * step(vUV.x, r.z) * step(vUV.y, r.w);
 }
@@ -350,28 +369,115 @@ function letteringCode(name, m, flat = false) {
             vec3 ${out} = ${v3(m.albedo)} * room(n, 1.0) * 2.0 + .008 * room(reflect(-v, n), .55);`;
 }
 
-function compile(gl, vertex, fragment) {
-    const shaders = [];
-    const result = gl.createProgram();
-    try {
-        for (const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]]) {
+// Compile every program at once. With KHR_parallel_shader_compile the driver
+// works in the background while fonts and logos load; status is polled rather
+// than forced, so the page never blocks on the large studio shader.
+async function compilePrograms(gl, pairs) {
+    const parallel = gl.getExtension('KHR_parallel_shader_compile');
+    const jobs = pairs.map(([vertex, fragment]) => {
+        const program = gl.createProgram();
+        const shaders = [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, fragment]].map(([type, source]) => {
             const shader = gl.createShader(type);
-            shaders.push(shader);
             gl.shaderSource(shader, source);
             gl.compileShader(shader);
-            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
-            gl.attachShader(result, shader);
+            gl.attachShader(program, shader);
+            return shader;
+        });
+        gl.linkProgram(program);
+        return { program, shaders };
+    });
+    if (parallel) {
+        while (!jobs.every(({ program }) => gl.getProgramParameter(program, parallel.COMPLETION_STATUS_KHR))) {
+            await new Promise(resolve => setTimeout(resolve, 16));
         }
-        gl.linkProgram(result);
-        if (!gl.getProgramParameter(result, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(result));
-        return result;
+    }
+    try {
+        for (const { program, shaders } of jobs) {
+            if (gl.getProgramParameter(program, gl.LINK_STATUS)) continue;
+            const log = shaders.map(shader => gl.getShaderInfoLog(shader)).filter(Boolean).join('\n');
+            throw new Error(log || gl.getProgramInfoLog(program));
+        }
     } catch (error) {
-        gl.deleteProgram(result);
+        jobs.forEach(({ program }) => gl.deleteProgram(program));
         throw error;
     } finally {
-        shaders.forEach(shader => gl.deleteShader(shader));
+        jobs.forEach(({ shaders }) => shaders.forEach(shader => gl.deleteShader(shader)));
     }
+    return jobs.map(({ program }) => program);
 }
+
+// The card's silhouette projected from the key light onto the backdrop plane.
+const shadowVertex = `#version 300 es
+layout(location = 0) in vec3 aPosition;
+uniform mat4 uModel;
+uniform mat4 uProjection;
+uniform vec3 uLight;
+void main() {
+    vec3 world = (uModel * vec4(aPosition, 1.0)).xyz;
+    float t = (-0.9 - uLight.z) / min(world.z - uLight.z, -1e-3);
+    vec3 onWall = uLight + (world - uLight) * t;
+    gl_Position = uProjection * vec4(onWall - vec3(0.0, 0.0, 7.0), 1.0);
+}`;
+const shadowFragment = `#version 300 es
+precision mediump float;
+out vec4 outColor;
+void main() { outColor = vec4(1.0); }`;
+const backdropFragment = `#version 300 es
+precision highp float;
+uniform sampler2D uShadow;
+uniform vec2 uResolution;
+uniform vec2 uPool;
+uniform vec3 uWall;
+uniform vec3 uFloor;
+uniform vec3 uPoolColor;
+uniform vec3 uKeyDirection;
+uniform float uGrain;
+uniform float uStone;
+uniform float uShadowStrength;
+uniform float uShadowFade;
+in vec2 vUV;
+out vec4 outColor;
+${toneCode}
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+float noise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), u.x), u.y);
+}
+float fbm(vec2 p) {
+    float v = 0.0, a = .5;
+    for (int i = 0; i < 5; i++) { v += a * noise(p); p = p * 2.03 + 11.7; a *= .5; }
+    return v;
+}
+void main() {
+    float aspect = uResolution.x / uResolution.y;
+    vec2 p = (vUV - .5) * vec2(aspect, 1.0);
+    // Cyclorama: the wall curves softly into a darker floor below the card.
+    float floorAmount = smoothstep(-.12, -.62, p.y);
+    vec3 color = mix(uWall, uFloor, floorAmount);
+    // Light pool on the wall from the same key that lights the metal.
+    vec2 d = (vUV - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
+    color += uPoolColor * exp(-dot(d, d) * 2.6);
+    if (uStone > .5) {
+        // Honed slate: low relief lit at a raking angle by the key.
+        vec2 q = p * 3.2;
+        float h = fbm(q);
+        float hx = fbm(q + vec2(.006, 0.0)) - h, hy = fbm(q + vec2(0.0, .006)) - h;
+        vec3 n = normalize(vec3(-hx * 55.0, -hy * 55.0, 1.0));
+        vec3 k = normalize(uKeyDirection * vec3(1.0, 1.0, .35));
+        color *= (.78 + .44 * h) * (.72 + .56 * max(dot(n, k), 0.0));
+    }
+    // Soft falloff to the edges of the frame.
+    color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
+    color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
+    vec3 display = toSRGB(neutralTonemap(color));
+    display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
+    outColor = vec4(display, 1.0);
+}`;
 
 const screenVertex = `#version 300 es
 out vec2 vUV;
@@ -537,7 +643,22 @@ function logoImage(lang) {
 }
 
 // The texture is only a coverage mask; each region selects its own process in the shader.
+// Composition. `accent` makes the name the hero and the wordmark a signature.
+const LAYOUTS = {
+    classic: {
+        landscape: { logo: 145, logoY: 42, center: false, name: [130], nameSize: direction.relief.nameSize, role: [152], contacts: 188, lineHeight: 18 },
+        portrait: { logo: 110, logoY: 76, center: true, name: [164, 193], nameSize: 24, role: [223, 240], contacts: 290, lineHeight: 22 }
+    },
+    accent: {
+        landscape: { logo: 92, logoY: 46, center: false, name: [128], nameSize: 32, role: [154], contacts: 190, lineHeight: 18 },
+        portrait: { logo: 78, logoY: 76, center: false, name: [152, 185], nameSize: 27, role: [216, 233], contacts: 284, lineHeight: 22 }
+    }
+};
+const requestedLayout = new URLSearchParams(location.search).get('layout');
+export const currentLayout = Object.hasOwn(LAYOUTS, requestedLayout) ? requestedLayout : (direction.layout || 'classic');
+
 function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
+    const plan = LAYOUTS[currentLayout][vertical ? 'portrait' : 'landscape'];
     const width = vertical ? 300 : 545, height = vertical ? (compact ? 460 : portraitHeight) : 300;
     const data = cards[lang];
     const canvas = document.createElement('canvas');
@@ -551,13 +672,13 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const x = vertical ? 34 : 56;
     context.textAlign = 'left';
     context.fillStyle = '#fff';
-    const logoWidth = vertical ? 110 : 145;
+    const logoWidth = plan.logo;
     const viewBox = logos[lang].viewBox.split(' ').map(Number);
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
-    const logoX = vertical ? (width - logoWidth) / 2 : x;
-    const logoY = vertical ? 76 : 42;
+    const logoX = plan.center ? (width - logoWidth) / 2 : x;
+    const logoY = plan.logoY;
     const textSize = vertical ? 12.5 : 13;
-    const finalBaseline = vertical ? 312 : 188 + 18;
+    const finalBaseline = plan.contacts + plan.lineHeight;
     context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
     const finalMetrics = context.measureText('t.me/sbmaxx');
     const blockTop = logoY;
@@ -582,17 +703,15 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRects = vertical
-        ? data.name.split(' ').map((line, i) => text(line, 164 + i * 29, 24, undefined, 500))
-        : [text(data.name, 130, direction.relief.nameSize, undefined, 500)];
+    const nameLines = vertical ? data.name.split(' ') : [data.name];
+    const titleRects = nameLines.map((line, i) => text(line, plan.name[i], plan.nameSize, undefined, 500));
     const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    if (vertical) data.positionLines.forEach((line, i) => text(line, 223 + i * 17, 12.5));
-    else text(data.position, 152, 13);
-    const y = vertical ? 290 : 188;
-    const size = vertical ? 12.5 : 13, lineHeight = vertical ? 22 : 18;
+    (vertical ? data.positionLines : [data.position]).forEach((line, i) => text(line, plan.role[i], textSize));
+    const y = plan.contacts;
+    const size = textSize, lineHeight = plan.lineHeight;
     text('sbmaxx@yandex-team.ru', y, size, 'mailto:sbmaxx@yandex-team.ru');
     text('t.me/sbmaxx', y + lineHeight, size, 'https://t.me/sbmaxx');
     return { canvas, links, width, height, titleRelief, logoRelief, logoScale: logoWidth / 145 };
@@ -612,24 +731,36 @@ export class CardRenderer {
     static async create(canvas) {
         const gl = canvas.getContext('webgl2', { alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
         if (!gl) throw new Error('WebGL 2 unavailable');
-        const [images] = await Promise.all([
+        performance.mark('card:create');
+        const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
+            compilePrograms(gl, [[vertexSource, fragmentSource], [screenVertex, blurFragment], [screenVertex, compositeFragment],
+                [shadowVertex, shadowFragment], [screenVertex, backdropFragment]])
+                .then(result => { performance.mark('card:compiled'); return result; }),
             Promise.all([document.fonts.load('400 12px "Card Onest"'), document.fonts.load('500 20px "Card Onest"')]).catch(() => {})
         ]);
-        return new CardRenderer(canvas, gl, images);
+        const renderer = new CardRenderer(canvas, gl, images, programs);
+        renderer.resize();
+        renderer.warmUp();
+        // Let the warm-up frame finish before the page starts the intro clock.
+        await new Promise(resolve => requestAnimationFrame(() => resolve()));
+        performance.mark('card:ready');
+        return renderer;
     }
 
-    constructor(canvas, gl, images) {
+    constructor(canvas, gl, images, programs) {
         this.canvas = canvas;
         this.gl = gl;
         this.halfThickness = HALF_THICKNESS;
         this.images = images;
-        this.program = compile(gl, vertexSource, fragmentSource);
-        this.blurProgram = compile(gl, screenVertex, blurFragment);
-        this.compositeProgram = compile(gl, screenVertex, compositeFragment);
+        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
+        const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
+        this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
+        this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
+            'uKeyDirection', 'uGrain', 'uStone', 'uShadowStrength', 'uShadowFade']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection']
+            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -674,7 +805,7 @@ export class CardRenderer {
     // Phone orientation: the room stays put while the phone turns, exactly as a
     // real metal card in the hand. The baseline slowly follows the hold angle.
     setupMotion() {
-        this.gyro = { active: false, beta: 0, gamma: 0, baseBeta: null, baseGamma: 0, x: 0, y: 0, last: 0 };
+        this.gyro = { active: false, beta: 0, gamma: 0, baseBeta: null, baseGamma: 0, x: 0, y: 0, last: 0, lastMove: 0 };
         if (typeof DeviceOrientationEvent === 'undefined' || !matchMedia('(pointer: coarse)').matches) return;
         this.onOrientation = event => {
             if (event.beta == null || event.gamma == null) return;
@@ -684,6 +815,8 @@ export class CardRenderer {
             else if (angle === -90 || angle === 270) [beta, gamma] = [gamma, -beta];
             else if (angle === 180) [beta, gamma] = [-beta, -gamma];
             const g = this.gyro;
+            // Sensors report continuously; only real movement asks for 60 fps.
+            if (Math.abs(beta - g.beta) + Math.abs(gamma - g.gamma) > .08) g.lastMove = performance.now();
             g.beta = beta; g.gamma = gamma; g.last = performance.now();
             if (g.baseBeta === null) { g.baseBeta = beta; g.baseGamma = gamma; }
             g.active = true;
@@ -699,9 +832,25 @@ export class CardRenderer {
         } else listen();
     }
 
+    // Drivers finish shader and pipeline work lazily, on first use. Draw the full
+    // pipeline for both faces while the canvas is still hidden, then wait for
+    // the GPU, so the intro starts on warm, full-rate frames.
+    warmUp() {
+        const gl = this.gl;
+        for (const flipped of [false, true]) {
+            this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 });
+        }
+        this.flipAngle = this.flipFrom = this.flipTarget = 0;
+        this.flipProgress = 1;
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+        performance.mark('card:warm');
+    }
+
     resize() {
         const gl = this.gl;
-        const rect = this.canvas.getBoundingClientRect();
+        // Layout size, not the transformed screen rect: a CSS transform on the
+        // scene (the lab's mobile sheet) must not change the render resolution.
+        const rect = { width: this.canvas.clientWidth, height: this.canvas.clientHeight };
         const dpr = Math.min(devicePixelRatio || 1, 2);
         const width = Math.max(1, Math.round(rect.width * dpr));
         const height = Math.max(1, Math.round(rect.height * dpr));
@@ -750,7 +899,8 @@ export class CardRenderer {
             return { texture, framebuffer, renderbuffer, width: w, height: h };
         };
         const w8 = Math.max(1, Math.round(width / 2)), h8 = Math.max(1, Math.round(height / 2));
-        this.targets = [make(width, height, true), make(width, height), make(w8, h8), make(w8, h8)];
+        // Shadow at 1/4 as well: at 1/8 its bilinear upscale showed steps.
+        this.targets = [make(width, height, true), make(width, height), make(w8, h8), make(w8, h8), make(width, height), make(width, height)];
     }
 
     deleteTargets() {
@@ -831,7 +981,9 @@ export class CardRenderer {
         const g = this.gyro;
         let gyroX = 0, gyroY = 0;
         if (g.active && !reduced) {
-            const recenter = 1 - Math.exp(-dt / 3);
+            // Slow re-centring: a deliberate tilt stays visible, a new hold angle
+            // becomes neutral over ~10 s.
+            const recenter = 1 - Math.exp(-dt / 10);
             g.baseBeta += (g.beta - g.baseBeta) * recenter;
             g.baseGamma += (g.gamma - g.baseGamma) * recenter;
             const target = [Math.max(-25, Math.min(25, g.beta - g.baseBeta)), Math.max(-25, Math.min(25, g.gamma - g.baseGamma))];
@@ -842,7 +994,9 @@ export class CardRenderer {
         }
         // Demo stand overrides (only present on /variants/lab/).
         const lab = globalThis.__cardLab;
-        this.wantsHighFrameRate = Boolean(lab) || (this.intro < 1 && !reduced) || (g.active && performance.now() - g.last < 400);
+        const gyroGain = lab ? lab.gyro : 1;
+        gyroX *= gyroGain; gyroY *= gyroGain;
+        this.wantsHighFrameRate = Boolean(lab) || (this.intro < 1 && !reduced) || (g.active && performance.now() - g.lastMove < 600);
 
         const lightPhase = this.time * Math.PI * 2 / variation.lightPeriod + variation.lightPhase;
         let lightYaw = Math.sin(lightPhase) * .20 * variation.lightTravel + introLight * 1.15;
@@ -851,7 +1005,9 @@ export class CardRenderer {
         // The room turns with the light path and against the phone, so reflections
         // slide across the plate just like a physical card turned under lamps.
         // Phone top away → the screen faces the ceiling; right side down → faces right.
-        const roomYaw = lightYaw + gyroY * 1.1, roomPitch = lightPitch - gyroX * 1.1;
+        // A real card turned by θ moves its reflections by 2θ; the card on screen
+        // also leans a little the same way, which adds to the effect.
+        const roomYaw = lightYaw + gyroY * 1.8, roomPitch = lightPitch - gyroX * 1.8;
         this.room = roomMatrix(roomYaw, roomPitch);
         // Shadow and background follow the key: world key = roomᵀ · key.
         const r = this.room, k = KEY_DIRECTION;
@@ -880,8 +1036,8 @@ export class CardRenderer {
         this.flipAngle = progress >= 1 ? this.flipTarget : this.flipFrom + (this.flipTarget - this.flipFrom) * flipCurve(progress);
         // The plate comes toward the viewer while it turns over.
         const flipDepth = progress >= 1 ? 0 : Math.sin(Math.PI * Math.min(1, progress / .85)) * .45;
-        const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX + gyroX * .25);
-        const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY - gyroY * .25);
+        const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX + gyroX * .2);
+        const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY + gyroY * .2);
         const targetZ = variation.poseZ + (reduced ? 0 : rz * Math.PI / 180 + Math.sin(idleTime * .36 + variation.phaseZ) * .025 * idleStrength);
         const blend = reduced ? 1 : 1 - Math.exp(-dt * 3);
         if (reduced) {
@@ -930,11 +1086,15 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uExposure, look.studio.exposure * (lab ? lab.exposure : 1));
         gl.uniform3f(this.uniforms.uKeyDirection, ...this.keyDirection);
         gl.uniform1f(this.uniforms.uOpacity, introFade);
+        const backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
+        this.backdrop = backdrop;
+        gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
+        gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
         // 1. Highlights above white at quarter resolution.
-        const [bright, blurA, wideA, wideB] = this.targets;
+        const [bright, blurA, wideA, wideB, shadowA, shadowB] = this.targets;
         gl.bindFramebuffer(gl.FRAMEBUFFER, bright.framebuffer);
         gl.viewport(0, 0, bright.width, bright.height);
         gl.clearColor(0, 0, 0, 0);
@@ -961,11 +1121,54 @@ export class CardRenderer {
         pass(wideA, wideB, 0, 1.5);
         pass(wideB, wideA, 2.5, 0);
         pass(wideA, wideB, 0, 2.5);
-        // 3. The card at full resolution, native MSAA.
+        if (backdrop) {
+            // 2b. Card silhouette from the key light onto the backdrop, blurred wide.
+            gl.bindFramebuffer(gl.FRAMEBUFFER, shadowA.framebuffer);
+            gl.viewport(0, 0, shadowA.width, shadowA.height);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            gl.disable(gl.CULL_FACE);
+            gl.useProgram(this.shadowProgram);
+            gl.uniformMatrix4fv(this.shadowUniforms.uModel, false, this.model);
+            gl.uniformMatrix4fv(this.shadowUniforms.uProjection, false, this.projection);
+            gl.uniform3f(this.shadowUniforms.uLight, ...this.keyLight);
+            gl.bindVertexArray(this.arrays[0]);
+            gl.drawArrays(gl.TRIANGLES, 0, this.counts[0]);
+            gl.enable(gl.CULL_FACE);
+            gl.useProgram(this.blurProgram);
+            gl.bindVertexArray(this.screenArray);
+            gl.activeTexture(gl.TEXTURE0);
+            // Growing radii: each pass smooths the previous one's taps.
+            for (const radius of [1, 2.2, 4]) {
+                pass(shadowA, shadowB, radius, 0);
+                pass(shadowB, shadowA, 0, radius);
+            }
+        }
+        // 3. Backdrop, then the card at full resolution with native MSAA.
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        if (backdrop) {
+            const u = this.backdropUniforms;
+            gl.useProgram(this.backdropProgram);
+            gl.bindVertexArray(this.screenArray);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, shadowA.texture);
+            gl.uniform1i(u.uShadow, 0);
+            gl.uniform2f(u.uResolution, this.canvas.width, this.canvas.height);
+            // The pool sits behind the card, offset towards the key light.
+            const k = this.keyDirection;
+            gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
+            gl.uniform3f(u.uWall, ...backdrop.wall);
+            gl.uniform3f(u.uFloor, ...backdrop.floor);
+            gl.uniform3f(u.uPoolColor, ...backdrop.pool);
+            gl.uniform3f(u.uKeyDirection, ...k);
+            gl.uniform1f(u.uGrain, backdrop.grain);
+            gl.uniform1f(u.uStone, backdrop.stone);
+            gl.uniform1f(u.uShadowStrength, backdrop.shadow);
+            gl.uniform1f(u.uShadowFade, introFade);
+            gl.drawArrays(gl.TRIANGLES, 0, 3);
+        }
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.program);
         this.drawCard(0, focusLink);
