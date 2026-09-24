@@ -544,7 +544,13 @@ void main() {
         float nearLogo = inRect(uLogoRect + pad);
         float nearName = inRect(uTitleRect + pad) * (1.0 - nearLogo);
         float nearText = inRect(uTextRect + pad) * (1.0 - nearLogo) * (1.0 - nearName);
-        float height = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x + nearText * uRaisedHeight.z;
+        // Height follows the relief the shading shows: role and contacts keep
+        // theirs only once magnified (see smallRelief), and nothing rises while
+        // a stroke is under a pixel — walls with no relief to light them read
+        // as a pale double of each letter.
+        float smallShown = uBodyTint.a > 1.5 ? resolved : 1.0 - smoothstep(.35, .7, footprint);
+        float height = (nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x) * resolved
+            + nearText * uRaisedHeight.z * smallShown;
         vec3 toEye = vec3(dot(v, T), dot(v, B), dot(v, n));
         if (height > 0.0 && toEye.z > .06) {
             // UV travelled from the top to the plate, and steps of ~⅓ layout px.
