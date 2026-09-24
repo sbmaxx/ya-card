@@ -205,3 +205,16 @@ They are ordinary static subdirectories; the root release and nginx configuratio
 are unchanged. Source/build instructions: `variants/README.md`.
 Staging directory: `/home/sbmaxx/ya-card-variants-20260924-01`.
 Only builds were performed; no test suites or preview sweeps were run.
+
+## Material-only editions
+
+The current WebGL source and first three experiments are preserved in branch
+`codex/webgl-snapshot-20260924` at `c868f8d`. The second variants release restores
+the production outline, thickness and layout in all three editions. Ivory and
+Obsidian have raised metallic lettering with moving contact shadows; Prism has
+recessed lettering and a view-dependent oxide-film finish. No cut-outs were added.
+The main homepage remains release `20260924-19`.
+
+Variants release: `/home/sbmaxx/ya-card-variants-20260924-02`.
+Rollback: `ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-variants-20260924-02/rollback.sh'`.
+Build only; no test suites, browser sweeps or agents were used.

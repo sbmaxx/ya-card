@@ -2,20 +2,10 @@ import { cards, logos } from '../data.js';
 import { createEngravingMap } from '../engraving.js';
 import { art } from './art-direction.js';
 import { direction } from './directions.js';
+import { materialShader } from './materials.js';
 
-const edgeOptions = { standard: [.055, .018], thin: [.022, .008], soft: [.032, .012] };
-const edgeStudy = new URLSearchParams(location.search).get('edge');
-const HALF_THICKNESS = direction.thickness, BEVEL = direction.bevel;
-const portraitOptions = { tall: 545, balanced: 500, compact: 460 };
-const portraitStudy = new URLSearchParams(location.search).get('proportion');
-const portraitHeight = Object.hasOwn(portraitOptions, portraitStudy) ? portraitOptions[portraitStudy] : 460;
-
-const finishes = {
-    silver: { metal: [.847, .859, .878], edge: [.50, .54, .58], ink: '#20252b', secondary: '#30353a', link: '#30353a' },
-    titanium: { metal: [.86, .81, .72], edge: [.55, .51, .43], ink: '#292722', secondary: '#35312a', link: '#35312a' },
-    graphite: { metal: [.28, .31, .35], edge: [.23, .26, .30], ink: '#f0f1f2', secondary: '#e1e4e9', link: '#e1e4e9' }
-};
-const requestedFinish = new URLSearchParams(location.search).get('finish');
+// Keep the production plate and layout identical across all material studies.
+const HALF_THICKNESS = .022, BEVEL = .008, portraitHeight = 460;
 const finish = direction.finish;
 
 // Sample once per page, not per frame or resize. Context recovery keeps the
@@ -77,87 +67,7 @@ varying vec2 vUV;
 varying vec3 vTangent;
 varying vec3 vBitangent;
 
-vec3 metalLighting(vec3 normal, vec3 view, vec3 light, float polish, float brushVisibility) {
-    // One moving softbox drives the illumination, reflection and cast shadow.
-    vec3 lightOffset = normalize(uKeyPosition) - normalize(vec3(-3.0, 4.0, 6.0));
-    vec3 halfVector = normalize(light + view);
-    vec3 reflection = reflect(-view, normal);
-    float diffuse = max(dot(normal, light), 0.0);
-    float fresnel = pow(1.0 - max(dot(normal, view), 0.0), 4.0);
-    float softbox = exp(-pow((reflection.x + 0.35 - lightOffset.x) * 1.6, 2.0)
-                       -pow((reflection.y - 0.50 - lightOffset.y) * 1.5, 2.0));
-    float specular = pow(max(dot(normal, halfVector), 0.0), 24.0);
-    // A circular source has falloff in both directions, rather than an infinite stripe.
-    vec2 reflectionOffset = reflection.xy - lightOffset.xy - vec2(0.02, 0.08);
-    float reflectionDistance = dot(reflectionOffset, reflectionOffset);
-    float finishVariation = sin(vUV.y * 17.0 + sin(vUV.x * 6.0)) * 0.025;
-    float polishedReflection = exp(-reflectionDistance * 12.0);
-    float highlightCore = exp(-reflectionDistance * 34.0);
-    float edgeGlint = pow(max(dot(normal, halfVector), 0.0), 96.0);
-    vec3 silver = mix(uMetalTone, uEdgeTone, uEdge);
-    // Horizontal tooling, below one percent contrast; fade before subpixel
-    // frequencies can shimmer. Polished walls and edges have no brushing.
-    vec2 surface = vUV * uLayoutSize;
-    float grain = (sin(surface.y * 5.2 + sin(surface.x * .13) * .7) * .65
-                 + sin(surface.y * 3.8 + sin(surface.x * .31)) * .35)
-                 * .009 * brushVisibility * (1.0 - smoothstep(0.0, 0.5, polish));
-    vec3 color = silver * (0.43 + 0.22 * diffuse);
-    color += vec3(0.15, 0.17, 0.19) * softbox + vec3(0.11) * specular;
-    color += vec3(0.22, 0.235, 0.25) * polishedReflection * (1.0 + finishVariation);
-    color += vec3(0.12, 0.12, 0.115) * highlightCore;
-    color += vec3(0.30, 0.34, 0.39) * fresnel;
-    color += vec3(0.22, 0.24, 0.27) * edgeGlint * uEdge;
-    ${art.studio ? `
-    // A single round studio source: satin broadens its reflected cone, while
-    // the engraved floor below uses a narrower lobe around the same direction.
-    float sourceDistance = 1.0 - max(dot(reflection, light), 0.0);
-    float satinReflection = exp(-sourceDistance * mix(5.0, 18.0, polish));
-    float sourceCore = exp(-sourceDistance * mix(30.0, 72.0, polish));
-    color = silver * (0.51 + 0.14 * diffuse) + vec3(0.10, 0.11, 0.12);
-    color += vec3(0.45, 0.47, 0.49) * satinReflection * (1.0 + .12 * polish);
-    color += vec3(1.0, 1.04, 1.09) * mix(.11, .26, polish) * sourceCore;
-    color += vec3(0.24, 0.28, 0.33) * fresnel;
-    color += vec3(0.22, 0.24, 0.27) * edgeGlint * uEdge;
-    ` : ''}
-    ${direction.id === 'ivory' ? `
-    float pearlLight = exp(-(1.0 - max(dot(reflection, light), 0.0)) * 4.0);
-    color = mix(vec3(.97, .94, .86), vec3(.70, .60, .43), uEdge) * (.95 + .06 * diffuse);
-    color += vec3(.16, .15, .12) * pearlLight + vec3(.12) * fresnel;
-    ` : direction.id === 'obsidian' ? `
-    vec2 room = reflection.xy - vec2(.12, .27) - lightOffset.xy * .6;
-    float chromeRoom = exp(-dot(room, room) * 14.0);
-    float chromeFlash = exp(-(1.0 - max(dot(reflection, light), 0.0)) * 64.0);
-    color = vec3(.035, .046, .062) * (.55 + .45 * diffuse);
-    color += vec3(.42, .49, .59) * chromeRoom + vec3(.82, .93, 1.08) * chromeFlash;
-    color += vec3(.30, .39, .51) * fresnel + vec3(.18) * edgeGlint * uEdge;
-    ` : `
-    float filmPhase = vUV.x * 3.8 + vUV.y * 2.2 + reflection.x * 3.1 - lightOffset.y * 2.2;
-    vec3 film = mix(vec3(.34, .83, .88), vec3(.68, .48, .94), .5 + .5 * sin(filmPhase));
-    film = mix(film, vec3(.96, .71, .82), (.5 + .5 * sin(filmPhase * .8 + 2.0)) * .62);
-    color = film * (.76 + .20 * diffuse);
-    color += vec3(.36) * exp(-(1.0 - max(dot(reflection, light), 0.0)) * 12.0);
-    color += vec3(.24, .31, .40) * fresnel;
-    color = mix(color, color * .65 + vec3(.18, .17, .30) * edgeGlint, uEdge);
-    `}
-    // The same source drives the background glow and its reflection on the rim.
-    vec3 toGlow = uGlowPosition - vPosition;
-    float facingGlow = max(dot(normal, normalize(toGlow)), 0.0);
-    float falloff = 1.0 / (1.0 + dot(toGlow, toGlow) * 0.15);
-    vec3 glowColor = mix(vec3(0.28, 0.44, 0.65), vec3(0.40, 0.44, 0.60),
-                         smoothstep(-2.0, 2.0, vPosition.x - uGlowPosition.x));
-    color += glowColor * facingGlow * falloff * (0.78 * uEdge + 0.06 * fresnel) * uGlowIntensity;
-    color *= 1.0 + grain;
-    // Roll off the brightest reflection rather than clipping it into a white patch.
-    color = max(color, vec3(0.0));
-    color = color / (vec3(1.0) + color * 0.12);
-    ${art.studio ? `
-    // Compress only the highlight shoulder; preserve midtone contrast and
-    // avoid a clipped white patch when the source reflects straight at us.
-    vec3 shoulder = max(color - vec3(0.82), vec3(0.0));
-    color = min(color, vec3(0.82)) + shoulder / (vec3(1.0) + shoulder / 0.18);
-    ` : ''}
-    return color;
-}
+${materialShader}
 
 void main() {
     vec3 normal = normalize(vNormal);
@@ -182,77 +92,45 @@ void main() {
     vec3 color = metalLighting(normal, view, light, uEdge, grainVisibility);
     float logoRegion = step(uLogoRect.x, vUV.x) * step(uLogoRect.y, vUV.y)
                      * step(vUV.x, uLogoRect.z) * step(vUV.y, uLogoRect.w);
-    ${art.cavity ? `
-    // A recessed floor is occluded by its opening. Read these masks outside
-    // the glyph branch so mip derivatives remain valid on WebGL 1.
+    // Offset coverage reads run outside conditional glyph branches so WebGL 1
+    // computes stable mip derivatives during a slow flip.
     float logoScale = max(0.1, ((uLogoRect.z - uLogoRect.x) * uLayoutSize.x - 4.0) / 145.0);
-    float cutDepth = mix(${art.name.depth.toFixed(3)}, ${art.logo.depth.toFixed(3)} * logoScale, logoRegion);
-    vec2 viewSlope = vec2(dot(view, normalize(vTangent)), dot(view, normalize(vBitangent))) / max(dot(view, normal), 0.4);
-    vec2 lightSlope = vec2(dot(light, normalize(vTangent)), dot(light, normalize(vBitangent))) / max(dot(light, normal), 0.35);
-    float visibleInnerWall = 1.0 - texture2D(uEngraving, vUV - viewSlope * cutDepth / uLayoutSize).a;
-    float cavityShadow = 1.0 - texture2D(uEngraving, vUV + lightSlope * cutDepth * 1.3 / uLayoutSize).a;
-    ` : ''}
-    if (engraved > 0.001) {
-        vec2 mappedXY = (relief.rg * 255.0 - 128.0) / 127.0;
-        mappedXY *= resolved;
+    float reliefDepth = mix(${art.name.depth.toFixed(3)}, ${art.logo.depth.toFixed(3)} * logoScale, logoRegion);
+    vec2 lightSlope = vec2(dot(light, normalize(vTangent)), dot(light, normalize(vBitangent))) / max(dot(light, normal), .35);
+    ${art.cavity ? `
+    vec2 viewSlope = vec2(dot(view, normalize(vTangent)), dot(view, normalize(vBitangent))) / max(dot(view, normal), .4);
+    float visibleInnerWall = 1.0 - texture2D(uEngraving, vUV - viewSlope * reliefDepth / uLayoutSize).a;
+    float cavityShadow = 1.0 - texture2D(uEngraving, vUV + lightSlope * reliefDepth * 1.3 / uLayoutSize).a;
+    ` : `
+    // Short contact shadows belong to raised letters, and point away from the
+    // moving light. This is a height-map relief, not extra letter geometry.
+    vec2 castOffset = lightSlope * reliefDepth / uLayoutSize;
+    float contactShadow = texture2D(uEngraving, vUV + castOffset * .45).a * .45
+                        + texture2D(uEngraving, vUV + castOffset * .85).a * .35
+                        + texture2D(uEngraving, vUV + castOffset * 1.20).a * .20;
+    color *= 1.0 - contactShadow * (1.0 - relief.a) * .42 * resolved * (1.0 - uEdge);
+    `}
+    if (engraved > .001) {
+        vec2 mappedXY = (relief.rg * 255.0 - 128.0) / 127.0 * resolved;
         float slope = length(mappedXY);
         vec3 facetNormal = normalize(normalize(vTangent) * mappedXY.x
                          + normalize(vBitangent) * mappedXY.y
-                         + normal * sqrt(max(0.01, 1.0 - dot(mappedXY, mappedXY))));
-        float wall = smoothstep(0.035, 0.30, slope) * ${(art.name.wall ?? .58).toFixed(3)} * resolved;
-        // Dark matte fill on the floor; the narrow cut wall reflects the same
-        // studio source as the plate, with mild cavity occlusion.
-        vec3 floorInk = paint * (0.91 + 0.09 * max(dot(normal, light), 0.0)) * (1.0 - 0.18 * relief.b);
-        float facetLight = max(dot(facetNormal, light), 0.0);
-        float wallExposure = smoothstep(-0.20, 0.10, facetLight - max(dot(normal, light), 0.0));
-        vec3 litWall = metalLighting(facetNormal, view, light, .55, 0.0) * (0.65 + 0.28 * facetLight);
-        // The occluded wall must become darker, not a second silver outline.
-        vec3 cutMetal = mix(floorInk * 0.58, litWall, wallExposure);
-        vec3 stampedFace = metalLighting(normal, view, light, .45, 0.0) * ${art.logo.face.toFixed(3)} + uMetalTone * 0.018;
-        stampedFace += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
-        stampedFace *= ${art.logo.raised ? '1.0' : '(1.0 - 0.14 * relief.b)'};
-        vec3 stampedWall = mix(stampedFace * 0.64,
-                               metalLighting(facetNormal, view, light, .55, 0.0) * (1.02 + 0.12 * facetLight),
-                               smoothstep(-0.16, 0.13, facetLight - max(dot(normal, light), 0.0)));
-        float stampedBevel = smoothstep(0.035, 0.30, slope) * ${art.logo.wall.toFixed(3)} * resolved;
-        vec3 stampedMetal = mix(stampedFace, stampedWall, stampedBevel);
-        ${art.logo.machined ? `
-        // The cut face is polished more than the satin plate. Its compact,
-        // round reflection moves with the same light, while the bevel normals
-        // turn that reflection around each letter's contour.
-        vec3 reflected = reflect(-view, normal);
-        vec3 sourceDirection = normalize(uKeyPosition);
-        vec2 studioOffset = reflected.xy - (sourceDirection.xy - vec2(-0.42, 0.56)) - vec2(0.10, 0.14);
-        float faceReflection = ${art.studio ? `exp(-(1.0 - max(dot(reflected, light), 0.0)) * ${(art.logo.broadPower ?? 8).toFixed(1)})` : 'exp(-dot(studioOffset, studioOffset) * 7.0)'};
-        float polish = ${art.studio ? `exp(-(1.0 - max(dot(reflected, light), 0.0)) * ${(art.logo.polishPower ?? 36).toFixed(1)})` : 'exp(-dot(studioOffset, studioOffset) * 28.0)'};
-        vec3 faceMetal = uMetalTone * ${(.18 + art.logo.face * .24).toFixed(3)};
-        faceMetal += vec3(0.23, 0.25, 0.28) * faceReflection + vec3(${(art.logo.sheen ?? .15).toFixed(3)}) * polish;
-        faceMetal += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
-        float tooling = sin(vUV.x * uLayoutSize.x * 7.8 + sin(vUV.y * uLayoutSize.y * 0.23));
-        faceMetal += vec3(tooling * 0.009 * grainVisibility);
-        faceMetal *= ${art.logo.raised ? '1.0' : '(1.0 - 0.17 * relief.b)'};
-        float facetExposure = smoothstep(-0.28, 0.22, dot(facetNormal, light) - dot(normal, light));
-        vec3 bevelMetal = mix(faceMetal * 0.42, metalLighting(facetNormal, view, light, .55, 0.0) * 1.08, facetExposure);
-        stampedMetal = mix(faceMetal, bevelMetal, smoothstep(0.025, 0.34, slope) * ${art.logo.wall.toFixed(3)} * resolved);
-        ` : ''}
-        inkColor = mix(paint, mix(floorInk, cutMetal, wall), engraved);
-        // The chosen monochrome relief catches the same moving softbox as the
-        // plate. Coverage is preserved, so no exterior outline is introduced.
-        inkColor = mix(inkColor, stampedMetal, engraved * logoRegion);
-        // Each edition gives the wordmark its own visible metal treatment.
-        vec3 markLow = vec3(${direction.markLow.join(', ')});
-        vec3 markHigh = vec3(${direction.markHigh.map(v => v.toFixed(3)).join(', ')});
-        float markReflection = pow(max(dot(normal, normalize(light + view)), 0.0), 18.0);
-        vec3 markFace = mix(markLow, markHigh, .18 + .58 * markReflection);
-        vec3 markWall = mix(markLow * .40, markHigh, wallExposure);
-        inkColor = mix(inkColor, mix(markFace, markWall, smoothstep(.03, .35, slope) * .9 * resolved), engraved * logoRegion);
+                         + normal * sqrt(max(.01, 1.0 - dot(mappedXY, mappedXY))));
+        float facetExposure = smoothstep(-.22, .22, dot(facetNormal, light) - dot(normal, light));
+        float bevel = smoothstep(.025, .34, slope) * resolved
+                    * mix(${art.name.wall.toFixed(3)}, ${art.logo.wall.toFixed(3)}, logoRegion);
+        vec3 faceMetal = letteringMetal(normal, view, light, logoRegion);
+        vec3 wallMetal = letteringMetal(facetNormal, view, light, logoRegion);
+        wallMetal = mix(faceMetal * .35, wallMetal * 1.18, facetExposure);
         ${art.cavity ? `
-        // Internal shadow separates the bottom from the bevel. The visible
-        // wall shifts with the viewing angle, while the letter opening stays fixed.
-        float floorAmount = smoothstep(0.20, 0.85, relief.b);
-        inkColor *= 1.0 - cavityShadow * floorAmount * 0.62 * resolved;
-        vec3 innerWall = mix(paint * 0.36, metalLighting(facetNormal, view, light, .55, 0.0) * 1.03, wallExposure);
-        inkColor = mix(inkColor, innerWall, visibleInnerWall * mix(0.64, 0.80, logoRegion) * resolved);
+        faceMetal *= 1.0 - .16 * relief.b;
+        vec3 cutRim = metalLighting(facetNormal, view, light, .90, 0.0);
+        wallMetal = mix(faceMetal * .30, cutRim, facetExposure);
+        ` : ''}
+        inkColor = mix(paint, mix(faceMetal, wallMetal, bevel), engraved);
+        ${art.cavity ? `
+        inkColor *= 1.0 - cavityShadow * smoothstep(.20, .85, relief.b) * .58 * resolved;
+        inkColor = mix(inkColor, wallMetal, visibleInnerWall * .72 * resolved);
         ` : ''}
     }
     // Preserve the original glyph coverage: the bevel cannot create an outer halo.
@@ -353,17 +231,14 @@ function projectionMatrix(aspect, f = 1 / Math.tan(Math.PI / 8)) {
 
 function roundedOutline(width, height, vertical) {
     const w = width / 2, h = height / 2;
-    const cut = .34;
-    const points = direction.shape === 'rounded' ? [[-w, h], [w, h], [w, -h], [-w, -h]]
-        : direction.shape === 'cut' ? [[-w + cut, h], [w, h], [w, -h + cut], [w - cut, -h], [-w, -h], [-w, h - cut]]
-        : vertical ? [[-w, h], [w, h], [w, -h * .74], [0, -h], [-w, -h * .74]]
-            : [[-w, h], [w * .74, h], [w, 0], [w * .74, -h], [-w, -h]];
+    const points = vertical ? [[-w, h], [w, h], [w, -h * .74], [0, -h], [-w, -h * .74]]
+        : [[-w, h], [w * .74, h], [w, 0], [w * .74, -h], [-w, -h]];
     const result = [];
     points.forEach((p, index) => {
-        const previous = points[(index + points.length - 1) % points.length], next = points[(index + 1) % points.length];
+        const previous = points[(index + 4) % 5], next = points[(index + 1) % 5];
         const a = Math.hypot(previous[0] - p[0], previous[1] - p[1]);
         const b = Math.hypot(next[0] - p[0], next[1] - p[1]);
-        const r = direction.radius;
+        const r = .055;
         const start = [p[0] + (previous[0] - p[0]) * r / a, p[1] + (previous[1] - p[1]) * r / a];
         const end = [p[0] + (next[0] - p[0]) * r / b, p[1] + (next[1] - p[1]) * r / b];
         for (let step = 0; step <= 8; step++) {
@@ -443,24 +318,19 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     // Transparent substrate: alpha is the printed-ink mask for the paint shader.
     context.clearRect(0, 0, width, height);
     const links = [];
-    const centered = direction.layout === 'center';
-    const split = direction.layout === 'split' && !vertical;
-    const bold = direction.layout === 'bold';
-    const x = centered ? width / 2 : vertical ? 34 : split ? 205 : 42;
+    const centered = false;
+    const x = vertical ? (centered ? width / 2 : 34) : 56;
     context.textAlign = centered ? 'center' : 'left';
-    const logoWidth = vertical ? (bold ? 145 : direction.layout === 'center' ? 124 : 128) : bold ? 195 : 130;
+    const logoWidth = vertical ? 110 : 145;
     const viewBox = logos[lang].viewBox.split(' ').map(Number);
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
-    const logoX = centered || (vertical && !bold) ? (width - logoWidth) / 2 : split ? 38 : x;
-    const logoY = vertical ? (bold ? 58 : 76) : split ? 145 : centered ? 45 : 42;
-    const nameY = vertical ? (bold ? 148 : 164) : split ? 105 : centered ? 148 : 150;
-    const nameSize = vertical ? Math.min(26, art.nameSize) : art.nameSize;
-    const contactY = vertical ? (bold ? 278 : 292) : centered ? 223 : 225;
-    const textSize = vertical ? 12.5 : 13, lineHeight = 22;
-    const finalBaseline = contactY + lineHeight;
+    const logoX = vertical ? (width - logoWidth) / 2 : x;
+    const logoY = vertical ? 76 : 42;
+    const textSize = vertical ? 12.5 : 13;
+    const finalBaseline = vertical ? 312 : 188 + 18;
     context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
     const finalMetrics = context.measureText('t.me/sbmaxx');
-    const blockTop = split ? nameY - nameSize * .78 : logoY;
+    const blockTop = logoY;
     const blockBottom = finalBaseline + finalMetrics.actualBoundingBoxDescent;
     const yOffset = (height - blockTop - blockBottom) / 2;
     function text(value, y, size, color = finish.ink, url, weight = 400) {
@@ -484,24 +354,20 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRects = vertical || split
-        ? data.name.split(' ').map((line, i) => text(line, nameY + i * 32, nameSize, finish.ink, undefined, 500))
-        : [text(data.name, nameY, nameSize, finish.ink, undefined, 500)];
+    const titleRects = vertical
+        ? data.name.split(' ').map((line, i) => text(line, 164 + i * 29, 24, finish.ink, undefined, 500))
+        : [text(data.name, 130, art.nameSize, finish.ink, undefined, 500)];
     const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    if (vertical || split) data.positionLines.forEach((line, i) => text(line, nameY + 63 + i * 17, 12.5, finish.secondary));
-    else text(data.position, centered ? 176 : 177, 13, finish.secondary);
-    const y = contactY, size = textSize;
+    if (vertical) data.positionLines.forEach((line, i) => text(line, 223 + i * 17, 12.5, finish.secondary));
+    else text(data.position, 152, 13, finish.secondary);
+    const y = vertical ? 290 : 188;
+    const size = vertical ? 12.5 : 13, lineHeight = vertical ? 22 : 18;
     // Contacts share one dark ink tone; hierarchy comes from spacing and size.
     text('sbmaxx@yandex-team.ru', y, size, finish.ink, 'mailto:sbmaxx@yandex-team.ru');
     text('t.me/sbmaxx', y + lineHeight, size, finish.ink, 'https://t.me/sbmaxx');
-    if (split) {
-        context.fillStyle = finish.ink; context.globalAlpha = .18;
-        context.fillRect(185, blockTop + yOffset, .6, blockBottom - blockTop);
-        context.globalAlpha = 1;
-    }
     return { canvas, links, width, height, titleRelief, logoRelief, logoScale: logoWidth / 145 };
 }
 

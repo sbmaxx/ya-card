@@ -5,6 +5,7 @@ import { gzipSync, brotliCompressSync, constants } from 'node:zlib';
 import { build, transform } from 'esbuild';
 import { minify } from 'html-minifier-terser';
 import { directions } from './directions.js';
+import { logos } from '../data.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 const out = resolve(root, 'dist/variants');
@@ -47,5 +48,8 @@ for (const [id, direction] of Object.entries(directions)) {
     console.log(`${id}: ${bytes.length} bytes → ${directory}`);
 }
 
-await writeFile(resolve(out, 'index.html'), await readFile(resolve(here, 'gallery.html')));
+const logo = logos.ru;
+const sample = `<div class="mark"><svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo.viewBox}" aria-hidden="true"><path d="${logo.text}"/><path d="${logo.ya}"/></svg></div><div class="person">Роман Рождественский</div><div class="role">руководитель отдела поисковых интерфейсов</div><div class="contact">sbmaxx@yandex-team.ru<br>t.me/sbmaxx</div>`;
+const gallery = (await readFile(resolve(here, 'gallery.html'), 'utf8')).replaceAll('{{CARD}}', () => sample);
+await writeFile(resolve(out, 'index.html'), await minify(gallery, { collapseWhitespace: true, removeComments: true, minifyCSS: true }));
 console.log(`Comparison page: ${out}/index.html`);
