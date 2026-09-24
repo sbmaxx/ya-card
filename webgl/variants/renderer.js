@@ -365,9 +365,14 @@ vec3 room(vec3 world, float rough) {
     // Dark floor, dim ceiling and a faint horizon for the side walls.
     vec3 col = mix(vec3(.006, .006, .007), vec3(.045, .047, .052), smoothstep(-.6, .9, d.y));
     col += vec3(.10, .10, .095) * exp(-d.y * d.y * mix(40.0, 5.0, rough)) * smoothstep(.3, -.2, d.z);
+    // A soft, even fill from every side: turned far from its lamps (a phone
+    // tilted hard, a hand spin) the metal still reads as metal, not a black slab.
+    col += vec3(.04) * (.55 + .45 * smoothstep(-1.0, 1.0, d.y));
     // A dim bounce card around the camera with a black flag in its centre:
     // satin averages the two into a mid tone, a mirror sees the dark flag.
-    float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.95, .70), blur + .08, uRoundLights);
+    // Wide and soft, so a hard phone tilt slides it off gradually instead of
+    // leaving the plate facing an unlit room.
+    float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(1.35, 1.05), blur + .22, uRoundLights);
     float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .20), blur + .02, uRoundLights);
     col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .82 * flag);
     // Light walls (the paper backdrop) surround the card with brighter room.
@@ -1488,7 +1493,7 @@ export class CardRenderer {
         // Phone top away → the screen faces the ceiling; right side down → faces right.
         // A real card turned by θ moves its reflections by 2θ; the card on screen
         // also leans a little the same way, which adds to the effect.
-        const roomYaw = lightYaw + gyroY * 1.8, roomPitch = lightPitch - gyroX * 1.8;
+        const roomYaw = lightYaw + gyroY * 1.5, roomPitch = lightPitch - gyroX * 1.5;
         this.room = roomMatrix(roomYaw, roomPitch);
         // Shadow and background follow the key: world key = roomᵀ · key.
         const setup = LIGHT_SETUPS[lab ? lab.lightSetup : direction.lightSetup] || LIGHT_SETUPS.studio;
