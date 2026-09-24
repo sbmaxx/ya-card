@@ -461,14 +461,25 @@ vec3 metal(vec3 f0, vec3 n, vec3 v, float rough) {
 // Gloss dielectric (enamel, lacquer): coloured diffuse under a sharp 4% coat.
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
 
+// A clear dielectric coat (lacquer, oxide): an uncoloured Fresnel reflection.
+vec3 clearCoat(float f0, vec3 n, vec3 v, float rough) {
+    float nv = max(dot(n, v), 1e-3);
+    return (f0 + (1.0 - f0) * pow(1.0 - nv, 5.0)) * room(reflect(-v, n), rough);
+}
+
 // Colour on a letter: enamel fills the flat faces and leaves polished bevels;
 // anodising colours the metal itself, bevels included.
 vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, float rough, float edge, float shine, vec3 plateLetter, float amount) {
     // The plate's own material: letters pressed out of (or into) the same steel.
     if (tint.a > 1.5) return plateLetter;
     if (tint.a < .5) return base;
-    vec3 anod = metal(tint.rgb, facet, v, mix(.55, max(.06, rough), shine));
-    vec3 full = mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .10, shine)), anod, finish), mix(base, anod, finish), edge);
+    // Anodising: the dye colours the metal under a clear oxide (n ≈ 1.65), which
+    // reflects ~6% of the room uncoloured. On dark dyes that coat is all the
+    // shine there is — without it a black letter showed no gloss at any «Блеск».
+    // «Блеск» sets how sharp both reflections are.
+    float anodRough = mix(.55, max(.06, rough), shine);
+    vec3 anod = metal(tint.rgb, facet, v, anodRough) + clearCoat(.06, facet, v, anodRough);
+    vec3 full = mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .06, shine)), anod, finish), mix(base, anod, finish), edge);
     // A translucent colour: the plate's brushed steel shows through, tinted.
     if (amount > .999) return full;
     vec3 dyed = plateLetter * mix(vec3(1.0), tint.rgb / max(max(tint.r, max(tint.g, tint.b)), .02), amount);
@@ -478,8 +489,8 @@ vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, floa
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough) {
     float nv = max(dot(n, v), 1e-3);
     float coat = .04 + .96 * pow(1.0 - nv, 5.0);
-    // Semi-gloss: a thin lacquer, so a passing light gleams without hiding the letter.
-    return albedo * room(n, 1.0) * 2.2 * (1.0 - coat) + coat * .55 * room(reflect(-v, n), rough);
+    // Lacquer over the colour: the full ~4% coat, sharp or soft with «Блеск».
+    return albedo * room(n, 1.0) * 2.2 * (1.0 - coat) + coat * room(reflect(-v, n), rough);
 }
 
 float hash(float x) { return fract(sin(x * 91.3458) * 47453.5453); }
@@ -1065,18 +1076,19 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     context.scale(canvas.width / width, canvas.height / height);
     context.clearRect(0, 0, width, height);
     const links = [];
-    const x = vertical ? 34 : 56;
+    // Portrait centres the block by its widest line (below); 34 is a start.
+    let x = vertical ? 34 : 56;
     context.textAlign = 'left';
     context.fillStyle = '#fff';
     const logoWidth = plan.logo;
     const viewBox = logos[lang].viewBox.split(' ').map(Number);
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
-    const logoX = plan.center ? (width - logoWidth) / 2 : x;
+    let logoX = plan.center ? (width - logoWidth) / 2 : x;
     const logoY = plan.logoY;
     const textSize = vertical ? 12.5 : 13;
     // Name and role stay on one line whenever they fit the plate; only a line
     // that does not fit is split in two, and everything below moves with it.
-    const maxWidth = vertical ? width - x - 26 : 440;
+    const maxWidth = vertical ? width - 2 * 26 : 440;
     const fits = (value, size, weight) => {
         context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
         return context.measureText(value).width <= maxWidth;
@@ -1148,6 +1160,21 @@ function textureCanvas(lang, vertical, logo, maxSize) {
             (y - metrics.actualBoundingBoxAscent - 2) / height,
             (drawX + metrics.actualBoundingBoxRight + 2) / width,
             (y + metrics.actualBoundingBoxDescent + 2) / height];
+    }
+    if (vertical) {
+        // Left-aligned lines, but equal metal on both sides of the widest one:
+        // a fixed left margin left the long name almost touching the right edge.
+        const inkWidth = (value, size, weight = 400) => {
+            context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+            const metrics = context.measureText(value);
+            return metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
+        };
+        const widest = Math.max(plan.center ? 0 : logoWidth,
+            ...nameLines.map(line => inkWidth(line, nameSize, 500)),
+            ...roleLines.map(line => inkWidth(line, textSize)),
+            inkWidth(data.email, textSize), inkWidth(`t.me/${data.telegram}`, textSize));
+        x = (width - widest) / 2;
+        if (!plan.center) logoX = x;
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
