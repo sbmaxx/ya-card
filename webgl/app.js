@@ -102,7 +102,7 @@ import { CardRenderer } from './renderer.js';
         frame = 0;
         if (!renderer || contextLost || document.hidden) return;
         const animate = !reducedMotion.matches;
-        const interacting = gesture || renderer.flipProgress < 1 || motionSettling || now - lastPointerMove < 500;
+        const interacting = gesture || renderer.flipProgress < 1 || motionSettling || renderer.wantsHighFrameRate || now - lastPointerMove < 500;
         const interval = interacting ? 1000 / 60 : 1000 / 30;
         if (now - lastDraw < interval - 1) { schedule(); return; }
         const delta = Math.max(.001, (now - previousTime) / 1000);

@@ -4,73 +4,70 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex">
-  <meta name="theme-color" content="#10141c">
-  <title>Визитка — три материала</title>
+  <meta name="theme-color" content="#0b0d11">
+  <title>Визитка — студийный металл</title>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; background: #10141c; color: #eef1f5; font: 16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
-    main { max-width: 1120px; margin: auto; padding: 56px 28px 72px; }
-    header { margin-bottom: 34px; }
+    body { margin: 0; background: #0b0d11; color: #eef1f5; font: 16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width: 1160px; margin: auto; padding: 56px 28px 72px; }
+    header { margin-bottom: 34px; display: flex; gap: 24px; align-items: end; justify-content: space-between; flex-wrap: wrap; }
     small { color: #8793a3; letter-spacing: .16em; font-size: 11px; }
     h1 { font-size: clamp(28px,4vw,44px); font-weight: 500; letter-spacing: -.04em; margin: 8px 0 12px; }
-    header p { color: #a7b2c2; margin: 0; max-width: 660px; }
+    header p { color: #a7b2c2; margin: 0; max-width: 640px; }
+    .lab-link { display: inline-flex; gap: 10px; align-items: center; padding: 12px 18px; border-radius: 12px; border: 1px solid #ffffff26;
+      background: linear-gradient(180deg,#ffffff14,#ffffff06); color: #fff; text-decoration: none; font-weight: 500; white-space: nowrap; }
+    .lab-link:hover { background: #ffffff1f; }
+    .lab-link span { color: #9aa6b5; font-weight: 400; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
-    .option { color: inherit; text-decoration: none; border: 1px solid #ffffff16; border-radius: 16px; overflow: hidden; background: #161c26; }
-    .option:focus-visible { outline: 2px solid #b7d3eb; outline-offset: 4px; }
-    .scene { height: 265px; display: flex; align-items: center; justify-content: center; padding: 32px; }
-    .sample { width: 100%; max-width: 350px; aspect-ratio: 1.82; padding: 26px 35px; display: flex; flex-direction: column; justify-content: center; clip-path: polygon(0 0,87% 0,100% 50%,87% 100%,0 100%); transform: rotate(-3deg); transition: transform .35s; }
-    .option:hover .sample { transform: rotate(0deg) translateY(-3px); }
-    .mark { width: 94px; margin-bottom: 20px; }
-    .mark svg { display: block; width: 100%; height: auto; fill: currentColor; }
-    .person { font-size: 13px; font-weight: 500; letter-spacing: -.025em; white-space: nowrap; }
-    .role { font-size: 8px; opacity: .85; }
-    .contact { font-size: 8px; line-height: 1.55; margin-top: 14px; }
-    .caption { padding: 20px 24px 24px; }
-    .caption h2 { font-size: 21px; font-weight: 500; margin: 0 0 5px; }
+    .option { color: inherit; text-decoration: none; border: 1px solid #ffffff14; border-radius: 16px; overflow: hidden; background: #12161d; transition: border-color .2s, transform .3s; }
+    .option:hover { border-color: #ffffff33; transform: translateY(-2px); }
+    .option:focus-visible, .lab-link:focus-visible { outline: 2px solid #b7d3eb; outline-offset: 4px; }
+    .option img { display: block; width: 100%; height: auto; aspect-ratio: 1020 / 600; object-fit: cover; background: #07080b; }
+    .caption { padding: 18px 22px 22px; }
+    .caption h2 { font-size: 21px; font-weight: 500; margin: 0 0 4px; }
     .caption p { font-size: 14px; color: #a7b2c2; margin: 0; }
     .caption span { float: right; color: #94a1b3; }
-    .current .scene { background: radial-gradient(ellipse at 50% 40%,#2c394a,#0a1018); }
-    .current .sample { background: radial-gradient(ellipse at 42% 25%,#e4e8ec,#91999f); color: #222930; }
-    .current .mark { filter: drop-shadow(0 1px 0 #edf5ff88); }
-    .ivory .scene { background: radial-gradient(ellipse at 45% 20%,#fffdf4,#dacdb8); }
-    .ivory .sample { background: repeating-linear-gradient(0deg,transparent 0 2px,#66502c05 2px 3px),radial-gradient(ellipse at 40% 25%,#ede7d8,#c0b69f); color: #3b3024; }
-    .ivory .mark, .ivory .person { color: #76532b; filter: drop-shadow(0 1px 0 #fbe4b5) drop-shadow(0 -1px 0 #49321b); }
-    .obsidian .scene { background: radial-gradient(ellipse at 50% 30%,#263746,#030609); }
-    .obsidian .sample { background: repeating-linear-gradient(0deg,transparent 0 2px,#a1bdce04 2px 3px),radial-gradient(ellipse at 40% 25%,#344552,#141c24); color: #c4cdd5; }
-    .obsidian .mark, .obsidian .person { color: #a9bbc9; filter: drop-shadow(0 -1px 0 #eff8ff88) drop-shadow(0 2px 0 #000b); }
-    .prism .scene { background: radial-gradient(ellipse at 45% 20%,#8356cc,#092250 70%,#341143); }
-    .prism .sample { background: radial-gradient(ellipse at 30% 25%,#a9d7ec88,transparent 70%),linear-gradient(115deg,#539cad,#9c81c2 65%,#be8bae); color: #221d3f; }
-    .prism .mark, .prism .person { color: #34234f; filter: drop-shadow(0 1px 0 #dfd4ffbb) drop-shadow(0 -1px 0 #25103899); }
-    footer { color: #8e9bad; font-size: 13px; margin-top: 28px; }
+    .notes { margin-top: 36px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; color: #a7b2c2; font-size: 14px; }
+    .notes h3 { color: #eef1f5; font-size: 15px; font-weight: 500; margin: 0 0 6px; }
+    .notes p { margin: 0; }
+    footer { color: #8e9bad; font-size: 13px; margin-top: 36px; }
     footer a { color: #c3cddb; }
-    @media(max-width:700px) { main { padding: 30px 18px; } .grid { grid-template-columns: 1fr; } .scene { height: 240px; padding: 24px; } }
-    @media(prefers-reduced-motion:reduce) { .sample { transition: none; } }
+    @media(max-width:760px) { main { padding: 30px 18px; } .grid, .notes { grid-template-columns: 1fr; } }
+    @media(prefers-reduced-motion:reduce) { .option { transition: none; } }
   </style>
 </head>
 <body><main>
   <header>
-    <small>ROMAN ROZHDESTVENSKIY / MATERIAL STUDIES</small>
-    <h1>Одна форма. Три материала.</h1>
-    <p>Одинаковые пропорции и раскладка. Разные покрытия, полировка и рельеф. Все варианты интерактивны, на русском и английском.</p>
+    <div>
+      <small>ROMAN ROZHDESTVENSKIY / STUDIO METAL</small>
+      <h1>Четыре металла. Одна студия.</h1>
+      <p>Процедурная студия со световыми панелями, HDR и свечение бликов, анизотропная шлифовка, алмазная фаска по контуру. Наклоните телефон — отражения поедут по металлу.</p>
+    </div>
+    <a class="lab-link" href="lab/">Демо-стенд <span>материалы · рельеф · свет</span></a>
   </header>
   <div class="grid">
-    <a class="option current" href="/">
-      <div class="scene"><div class="sample">{{CARD}}</div></div>
-      <div class="caption"><span>↗</span><h2>Текущая версия</h2><p>Сатинированное серебро · студийный фон</p></div>
+    <a class="option" href="steel/">
+      <img src="previews/steel.webp" alt="Стальная карточка с круговой шлифовкой" width="1020" height="600">
+      <div class="caption"><span>↗</span><h2>01 — Steel</h2><p>Круговая шлифовка · алмазная V-резка · чёрная эмаль</p></div>
     </a>
-    <a class="option ivory" href="ivory/">
-      <div class="scene"><div class="sample">{{CARD}}</div></div>
-      <div class="caption"><span>↗</span><h2>01 — Ivory</h2><p>Светлый титан · выпуклый металл цвета шампань · тёплая студия</p></div>
+    <a class="option" href="noir/">
+      <img src="previews/noir.webp" alt="Чёрная PVD-карточка со светлой кромкой" width="1020" height="600">
+      <div class="caption"><span>↗</span><h2>02 — Noir</h2><p>Чёрный PVD · лазер до голой стали · зеркальная фаска</p></div>
     </a>
-    <a class="option obsidian" href="obsidian/">
-      <div class="scene"><div class="sample">{{CARD}}</div></div>
-      <div class="caption"><span>↗</span><h2>02 — Obsidian</h2><p>Матовый gunmetal · полированный чёрный хром · холодная кромка</p></div>
+    <a class="option" href="gold/">
+      <img src="previews/gold.webp" alt="Золотая карточка с линейной шлифовкой" width="1020" height="600">
+      <div class="caption"><span>↗</span><h2>03 — Champagne</h2><p>Шлифованное золото · зеркальная V-резка · чёрная эмаль</p></div>
     </a>
-    <a class="option prism" href="prism/">
-      <div class="scene"><div class="sample">{{CARD}}</div></div>
-      <div class="caption"><span>↗</span><h2>03 — Prism</h2><p>Переливчатый титан · углублённые надписи · сине-фиолетовый свет</p></div>
+    <a class="option" href="aurora/">
+      <img src="previews/aurora.webp" alt="Анодированная титановая карточка с переливом" width="1020" height="600">
+      <div class="caption"><span>↗</span><h2>04 — Aurora</h2><p>Анодированный титан · интерференция · лазерный отжиг</p></div>
     </a>
   </div>
-  <footer>Откройте вариант, чтобы увидеть свет и рельеф в движении. <a href="/">Вернуться к текущей версии</a></footer>
+  <section class="notes">
+    <div><h3>V-резка</h3><p>Логотип вырезан двумя полированными гранями. Одна ловит свет, другая уходит в тень — буквы читаются объёмом, а не краской.</p></div>
+    <div><h3>Эмаль и лазер</h3><p>Имя — выемка, залитая полуглянцевой эмалью. Контакты — лазерная маркировка: тёмный отжиг на металле или снятое покрытие на PVD.</p></div>
+    <div><h3>Сравнение</h3><p>На стенде можно переключить логотип на углублённый или выпуклый, остановить свет в нужной точке и подобрать экспозицию.</p></div>
+  </section>
+  <footer>Предыдущий раунд: <a href="ivory/">Ivory</a>, <a href="obsidian/">Obsidian</a>, <a href="prism/">Prism</a>. <a href="/">Текущая версия сайта</a></footer>
 </main></body>
 </html>

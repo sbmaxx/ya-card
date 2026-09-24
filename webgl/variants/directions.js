@@ -1,71 +1,103 @@
-// Material-only studies: the original contour, thickness, size and layout are shared.
-// The existing homepage is not part of this build.
+// Studio editions. Every edition shares the card contour, layout, controller
+// and studio; only the finish, the lettering process and the room tint differ.
+// Colours in `look` are linear reflectances (F0) or linear albedo, not sRGB.
+//
+// Lettering processes:
+// - `vcut`    — diamond V-cut: two polished walls meet at the bottom of the groove.
+// - `enamel`  — cut-and-fill: a shallow cut filled with gloss enamel, polished lip.
+// - `anneal`  — laser annealing: dark oxide in the metal, no depth, faint sheen.
+// - `ablate`  — laser ablation: the coating is removed and bare frosted steel shows.
 const directions = {
-    ivory: {
-        id: 'ivory', title: 'Ivory / титан и шампань',
-        finish: { metal: [.89, .85, .76], edge: [.62, .53, .38], ink: '#322b24', secondary: '#494037' },
-        markLow: [.21, .14, .07], markHigh: [.93, .77, .49],
-        relief: { nameSize: 22, name: { depth: .50, bevel: .65, raised: true, wall: .72 },
-            logo: { depth: 1.30, bevel: 1.10, raised: true, wall: .98, machined: true } },
-        background: '#e9e3d9', shadow: '#493b29',
+    steel: {
+        id: 'steel', title: 'Steel', caption: 'Круговая шлифовка · алмазная V-резка · эмаль',
+        look: {
+            plate: { f0: [.60, .60, .62], rough: .30, aniso: .30, brush: 'circular', center: [.76, .50], centerPortrait: [.50, .80] },
+            chamfer: { f0: [.93, .93, .95], rough: .03 },
+            side: { f0: [.62, .62, .64], rough: .22 },
+            logo: { process: 'vcut', f0: [.88, .88, .90], rough: .025 },
+            name: { process: 'enamel', albedo: [.006, .007, .009], lip: [.90, .90, .92] },
+            text: { process: 'anneal', albedo: [.018, .019, .022] },
+            studio: { key: [1, .97, .93], fill: [.80, .88, 1], bounce: .62, exposure: .95 }
+        },
+        relief: { nameSize: 22, logo: 'vcut', name: { depth: .55, bevel: .55 } },
+        background: '#0b0d11', shadow: '#000000',
         css: `
-            :root { color-scheme: light; }
-            :root, body, .ambient { background-color: #e9e3d9; color: #302921; }
-            .ambient::before { background: radial-gradient(ellipse at 44% 32%, #fffdf4 0%, #f7f0de88 40%, transparent 72%), linear-gradient(125deg,#ded4c3,#f2eee5 52%,#d8ccba); }
-            .ambient::after { background: radial-gradient(ellipse at 50% 42%, transparent 35%, #9e896632 100%); }
-            .languages { border-color: #493b2929; background: #ffffff70; }
-            .languages a { color: #4d413599; }
-            .languages a + a { border-color: #493b2929; }
-            .languages a[aria-current] { color: #31271e; background: #bbaa8f55; }
-            .languages a:hover { color: #30251b; background: #bbaa8f33; }
-            .links-overlay, .edition-link { color: #5a4d3ecc; }
-            .links-overlay a:hover { color: #30251b; }
-            a:focus-visible, .scene:focus-visible { outline-color: #73512b; }
-            .face { background: linear-gradient(145deg,#ece6d6,#c5bba4); color: #322b24; }
-            .face .logo path { fill: #73532c !important; }
-            .face h1 { color: #73532c; text-shadow: 0 1px #f9e3b7, 0 -1px #302415; }
+            :root, body, .ambient { background-color: #0b0d11; }
+            .ambient::before { background: radial-gradient(ellipse at 42% 36%, #8a96a633 0%, #5a667514 38%, transparent 70%), linear-gradient(125deg,#07090c,#161b22 52%,#0a0c10); }
+            .ambient::after { background: radial-gradient(ellipse at 50% 46%, transparent 24%, #000a 100%); }
+            .face { background: radial-gradient(ellipse at 34% 30%,#f1f3f5,#9aa0a6 80%); color: #111418; }
+            .face .logo path { fill: #2a2e33 !important; }
         `
     },
-    obsidian: {
-        id: 'obsidian', title: 'Obsidian / чёрный хром',
-        finish: { metal: [.078, .091, .11], edge: [.24, .29, .36], ink: '#c4cdd5', secondary: '#a4b0ba' },
-        markLow: [.23, .28, .34], markHigh: [.93, .97, 1],
-        relief: { nameSize: 22, name: { depth: .65, bevel: .75, raised: true, wall: .85 },
-            logo: { depth: 1.60, bevel: 1.15, raised: true, wall: 1, machined: true } },
-        background: '#030609', shadow: '#000000',
+    noir: {
+        id: 'noir', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
+        look: {
+            plate: { f0: [.05, .051, .056], rough: .30, aniso: .22, brush: 'linear', coat: .012 },
+            chamfer: { f0: [.94, .94, .96], rough: .025 },
+            side: { f0: [.05, .05, .055], rough: .30 },
+            logo: { process: 'ablate', f0: [.92, .92, .94], rough: .14 },
+            name: { process: 'ablate', f0: [.80, .80, .82], rough: .20 },
+            text: { process: 'ablate', f0: [.70, .70, .72], rough: .42 },
+            studio: { key: [1, .98, .95], fill: [.75, .85, 1], bounce: .70, exposure: 1.2 }
+        },
+        relief: { nameSize: 22, logo: 'vcut', name: { depth: .35, bevel: .45 } },
+        background: '#040506', shadow: '#000000',
         css: `
-            :root, body, .ambient { background-color: #030609; }
-            .ambient::before { background: radial-gradient(ellipse at 48% 42%, #596b8055 0%, #26354422 40%, transparent 68%), linear-gradient(135deg,#020406,#111a23,#030609); }
-            .ambient::after { background: radial-gradient(ellipse at 50% 45%,transparent 25%,#000b 100%); }
-            .languages { border-color: #bad5ec33; background: #0a101c99; }
-            .languages a[aria-current] { color: #e4f5ff; background: #a9cfee24; }
-            .links-overlay, .edition-link { color: #c7d8ebaa; }
-            .face { background: radial-gradient(ellipse at 40% 25%,#354554,#151d25 75%); color: #c4cdd5; border-color: #c2daed44; }
-            .face .logo path { fill: #a9bbc9 !important; }
-            .face h1 { color: #a9bbc9; text-shadow: 0 1px #000, 0 -1px #ddeeff99; }
-            .face a:focus-visible { outline-color: #e4f5ff; }
+            :root, body, .ambient { background-color: #040506; }
+            .ambient::before { background: radial-gradient(ellipse at 44% 38%, #5d6a7a2e 0%, #2a334010 40%, transparent 70%), linear-gradient(135deg,#020304,#0d1117 52%,#030405); }
+            .ambient::after { background: radial-gradient(ellipse at 50% 46%, transparent 22%, #000c 100%); }
+            .face { background: radial-gradient(ellipse at 34% 28%,#2a2d31,#0c0d0f 78%); color: #d7dbe0; border: 1px solid #ffffff2a; }
+            .face .logo path { fill: #e8ebee !important; }
+            .face a:focus-visible { outline-color: #fff; }
         `
     },
-    prism: {
-        id: 'prism', title: 'Prism / интерференционный титан',
-        finish: { metal: [.52, .67, .83], edge: [.24, .34, .55], ink: '#15152b', secondary: '#27263c' },
-        markLow: [.07, .04, .16], markHigh: [.54, .58, .78],
-        relief: { nameSize: 22, cavity: true, name: { depth: .60, bevel: .75, raised: false, wall: .75 },
-            logo: { depth: 1.40, bevel: 1.20, raised: false, wall: .98, machined: true } },
-        background: '#10123a', shadow: '#060821',
+    gold: {
+        id: 'gold', title: 'Champagne', caption: 'Шлифованное золото · зеркальная V-резка · чёрная эмаль',
+        look: {
+            plate: { f0: [.92, .70, .42], rough: .32, aniso: .26, brush: 'linear' },
+            chamfer: { f0: [1.0, .82, .52], rough: .03 },
+            side: { f0: [.90, .70, .42], rough: .22 },
+            logo: { process: 'vcut', f0: [1.0, .80, .50], rough: .025 },
+            name: { process: 'enamel', albedo: [.006, .005, .004], lip: [1.0, .82, .52] },
+            text: { process: 'anneal', albedo: [.030, .018, .010] },
+            studio: { key: [1, .93, .84], fill: [.95, .88, .80], bounce: .55, exposure: .9 }
+        },
+        relief: { nameSize: 22, logo: 'vcut', name: { depth: .55, bevel: .55 } },
+        background: '#0d0a07', shadow: '#000000',
         css: `
-            :root, body, .ambient { background-color: #10123a; }
-            .ambient::before { background: radial-gradient(ellipse at 48% 40%,#b281ff88 0%,#7065e644 36%,transparent 70%), linear-gradient(125deg,#054669,#30228d 50%,#5a174c); }
-            .ambient::after { background: radial-gradient(ellipse at 50% 44%,transparent 22%,#070b3099 100%); }
-            .languages { border-color: #cbc9ff44; background: #27225c88; }
-            .languages a[aria-current] { background: #c8bcff3b; }
-            .links-overlay, .edition-link { color: #eee5ffbb; }
-            .face { background: linear-gradient(125deg,#6de1df,#a79aef 48%,#ecc1dc); color: #15152f; border-color: #dddbff99; }
-            .face .logo path { fill: #34234f !important; }
-            .face h1 { color: #34234f; text-shadow: 0 1px #e4dcff99, 0 -1px #21133199; }
+            :root, body, .ambient { background-color: #0d0a07; }
+            .ambient::before { background: radial-gradient(ellipse at 42% 36%, #a38a6533 0%, #6a553a14 38%, transparent 70%), linear-gradient(125deg,#080604,#1c1610 52%,#0b0906); }
+            .ambient::after { background: radial-gradient(ellipse at 50% 46%, transparent 24%, #000b 100%); }
+            .face { background: radial-gradient(ellipse at 34% 30%,#f3dfb8,#a88652 80%); color: #1a120a; }
+            .face .logo path { fill: #3a2a16 !important; }
+        `
+    },
+    aurora: {
+        id: 'aurora', title: 'Aurora', caption: 'Анодированный титан · интерференция · лазер до металла',
+        look: {
+            plate: { film: true, rough: .28, aniso: .18, brush: 'linear' },
+            chamfer: { f0: [.62, .60, .58], rough: .03 },
+            side: { f0: [.55, .53, .52], rough: .25 },
+            logo: { process: 'vcut', f0: [.66, .64, .62], rough: .02 },
+            name: { process: 'anneal', albedo: [.012, .011, .016] },
+            text: { process: 'anneal', albedo: [.016, .014, .022] },
+            studio: { key: [1, .97, .95], fill: [.85, .88, 1], bounce: .62, exposure: 1.05 }
+        },
+        relief: { nameSize: 22, logo: 'vcut', name: { depth: .40, bevel: .50 } },
+        background: '#07080f', shadow: '#000000',
+        css: `
+            :root, body, .ambient { background-color: #07080f; }
+            .ambient::before { background: radial-gradient(ellipse at 44% 38%, #5b58a033 0%, #2e3a6a14 40%, transparent 70%), linear-gradient(125deg,#05060c,#141a2c 52%,#0b0712); }
+            .ambient::after { background: radial-gradient(ellipse at 50% 46%, transparent 22%, #000b 100%); }
+            .face { background: linear-gradient(125deg,#5d8fb0,#7c6bb0 48%,#b7896a); color: #0f0d18; }
+            .face .logo path { fill: #1c1a26 !important; }
         `
     }
 };
 
-export const direction = directions[typeof __CARD_VARIANT__ === 'string' ? __CARD_VARIANT__ : 'ivory'];
+// Edition pages have the id compiled in; the lab page reads `?edition=`.
+const compiled = typeof __CARD_VARIANT__ === 'string' ? __CARD_VARIANT__ : null;
+const requested = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('edition');
+export const direction = directions[compiled && compiled !== 'lab' ? compiled
+    : Object.hasOwn(directions, requested) ? requested : 'steel'];
 export { directions };
