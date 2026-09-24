@@ -16,6 +16,10 @@ const lab = globalThis.__cardLab = {
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
     nameDepth: number('nameDepth', 1),
+    textMute: number('textMute', .3),
+    logoTint: /^[0-9a-f]{6}$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
+    nameTint: /^[0-9a-f]{6}$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
+    tintFinish: params.get('tintFinish') === 'anod' ? 'anod' : 'enamel',
     backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : 'studio',
     manualLight: params.get('light') === 'manual',
     yaw: number('yaw', 0),
@@ -47,6 +51,10 @@ style.textContent = direction.css + `
 .lab .actions button { flex: 1; appearance: none; border: 1px solid #ffffff22; border-radius: 8px; padding: 7px 6px; background: #ffffff0d; color: #e8ebf0; font: inherit; cursor: pointer; }
 .lab .actions button:hover { background: #ffffff1c; }
 .lab p { margin: 8px 0 0; color: #7d8794; font-size: 11px; }
+.lab .swatches { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.lab .swatches span { width: 62px; color: #9aa3b0; }
+.lab .swatches button { appearance: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
+.lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
 .lab .close { appearance: none; border: 0; background: #ffffff14; color: #cfd6df; width: 26px; height: 26px; border-radius: 50%;
   font: 16px/26px -apple-system, sans-serif; cursor: pointer; margin-left: 10px; padding: 0; }
 .lab .close:hover { background: #ffffff26; }
@@ -79,6 +87,8 @@ style.textContent = direction.css + `
 document.head.append(style);
 document.title = `Lab · ${direction.title}`;
 
+const swatches = [['', 'Металл'], ['fc3f1d', 'Яндекс-красный'], ['111214', 'Чёрный'], ['f2f1ee', 'Белый'],
+    ['1f3c8a', 'Синий'], ['0f5a3c', 'Изумруд'], ['6d1320', 'Бордо'], ['c9a45c', 'Золото']];
 const labels = { vcut: 'V-резка', deboss: 'Углублённый', raised: 'Выпуклый' };
 const panel = document.createElement('aside');
 panel.className = 'lab';
@@ -104,6 +114,16 @@ panel.innerHTML = `
     ${Object.entries({ edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === currentNameShape}">${label}</button>`).join('')}
   </div>
     <label class="range" style="margin-top:8px">Глубина имени <output data-for="nameDepth"></output><input type="range" name="nameDepth" min="0" max="3" step=".05" value="${lab.nameDepth}"></label>
+  </fieldset>
+  <fieldset><legend>Цвет букв</legend>
+    ${['logoTint', 'nameTint'].map(key => `<div class="swatches" data-tint="${key}"><span>${key === 'logoTint' ? 'Логотип' : 'Имя'}</span>
+      ${swatches.map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[key]}" style="--swatch:${hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+    </div>`).join('')}
+    <div class="segments" data-live="tintFinish" style="margin-top:6px">
+      <button type="button" data-value="enamel" aria-pressed="${lab.tintFinish === 'enamel'}">Эмаль</button>
+      <button type="button" data-value="anod" aria-pressed="${lab.tintFinish === 'anod'}">Анодировка</button>
+    </div>
+    <label class="range" style="margin-top:8px">Приглушение текста <output data-for="textMute"></output><input type="range" name="textMute" min="0" max=".8" step=".02" value="${lab.textMute}"></label>
   </fieldset>
   <div class="tuning"><fieldset><legend>Свет</legend>
     <label class="check"><input type="checkbox" name="manual" ${lab.manualLight ? 'checked' : ''}> Стоп-кадр света</label>
@@ -135,8 +155,10 @@ const writeUrl = () => {
     next.set('layout', currentLayout);
     next.set('name', currentNameShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
+    for (const key of ['logoTint', 'nameTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
+    next.set('tintFinish', lab.tintFinish);
     history.replaceState(null, '', `?${next}${location.hash}`);
 };
 const reloadWith = (key, value) => {
@@ -163,6 +185,20 @@ panel.querySelector('[data-live="backdrop"]').addEventListener('click', event =>
     if (button) { applyBackdrop(button.dataset.value); writeUrl(); }
 });
 applyBackdrop(lab.backdrop);
+panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab[row.dataset.tint] = button.dataset.value;
+    row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    writeUrl();
+}));
+panel.querySelector('[data-live="tintFinish"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.tintFinish = button.dataset.value;
+    panel.querySelectorAll('[data-live="tintFinish"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    writeUrl();
+});
 let reliefQueued = false;
 const showValue = input => { panel.querySelector(`output[data-for="${input.name}"]`).textContent = Number(input.value).toFixed(2); };
 panel.querySelectorAll('input[type=range]').forEach(input => {
@@ -216,6 +252,8 @@ let frames = 0, since = performance.now();
         // Visible in both states: panel header when open, the toggle when collapsed.
         fps.textContent = rate;
         toggle.textContent = `Стенд · ${rate}`;
+        const warm = globalThis.__cardRenderer?.settleStats;
+        if (warm) fps.title = `Прогрев до показа: ${warm.frames} кадров, ${Math.round(warm.total)} мс; кадр ${warm.first.toFixed(1)} → ${warm.last.toFixed(1)} мс`;
         frames = 0; since = now;
     }
     requestAnimationFrame(count);

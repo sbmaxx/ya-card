@@ -108,16 +108,30 @@ vec3 toSRGB(vec3 c) {
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
 }`;
 
-// Backdrops: a studio cyclorama rendered with the card, lit by the same key and
-// receiving the card's real, blurred shadow. `void` keeps the CSS page background.
+// Backdrops: rendered with the card, lit by the same key light and receiving
+// the card's real, blurred shadow; the room the metal reflects follows them.
+// `kind` selects a surface; its pattern is baked once into a texture.
+// `void` keeps the original CSS page background.
+const KIND = { plain: 0, stone: 1, marble: 2, velvet: 3, concrete: 4, beam: 5, stage: 6 };
+const tint = direction.tint || [.8, .85, 1];
 export const BACKDROPS = {
     void: null,
-    studio: { title: 'Графит', wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
-        grain: .022, stone: 0, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', light: false },
-    paper: { title: 'Бумага', wall: [.56, .55, .53], floor: [.40, .395, .38], pool: [.30, .29, .275],
-        grain: .014, stone: 0, shadow: .52, roomBase: .20, bounce: 1.9, css: '#c9c7c2', light: true },
-    stone: { title: 'Камень', wall: [.034, .034, .036], floor: [.015, .015, .016], pool: [.13, .125, .12],
-        grain: .018, stone: 1, shadow: .82, roomBase: .018, bounce: 1.1, css: '#101112', light: false }
+    stage: { title: 'Сцена', kind: KIND.stage, wall: [.010, .011, .013], floor: [.004, .004, .005], pool: [.11, .115, .125],
+        accent: [0, 0, 0], grain: .018, shadow: .7, roomBase: .012, bounce: 1.0, css: '#08090b', light: false },
+    studio: { title: 'Графит', kind: KIND.plain, wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
+        accent: [0, 0, 0], grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', light: false },
+    beam: { title: 'Луч', kind: KIND.beam, wall: [.010, .011, .014], floor: [.005, .005, .006], pool: tint.map(v => v * .05),
+        accent: tint.map(v => v * .55), grain: .02, shadow: .6, roomBase: .015, bounce: 1.1, css: '#07080b', light: false },
+    marble: { title: 'Мрамор', kind: KIND.marble, wall: [.020, .020, .022], floor: [.010, .010, .011], pool: [.10, .10, .10],
+        accent: [.30, .29, .27], grain: .012, shadow: .8, roomBase: .02, bounce: 1.1, css: '#0c0c0d', light: false },
+    velvet: { title: 'Бархат', kind: KIND.velvet, wall: [.006, .008, .020], floor: [.003, .004, .010], pool: [.03, .035, .07],
+        accent: [.06, .07, .15], grain: .014, shadow: .85, roomBase: .015, bounce: 1.0, css: '#070a16', light: false },
+    stone: { title: 'Камень', kind: KIND.stone, wall: [.034, .034, .036], floor: [.015, .015, .016], pool: [.13, .125, .12],
+        accent: [0, 0, 0], grain: .018, shadow: .82, roomBase: .018, bounce: 1.1, css: '#101112', light: false },
+    concrete: { title: 'Цемент', kind: KIND.concrete, wall: [.27, .255, .235], floor: [.17, .16, .15], pool: [.20, .19, .175],
+        accent: [0, 0, 0], grain: .016, shadow: .6, roomBase: .12, bounce: 1.6, css: '#8e8a84', light: true },
+    paper: { title: 'Бумага', kind: KIND.plain, wall: [.56, .55, .53], floor: [.40, .395, .38], pool: [.30, .29, .275],
+        accent: [0, 0, 0], grain: .014, shadow: .52, roomBase: .20, bounce: 1.9, css: '#c9c7c2', light: true }
 };
 const requestedBackdrop = new URLSearchParams(location.search).get('backdrop');
 export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'void');
@@ -168,6 +182,12 @@ uniform float uLogoScale;
 uniform vec2 uBrushCenter;
 uniform vec3 uKeyDirection;
 uniform vec2 uRaisedHeight;
+uniform float uMirror;
+uniform float uFloorY;
+uniform vec4 uLogoTint;
+uniform vec4 uNameTint;
+uniform float uTintFinish;
+uniform float uTextMute;
 uniform float uRoomBase;
 uniform float uBounce;
 in vec3 vPosition;
@@ -200,7 +220,8 @@ float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur) {
 }
 
 vec3 room(vec3 world, float rough) {
-    vec3 d = uRoom * world;
+    // The floor reflection sees the room mirrored as well.
+    vec3 d = uRoom * (world * vec3(1.0, uMirror > .5 ? -1.0 : 1.0, 1.0));
     float blur = .004 + rough * rough * 1.5;
     // Dark floor, dim ceiling and a faint horizon for the side walls.
     vec3 col = mix(vec3(.006, .006, .007), vec3(.045, .047, .052), smoothstep(-.6, .9, d.y));
@@ -319,6 +340,11 @@ void main() {
         float slope = length(slopeXY);
         vec3 facet = normalize(T * slopeXY.x + B * slopeXY.y + n * sqrt(max(.01, 1.0 - dot(slopeXY, slopeXY))));
         float depth = relief.b;
+        // Specular anti-aliasing (Kaplanyan–Hoffman): where the relief normal
+        // turns faster than a pixel can show, widen the reflection instead of
+        // letting a mirror flicker between a bright panel and dark room.
+        vec3 dnx = dFdx(facet), dny = dFdy(facet);
+        float letterRough = sqrt(min((dot(dnx, dnx) + dot(dny, dny)) * .6, .20));
 
         // Links: underline and keyboard focus are drawn with the text process.
         vec2 aa = max(fwidth(vUV) * .7, vec2(1e-5));
@@ -354,6 +380,19 @@ void main() {
             ${letteringCode('name', nameLook)}
             ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
             ${letteringCode('text', look.text, true)}
+            // Colour: enamel fills the flat faces and leaves polished bevels;
+            // anodising colours the metal itself, bevels included.
+            float letterEdge = smoothstep(.12, .45, slope) * resolved;
+            if (uLogoTint.a > .5) {
+                vec3 anod = metal(uLogoTint.rgb, facet, v, max(.06, letterRough));
+                logoColor = mix(mix(gloss(uLogoTint.rgb * 1.9, n, v, .10), anod, uTintFinish), mix(logoColor, anod, uTintFinish), letterEdge);
+            }
+            if (uNameTint.a > .5) {
+                vec3 anod = metal(uNameTint.rgb, facet, v, max(.06, letterRough));
+                nameColor = mix(mix(gloss(uNameTint.rgb * 1.9, n, v, .10), anod, uTintFinish), mix(nameColor, anod, uTintFinish), letterEdge);
+            }
+            // Role and contacts sit back: a shallower mark, closer to the plate.
+            textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
             // Links are always drawn with the body-text process.
             float linkMark = max(underline, focusStroke);
@@ -369,6 +408,12 @@ void main() {
         return;
     }
     vec3 display = toSRGB(neutralTonemap(hdr));
+    if (uMirror > .5) {
+        // Reflection in black acrylic: dim, fading with distance below the floor.
+        float fade = .40 * exp(-max(uFloorY - vPosition.y, 0.0) * 1.1) * uOpacity;
+        outColor = vec4(display * fade, fade);
+        return;
+    }
     outColor = vec4(display * uOpacity, uOpacity);
 }`;
 
@@ -378,15 +423,15 @@ function letteringCode(name, m, flat = false) {
     if (m.process === 'vcut') return `
             // Diamond V-cut: both walls are polished; the lower groove is occluded.
             float ${name}Wall = smoothstep(.02, .20, slope);
-            vec3 ${out} = metal(${name.toUpperCase()}_F0, facet, v, ${f(m.rough)}) * mix(1.0, .9, ${name}Wall);`;
+            vec3 ${out} = metal(${name.toUpperCase()}_F0, facet, v, max(${f(m.rough)}, letterRough)) * mix(1.0, .9, ${name}Wall);`;
     if (m.process === 'enamel') return `
             // Cut-and-fill: gloss enamel sits a hair below a polished lip.
             float ${name}Lip = smoothstep(.25, .55, slope) * resolved;
             vec3 ${out} = mix(gloss(${v3(m.albedo)}, n, v, .12),
-                metal(${v3(m.lip)}, facet, v, .04), ${name}Lip * .55);`;
+                metal(${v3(m.lip)}, facet, v, max(.04, letterRough)), ${name}Lip * .55);`;
     if (m.process === 'ablate') return `
             // Laser ablation: coating removed, bare frosted steel below.
-            vec3 ${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${f(m.rough)});
+            vec3 ${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`});
             ${out} += ${name.toUpperCase()}_F0 * room(n, 1.0) * .35;`;
     return `
             // Laser annealing: dark oxide with a faint, rough sheen.
@@ -446,24 +491,7 @@ const shadowFragment = `#version 300 es
 precision mediump float;
 out vec4 outColor;
 void main() { outColor = vec4(1.0); }`;
-const backdropFragment = `#version 300 es
-precision highp float;
-uniform sampler2D uShadow;
-uniform vec2 uResolution;
-uniform vec2 uPool;
-uniform vec3 uWall;
-uniform vec3 uFloor;
-uniform vec3 uPoolColor;
-uniform vec3 uKeyDirection;
-uniform vec2 uRaisedHeight;
-uniform float uGrain;
-uniform float uStone;
-uniform float uShadowStrength;
-uniform float uShadowFade;
-in vec2 vUV;
-out vec4 outColor;
-${toneCode}
-float hash(vec2 p) {
+const noiseCode = `float hash(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
     p += dot(p, p + 45.32);
     return fract(p.x * p.y);
@@ -477,26 +505,157 @@ float fbm(vec2 p) {
     float v = 0.0, a = .5;
     for (int i = 0; i < 5; i++) { v += a * noise(p); p = p * 2.03 + 11.7; a *= .5; }
     return v;
+}`;
+
+// Surface pattern, baked once per backdrop and size: R albedo variation,
+// G accent (vein, pore, haze), BA the surface normal for raking light.
+const patternFragment = `#version 300 es
+precision highp float;
+uniform float uKind;
+uniform float uAspect;
+in vec2 vUV;
+out vec4 outColor;
+${noiseCode}
+float height(vec2 q, float kind) {
+    if (kind < 1.5) return fbm(q * 3.2);                          // honed slate
+    if (kind < 2.5) return fbm(q * 1.4) * .15;                    // polished marble
+    if (kind < 3.5) return fbm(vec2(q.x * 2.0, q.y * 5.0)) * .25; // velvet nap
+    return fbm(q * 2.6) * .35;                                     // cement, soft trowel relief
 }
+void main() {
+    vec2 q = (vUV - .5) * vec2(uAspect, 1.0);
+    float kind = uKind;
+    float albedo = .5, accent = 0.0;
+    float h = height(q, kind);
+    float e = .004;
+    vec2 grad = vec2(height(q + vec2(e, 0.0), kind) - h, height(q + vec2(0.0, e), kind) - h) / e;
+    if (kind > .5 && kind < 1.5) albedo = h;
+    if (kind > 1.5 && kind < 2.5) {
+        // Nero Marquina: domain-warped veins, a main family and fine cracks.
+        // Veins follow one diagonal grain, gently warped; thickness varies along them.
+        vec2 m = q * 1.1;
+        vec2 w = vec2(fbm(m * .8 + vec2(1.7, 9.2)), fbm(m * .8 + vec2(8.3, 2.8)));
+        float f = fbm(m + 1.3 * w);
+        float grain = m.x * .9 + m.y * .45 + f * 1.6;
+        float width = mix(.012, .055, fbm(m * 1.7 + 3.1));
+        float main = smoothstep(width, 0.0, abs(fract(grain * 1.9) - .5) - .006);
+        float branch = smoothstep(.012, 0.0, abs(fract((m.x * .4 - m.y * 1.1 + f * 2.2) * 1.3) - .5)) * .45;
+        albedo = .42 + .3 * fbm(m * 2.5 + 7.0);
+        // Veins fade in and out along their length, as in real stone.
+        accent = clamp(main * smoothstep(.35, .65, fbm(m * 2.2 + 2.0)) + branch * smoothstep(.45, .7, f), 0.0, 1.0);
+    }
+    if (kind > 2.5 && kind < 3.5) {
+        // Crushed velvet: large patches where the pile leans a different way.
+        albedo = .5 + .6 * (fbm(q * 1.3 + 3.0) - .5);
+        accent = noise(q * vec2(700.0, 260.0));
+    }
+    if (kind > 3.5 && kind < 4.5) {
+        // Micro-cement: soft trowel clouds and small pores.
+        albedo = fbm(q * 1.6 + 7.0);
+        // Sparse, tiny pores; rotated so their lattice never lines up with the screen.
+        vec2 r = mat2(.8, -.6, .6, .8) * q;
+        accent = smoothstep(.9, .97, noise(r * 330.0)) * smoothstep(.35, .65, fbm(q * 6.0 + 3.0));
+    }
+    if (kind > 4.5 && kind < 5.5) {
+        // Slow haze for the light beam.
+        albedo = fbm(q * vec2(1.4, 2.6) + 4.0);
+        accent = fbm(q * 4.0 + 9.0);
+    }
+    vec2 n = clamp(-grad * .5, -1.0, 1.0);
+    outColor = vec4(albedo, accent, n * .5 + .5);
+}`;
+
+const backdropFragment = `#version 300 es
+precision highp float;
+uniform sampler2D uShadow;
+uniform sampler2D uPattern;
+uniform vec2 uResolution;
+uniform vec2 uPool;
+uniform vec3 uWall;
+uniform vec3 uFloor;
+uniform vec3 uPoolColor;
+uniform vec3 uAccent;
+uniform vec3 uKeyDirection;
+uniform float uKind;
+uniform float uGrain;
+uniform float uShadowStrength;
+uniform float uShadowFade;
+uniform float uFocal;
+uniform float uFloorY;
+uniform vec2 uCardCenter;
+in vec2 vUV;
+out vec4 outColor;
+${toneCode}
+${noiseCode}
+
+// Wall lighting at a screen position: base tone, key light pool, pattern.
+vec3 wallColor(vec2 uv, vec2 p) {
+    float aspect = uResolution.x / uResolution.y;
+    vec3 color = uWall;
+    vec2 d = (uv - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
+    float pool = exp(-dot(d, d) * 2.6);
+    color += uPoolColor * pool;
+    vec4 pattern = texture(uPattern, uv);
+    vec3 n = normalize(vec3(pattern.ba * 2.0 - 1.0, 1.0));
+    vec3 k = normalize(uKeyDirection * vec3(1.0, 1.0, .35));
+    float rake = max(dot(n, k), 0.0);
+    if (uKind > .5 && uKind < 1.5) color *= (.78 + .44 * pattern.r) * (.72 + .56 * rake);
+    if (uKind > 1.5 && uKind < 2.5) {
+        color *= .75 + .5 * pattern.r;
+        // Polished veins catch the pool of light more than the dark ground.
+        color += uAccent * pattern.g * (.25 + 1.1 * pool);
+    }
+    if (uKind > 2.5 && uKind < 3.5) {
+        // Pile sheen: patches that face the light glow, fibres add a fine sparkle.
+        float sheen = pattern.r * (.25 + 1.3 * pool);
+        color = color * (.75 + .4 * pattern.r) + uAccent * sheen * (.8 + .4 * pattern.g);
+    }
+    if (uKind > 3.5 && uKind < 4.5) color *= (.9 + .18 * pattern.r) * (1.0 - .35 * pattern.g) * (.92 + .16 * rake);
+    if (uKind > 4.5 && uKind < 5.5) {
+        // A soft volumetric beam from the key, falling towards the card.
+        vec2 origin = vec2(.5 + uKeyDirection.x * 1.3, .5 + uKeyDirection.y * 1.3 + .25);
+        vec2 axis = normalize(vec2(.5, .48) - origin);
+        vec2 rel = (uv - origin) * vec2(aspect, 1.0);
+        float along = dot(rel, normalize(axis * vec2(aspect, 1.0)));
+        float across = length(rel - normalize(axis * vec2(aspect, 1.0)) * along);
+        float width = .10 + along * .32;
+        float beam = exp(-across * across / (width * width)) * smoothstep(0.0, .25, along) * exp(-along * .55);
+        color += uAccent * beam * (.55 + .9 * pattern.r) + uAccent * .12 * pattern.g * pool;
+    }
+    return color;
+}
+
 void main() {
     float aspect = uResolution.x / uResolution.y;
     vec2 p = (vUV - .5) * vec2(aspect, 1.0);
-    // Cyclorama: the wall curves softly into a darker floor below the card.
-    float floorAmount = smoothstep(-.12, -.62, p.y);
-    vec3 color = mix(uWall, uFloor, floorAmount);
-    // Light pool on the wall from the same key that lights the metal.
-    vec2 d = (vUV - uPool) * vec2(aspect, 1.0) * vec2(.85, 1.1);
-    color += uPoolColor * exp(-dot(d, d) * 2.6);
-    if (uStone > .5) {
-        // Honed slate: low relief lit at a raking angle by the key.
-        vec2 q = p * 3.2;
-        float h = fbm(q);
-        float hx = fbm(q + vec2(.006, 0.0)) - h, hy = fbm(q + vec2(0.0, .006)) - h;
-        vec3 n = normalize(vec3(-hx * 55.0, -hy * 55.0, 1.0));
-        vec3 k = normalize(uKeyDirection * vec3(1.0, 1.0, .35));
-        color *= (.78 + .44 * h) * (.72 + .56 * max(dot(n, k), 0.0));
+    vec3 color;
+    if (uKind > 5.5) {
+        // Stage: a camera ray either meets the glossy floor or the far wall.
+        vec2 ndc = vUV * 2.0 - 1.0;
+        vec3 dir = normalize(vec3(ndc.x * aspect / uFocal, ndc.y / uFocal, -1.0));
+        float t = dir.y < 0.0 ? uFloorY / dir.y : 1e6;
+        vec3 hit = vec3(0.0, 0.0, 7.0) + dir * t;
+        if (hit.z > -0.9) {
+            // Black acrylic: reflects the wall and pool, more at grazing angles.
+            vec3 r = vec3(dir.x, -dir.y, dir.z);
+            float tw = (-0.9 - hit.z) / r.z;
+            vec3 onWall = hit + r * tw;
+            vec2 wallUV = vec2(onWall.x * uFocal / (aspect * 7.9), onWall.y * uFocal / 7.9) * .5 + .5;
+            float fresnel = .04 + .96 * pow(1.0 - abs(dir.y), 5.0);
+            color = uFloor + wallColor(wallUV, p) * (.25 + .6 * fresnel);
+            // A soft pool of darkness right below the floating card.
+            vec2 under = vec2(hit.x - uCardCenter.x, hit.z) * vec2(.55, 1.1);
+            color *= 1.0 - .55 * exp(-dot(under, under) * 1.2) * uShadowFade;
+            // The far edge of the floor melts into the wall: no hard horizon line.
+            color = mix(wallColor(vUV, p), color, smoothstep(-.9, -.35, hit.z));
+        } else {
+            color = wallColor(vUV, p);
+        }
+    } else {
+        // Cyclorama: the wall curves softly into a darker floor below the card.
+        float floorAmount = smoothstep(-.12, -.62, p.y);
+        color = mix(wallColor(vUV, p), uFloor + (wallColor(vUV, p) - uWall) * .6, floorAmount);
     }
-    // Soft falloff to the edges of the frame.
     color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
     color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
     vec3 display = toSRGB(neutralTonemap(color));
@@ -760,15 +919,14 @@ export class CardRenderer {
         const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
             compilePrograms(gl, [[vertexSource, fragmentSource], [screenVertex, blurFragment], [screenVertex, compositeFragment],
-                [shadowVertex, shadowFragment], [screenVertex, backdropFragment]])
+                [shadowVertex, shadowFragment], [screenVertex, backdropFragment], [screenVertex, patternFragment]])
                 .then(result => { performance.mark('card:compiled'); return result; }),
             Promise.all([document.fonts.load('400 12px "Card Onest"'), document.fonts.load('500 20px "Card Onest"')]).catch(() => {})
         ]);
         const renderer = new CardRenderer(canvas, gl, images, programs);
         renderer.resize();
         renderer.warmUp();
-        // Let the warm-up frame finish before the page starts the intro clock.
-        await new Promise(resolve => requestAnimationFrame(() => resolve()));
+        await renderer.settle();
         performance.mark('card:ready');
         return renderer;
     }
@@ -778,15 +936,17 @@ export class CardRenderer {
         this.gl = gl;
         this.halfThickness = HALF_THICKNESS;
         this.images = images;
-        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
+        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram, this.patternProgram] = programs;
         if (globalThis.__cardLab) globalThis.__cardRenderer = this;
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
-        this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uKeyDirection', 'uGrain', 'uStone', 'uShadowStrength', 'uShadowFade']);
+        this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uPattern', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
+            'uAccent', 'uKeyDirection', 'uKind', 'uGrain', 'uShadowStrength', 'uShadowFade', 'uFocal', 'uFloorY', 'uCardCenter']);
+        this.patternUniforms = locate(this.patternProgram, ['uKind', 'uAspect']);
+        this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight']
+            'uLogoRect', 'uTitleRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -872,6 +1032,29 @@ export class CardRenderer {
         performance.mark('card:warm');
     }
 
+    // Keep rendering hidden frames until their cost stops falling: drivers finish
+    // deferred compilation, the GPU clocks up and uploads complete. Only then is
+    // the scene shown and the intro clock started. The loader covers this time.
+    async settle(limit = 3000) {
+        const gl = this.gl, probe = new Uint8Array(4), times = [];
+        const start = performance.now();
+        while (performance.now() - start < limit) {
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            const flipped = times.length % 2 === 1 && times.length < 6;
+            const t0 = performance.now();
+            this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 });
+            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+            times.push(performance.now() - t0);
+            if (times.length >= 8) {
+                const last = times.slice(-4);
+                if (Math.max(...last) <= Math.min(...last) * 1.35 + 1.5) break;
+            }
+        }
+        this.flipAngle = this.flipFrom = this.flipTarget = 0;
+        this.flipProgress = 1;
+        this.settleStats = { frames: times.length, first: times[0], last: times[times.length - 1], total: performance.now() - start };
+    }
+
     resize() {
         const gl = this.gl;
         // Layout size, not the transformed screen rect: a CSS transform on the
@@ -927,6 +1110,31 @@ export class CardRenderer {
         const w8 = Math.max(1, Math.round(width / 2)), h8 = Math.max(1, Math.round(height / 2));
         // Shadow at 1/4 as well: at 1/8 its bilinear upscale showed steps.
         this.targets = [make(width, height, true), make(width, height), make(w8, h8), make(w8, h8), make(width, height), make(width, height)];
+    }
+
+    // Backdrop surface pattern: baked once per kind and canvas size.
+    bakePattern(kind) {
+        const gl = this.gl;
+        const width = this.canvas.width, height = this.canvas.height;
+        if (this.pattern && this.pattern.kind === kind && this.pattern.width === width && this.pattern.height === height) return;
+        if (this.pattern) { gl.deleteTexture(this.pattern.texture); gl.deleteFramebuffer(this.pattern.framebuffer); }
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        for (const [key, value] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR],
+            [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, key, value);
+        const framebuffer = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+        gl.viewport(0, 0, width, height);
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.BLEND);
+        gl.useProgram(this.patternProgram);
+        gl.bindVertexArray(this.screenArray);
+        gl.uniform1f(this.patternUniforms.uKind, kind);
+        gl.uniform1f(this.patternUniforms.uAspect, width / height);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        this.pattern = { kind, width, height, texture, framebuffer };
     }
 
     deleteTargets() {
@@ -1128,6 +1336,20 @@ export class CardRenderer {
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
         gl.uniform2f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
+        gl.uniform1f(this.uniforms.uMirror, 0);
+        const tintOf = hex => {
+            if (!hex) return [0, 0, 0, 0];
+            const linear = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
+            return [0, 2, 4].map(i => linear(parseInt(hex.slice(i, i + 2), 16) / 255)).concat(1);
+        };
+        gl.uniform4f(this.uniforms.uLogoTint, ...tintOf(lab ? lab.logoTint : direction.logoTint));
+        gl.uniform4f(this.uniforms.uNameTint, ...tintOf(lab ? lab.nameTint : direction.nameTint));
+        gl.uniform1f(this.uniforms.uTintFinish, (lab ? lab.tintFinish : direction.tintFinish) === 'anod' ? 1 : 0);
+        gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
+        // Stage floor just below the card; it scales with the card, like a dolly.
+        const cardScale = this.zoom * fit;
+        this.floorY = -(this.height / 2 + .42) * cardScale;
+        gl.uniform1f(this.uniforms.uFloorY, this.floorY);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
@@ -1181,6 +1403,7 @@ export class CardRenderer {
                 pass(shadowB, shadowA, 0, radius);
             }
         }
+        if (backdrop && backdrop.kind !== KIND.plain) this.bakePattern(backdrop.kind);
         // 3. Backdrop, then the card at full resolution with native MSAA.
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -1193,7 +1416,16 @@ export class CardRenderer {
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, shadowA.texture);
             gl.uniform1i(u.uShadow, 0);
+            gl.activeTexture(gl.TEXTURE1);
+            gl.bindTexture(gl.TEXTURE_2D, this.pattern ? this.pattern.texture : shadowA.texture);
+            gl.uniform1i(u.uPattern, 1);
+            gl.activeTexture(gl.TEXTURE0);
             gl.uniform2f(u.uResolution, this.canvas.width, this.canvas.height);
+            gl.uniform1f(u.uKind, backdrop.kind);
+            gl.uniform3f(u.uAccent, ...backdrop.accent);
+            gl.uniform1f(u.uFocal, this.projection[5]);
+            gl.uniform1f(u.uFloorY, this.floorY);
+            gl.uniform2f(u.uCardCenter, this.model[12], 0);
             // The pool sits behind the card, offset towards the key light.
             const k = this.keyDirection;
             gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
@@ -1202,13 +1434,27 @@ export class CardRenderer {
             gl.uniform3f(u.uPoolColor, ...backdrop.pool);
             gl.uniform3f(u.uKeyDirection, ...k);
             gl.uniform1f(u.uGrain, backdrop.grain);
-            gl.uniform1f(u.uStone, backdrop.stone);
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
             gl.uniform1f(u.uShadowFade, introFade);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.program);
+        if (backdrop && backdrop.kind === KIND.stage) {
+            // The card mirrored in the floor plane, drawn faded over the floor.
+            const mirror = new Float32Array([1, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 2 * this.floorY, 0, 1]);
+            gl.uniformMatrix4fv(this.uniforms.uModel, false, multiplyMatrices(mirror, this.model));
+            gl.uniform1f(this.uniforms.uMirror, 1);
+            gl.frontFace(gl.CW);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            this.drawCard(0, null);
+            gl.disable(gl.BLEND);
+            gl.frontFace(gl.CCW);
+            gl.uniform1f(this.uniforms.uMirror, 0);
+            gl.uniformMatrix4fv(this.uniforms.uModel, false, this.model);
+            gl.clear(gl.DEPTH_BUFFER_BIT);
+        }
         this.drawCard(0, focusLink);
         // 4. Glow over the card and the page, screen-blended.
         gl.disable(gl.DEPTH_TEST);
