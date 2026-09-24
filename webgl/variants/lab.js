@@ -26,7 +26,8 @@ const lab = globalThis.__cardLab = {
     bloom: number('bloom', .3),
     keyGain: number('keyGain', .7),
     keySoft: number('keySoft', .05),
-    keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'strip',
+    keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'round',
+    lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
     idle: number('idle', 1),
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
@@ -190,6 +191,9 @@ panel.innerHTML = `
     <div class="segments" data-live="keyShape">
       ${Object.entries(KEY_SHAPES).map(([id, shape]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.keyShape}">${shape.title}</button>`).join('')}
     </div>
+    <div class="segments" data-live="lamps">
+      <button type="button" data-value="round" aria-pressed="${lab.lamps === 'round'}">Лампы: круги</button><button type="button" data-value="capsule" aria-pressed="${lab.lamps === 'capsule'}">Капсулы</button>
+    </div>
     <label class="range">Мягкость всего света <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
     <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>`)}
   <div class="tuning"><fieldset><legend>Свет</legend>
@@ -238,6 +242,7 @@ const writeUrl = () => {
     else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
     next.set('panel', panel.hidden ? '0' : '1');
     next.set('keyShape', lab.keyShape);
+    next.set('lamps', lab.lamps);
     for (const [key] of textFields) if (lab.text[key]) next.set(key, lab.text[key]); else next.delete(key);
     next.delete('tintFinish');
     for (const [key, value] of Object.entries(lab.finish)) next.set(`${key}Finish`, value);
@@ -282,6 +287,13 @@ panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click
     row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
 }));
+panel.querySelector('[data-live="lamps"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.lamps = button.dataset.value;
+    panel.querySelectorAll('[data-live="lamps"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    writeUrl();
+});
 panel.querySelector('[data-live="keyShape"]').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;

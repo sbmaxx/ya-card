@@ -265,21 +265,26 @@ float keyPanel(vec3 d, vec3 c, float blur) {
     return inside * max(body, 0.0) * smoothstep(0.0, .25, z) * energy;
 }
 
+uniform float uRoundLights;
+
 float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur) {
     float z = dot(d, c);
     vec2 p = vec2(dot(d, r), dot(d, u)) / max(z, .08);
-    // Capsule-shaped lights (fully rounded ends) with the studio's diffuser
-    // softness: no straight corners ever show in a reflection.
+    // Studio lights are round (octaboxes) by default; capsules — fully rounded
+    // long panels — remain as an option. A round light keeps the panel's area.
+    float disc = sqrt(size.x * size.y);
     float radius = min(size.x, size.y);
     vec2 q = abs(p) - size + radius;
-    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float capsule = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float sd = mix(capsule, length(p) - disc, uRoundLights);
+    vec2 shape = mix(size, vec2(disc), uRoundLights);
     float edge = blur + uKeySoft;
     float inside = smoothstep(edge, -edge, sd);
     // Real softboxes are a little brighter in the middle than at the frame.
-    vec2 span = size + edge;
+    vec2 span = shape + edge;
     float body = 1.0 - .25 * dot(p / span, p / span);
     // A rough surface spreads the same energy over a larger solid angle.
-    float energy = (size.x * size.y) / (span.x * span.y);
+    float energy = (shape.x * shape.y) / (span.x * span.y);
     return inside * max(body, 0.0) * smoothstep(0.0, .25, z) * energy;
 }
 
@@ -1078,7 +1083,7 @@ export class CardRenderer {
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1530,7 +1535,8 @@ export class CardRenderer {
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
-        const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.strip;
+        const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.round;
+        gl.uniform1f(this.uniforms.uRoundLights, (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1);
         gl.uniform1f(this.uniforms.uKeyGain, (lab ? lab.keyGain : (direction.keyGain ?? .7)) * keyShape.gain);
         gl.uniform3f(this.uniforms.uKeyRight, ...keyShape.right);
         gl.uniform3f(this.uniforms.uKeyUp, ...keyShape.up);
