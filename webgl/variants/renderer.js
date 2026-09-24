@@ -1031,12 +1031,12 @@ function logoImage(lang) {
 // Composition. `accent` makes the name the hero and the wordmark a signature.
 const LAYOUTS = {
     classic: {
-        landscape: { logo: 145, logoY: 42, center: false, name: [130], nameSize: direction.relief.nameSize, role: [152], contacts: 188, lineHeight: 18 },
-        portrait: { logo: 110, logoY: 76, center: true, name: [164, 193], nameSize: 24, role: [223, 240], contacts: 290, lineHeight: 22 }
+        landscape: { logo: 145, logoY: 42, center: false, name: [130], nameSize: direction.relief.nameSize, role: [152], contacts: 188 },
+        portrait: { logo: 110, logoY: 76, center: true, name: [164, 193], nameSize: 24, role: [223, 240], contacts: 290 }
     },
     accent: {
-        landscape: { logo: 92, logoY: 46, center: false, name: [128], nameSize: 32, role: [154], contacts: 190, lineHeight: 18 },
-        portrait: { logo: 78, logoY: 76, center: false, name: [152, 185], nameSize: 27, role: [216, 233], contacts: 284, lineHeight: 22 }
+        landscape: { logo: 92, logoY: 46, center: false, name: [128], nameSize: 32, role: [154], contacts: 190 },
+        portrait: { logo: 78, logoY: 76, center: false, name: [152, 185], nameSize: 27, role: [216, 233], contacts: 284 }
     }
 };
 const requestedLayout = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('layout');
@@ -1119,7 +1119,8 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         const metrics = context.measureText(value);
         return { ascent: metrics.actualBoundingBoxAscent, descent: Math.max(0, metrics.actualBoundingBoxDescent) };
     };
-    let nameY, nameGap, roleYs, contactsY, lineHeight = plan.lineHeight * bodyGrow;
+    // Email and Telegram sit at the role's own leading: one rhythm for the small text.
+    let nameY, nameGap, roleYs, contactsY, lineHeight;
     if (vertical) {
         // Portrait: a rhythm from the real glyph sizes rather than fixed baselines.
         // The same white space separates name → role and role → contacts; the
@@ -1130,6 +1131,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         const nameBottom = nameY + (nameLines.length - 1) * nameGap + ink(nameLines.at(-1), nameSize, 500).descent;
         const roleY = nameBottom + gap + ink(roleLines[0], textSize, bodyWeight).ascent;
         roleYs = roleLines.map((_, i) => roleY + i * roleLeading);
+        lineHeight = roleLeading;
         const roleBottom = roleYs.at(-1) + ink(roleLines.at(-1), textSize, bodyWeight).descent;
         contactsY = roleBottom + gap + ink(data.email, textSize, bodyWeight).ascent;
     } else {
@@ -1144,6 +1146,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
             - (plan.name[0] + (plan.name.length - 1) * planGap);
         const roleShift = nameShift + (roleLines.length - plan.role.length) * roleGap;
         roleYs = roleLines.map((_, i) => plan.role[0] + nameShift + i * roleGap);
+        lineHeight = roleGap;
         contactsY = plan.contacts + roleShift;
     }
     const finalBaseline = contactsY + lineHeight;
