@@ -60,7 +60,21 @@ const labCss = cornersCss + loaderCss;
         // The backdrop is rendered in WebGL: no CSS ambient layer or SVG shadow.
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '<div class="card-loader" aria-hidden="true"></div>')
         // Without WebGL 2, or if the scene never starts, open the plain card instead.
-        .replace(/document\.documentElement\.classList\.remove\('webgl-loading'\);\n\}, 8000\);/, "location.replace('../plain/' + location.hash);\n}, 8000);\nwindow.cardFallbackUrl = '../plain/';")
+        // Only time on screen counts: a background tab or a locked phone pauses
+        // the frames the warm-up waits for, and that is not a missing WebGL.
+        .replace(/window\.cardBootTimeout = setTimeout\(\(\) => \{\n    document\.documentElement\.classList\.remove\('webgl-loading'\);\n\}, 8000\);/, () => `(() => {
+    let visible = 0, last = performance.now();
+    const tick = () => {
+        const now = performance.now();
+        if (document.visibilityState === 'visible') visible += Math.min(now - last, 1000);
+        last = now;
+        if (!document.documentElement.classList.contains('webgl-loading')) return;
+        if (visible > 20000) location.replace('../plain/?why=timeout' + location.hash);
+        else window.cardBootTimeout = setTimeout(tick, 500);
+    };
+    window.cardBootTimeout = setTimeout(tick, 500);
+})();
+window.cardFallbackUrl = '../plain/';`)
         .replace('<meta name="theme-color" content="#101722">', '<meta name="theme-color" content="#0b0d11"><meta name="robots" content="noindex">')
         .replaceAll('stop-color="#02030a"', 'stop-color="#000000"')
         .replace('<link rel="stylesheet" href="./styles.css">', () => `<style>${css.code}</style>`)

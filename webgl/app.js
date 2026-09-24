@@ -390,7 +390,14 @@ import { CardRenderer } from './renderer.js';
         } catch (error) {
             console.warn('WebGL card unavailable; showing HTML contacts.', error);
             // Pages may name a separate plain version instead of the inline fallback.
-            if (window.cardFallbackUrl) { location.replace(window.cardFallbackUrl + location.hash); return; }
+            if (window.cardFallbackUrl) {
+                // A context lost while loading (memory pressure, a background tab)
+                // is not a missing WebGL: wait behind the loader for its restoration.
+                if (canvas.getContext('webgl2')?.isContextLost()) return;
+                const why = encodeURIComponent(String(error?.message || error).slice(0, 80));
+                location.replace(`${window.cardFallbackUrl}?why=${why}${location.hash}`);
+                return;
+            }
             showFallback();
         }
     }
