@@ -467,6 +467,12 @@ void main() {
         // Diamond-cut chamfer: a narrow mirror facet. The side wall is satin.
         float chamfer = smoothstep(.25, .45, abs(vFacet)) * (1.0 - smoothstep(.95, .99, abs(vFacet)));
         vec3 cut = metal(CHAMFER_F0, n, v, ${f(look.chamfer.rough)});
+        // The chamfer mirrors the ring of directions around the card (square to
+        // the view). Lamps cover only parts of it, which left dark gaps at the
+        // rounded corners; a soft, even ring keeps the edge lit all the way round.
+        vec3 around = uRoom * reflect(-v, n);
+        float ring = exp(-around.z * around.z * 6.0) * mix(.55, 1.0, smoothstep(-1.0, 1.0, around.y));
+        cut += fresnel(CHAMFER_F0, max(dot(n, v), 1e-3)) * ring * .8;
         vec3 wall = metal(SIDE_F0, n, v, ${f(look.side.rough)});
         color = mix(wall, cut, chamfer);
     } else {
