@@ -10,7 +10,7 @@ import { decodePreset } from './preset.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
-const HOME_LOOK = 'AABBCDDBAABBBABAA8AtAUATAJAJAUAUAUAUAUAHAAB4A8Cz9LWACXWFoCiQAG';
+const HOME_LOOK = 'AABBCDDBAABBBABAA8AtAUATAJAJAUAUAOAQAUAHAAB4A8CXWFoCJSgsCERIUC-GBKAeADANAJAEAHAIAE';
 const page = async (id, html, out = variantsOut) => {
     const bytes = Buffer.from(html), directory = resolve(out, id);
     await mkdir(directory, { recursive: true });
