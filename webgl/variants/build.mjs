@@ -29,7 +29,6 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 .safe-edge-top{top:0;height:max(6px,env(safe-area-inset-top,0px))}
 .safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
 @media (pointer:fine){.safe-edge{display:none}}
-:root.webgl-backdrop body{background:transparent}
 @media (hover:none) and (pointer:coarse){.ambient{display:none}}`;
 // Corners stay clean on the WebGL card: language flips with the card itself.
 // The HTML fallback keeps both controls.

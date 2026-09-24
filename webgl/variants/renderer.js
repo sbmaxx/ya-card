@@ -1270,29 +1270,34 @@ export class CardRenderer {
         // The light pool drifts; refresh now and then, not every frame.
         if (key === this.edgeKey && this.edgeFrames % 90) return;
         this.edgeKey = key;
-        const fade = [.07, .09];
+        const fade = [.10, .09];
         const gl = this.gl, pixel = new Uint8Array(4);
         const read = y => {
             gl.readPixels(this.canvas.width >> 1, Math.round(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
             return [pixel[0], pixel[1], pixel[2]];
         };
+        // One colour for both edges: whatever Safari samples for either bar —
+        // the page, the scene or an edge strip — it gets the same colour, and the
+        // scene fades into exactly that colour at the top and at the bottom.
         const top = read(this.canvas.height * (1 - fade[0]) - 1), bottom = read(this.canvas.height * fade[1]);
-        this.edges = { fade, top: top.map(v => v / 255), bottom: bottom.map(v => v / 255) };
-        const css = rgb => `rgb(${rgb.join(',')})`;
+        const edge = top.map((v, i) => Math.round((v + bottom[i]) / 2));
+        this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
+        const color = `rgb(${edge.join(',')})`;
         const root = document.documentElement;
-        root.style.backgroundColor = css(bottom);
+        root.style.backgroundColor = color;
+        document.body.style.backgroundColor = color;
         const scene = document.querySelector('.scene');
-        if (scene) scene.style.backgroundColor = css(bottom);
+        if (scene) scene.style.backgroundColor = color;
         const meta = document.querySelector('meta[name="theme-color"]');
-        if (meta) meta.content = css(top);
-        for (const [side, color] of [['top', top], ['bottom', bottom]]) {
+        if (meta) meta.content = color;
+        for (const side of ['top', 'bottom']) {
             let strip = document.querySelector(`.safe-edge-${side}`);
             if (!strip) {
                 strip = Object.assign(document.createElement('div'), { className: `safe-edge safe-edge-${side}` });
                 strip.setAttribute('aria-hidden', 'true');
                 document.body.prepend(strip);
             }
-            strip.style.backgroundColor = css(color);
+            strip.style.backgroundColor = color;
         }
     }
 
