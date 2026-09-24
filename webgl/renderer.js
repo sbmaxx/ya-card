@@ -129,7 +129,10 @@ void main() {
     float resolved = 1.0 - smoothstep(0.85, 1.8, footprint);
     #else
     float resolved = smoothstep(0.18, 0.55, abs(dot(normal, view)));
+    float footprint = 1.0;
     #endif
+    // Subpixel tooling marks fade out before they can alias during rotation.
+    float grainVisibility = 1.0 - smoothstep(0.28, 0.65, footprint);
     if (engraved > 0.001) {
         vec2 mappedXY = (relief.rg * 255.0 - 128.0) / 127.0;
         mappedXY *= resolved;
@@ -156,6 +159,25 @@ void main() {
                                smoothstep(-0.16, 0.13, facetLight - max(dot(normal, light), 0.0)));
         float stampedBevel = smoothstep(0.035, 0.30, slope) * ${art.logo.wall.toFixed(3)} * resolved;
         vec3 stampedMetal = mix(stampedFace, stampedWall, stampedBevel);
+        ${art.logo.machined ? `
+        // The cut face is polished more than the satin plate. Its compact,
+        // round reflection moves with the same light, while the bevel normals
+        // turn that reflection around each letter's contour.
+        vec3 reflected = reflect(-view, normal);
+        vec3 sourceDirection = normalize(uKeyPosition);
+        vec2 studioOffset = reflected.xy - (sourceDirection.xy - vec2(-0.42, 0.56)) - vec2(0.10, 0.14);
+        float faceReflection = exp(-dot(studioOffset, studioOffset) * 7.0);
+        float polish = exp(-dot(studioOffset, studioOffset) * 28.0);
+        vec3 faceMetal = uMetalTone * ${(.18 + art.logo.face * .24).toFixed(3)};
+        faceMetal += vec3(0.23, 0.25, 0.28) * faceReflection + vec3(0.15) * polish;
+        faceMetal += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
+        float tooling = sin(vUV.x * uLayoutSize.x * 7.8 + sin(vUV.y * uLayoutSize.y * 0.23));
+        faceMetal += vec3(tooling * 0.009 * grainVisibility);
+        faceMetal *= ${art.logo.raised ? '1.0' : '(1.0 - 0.17 * relief.b)'};
+        float facetExposure = smoothstep(-0.28, 0.22, dot(facetNormal, light) - dot(normal, light));
+        vec3 bevelMetal = mix(faceMetal * 0.42, metalLighting(facetNormal, view, light) * 1.08, facetExposure);
+        stampedMetal = mix(faceMetal, bevelMetal, smoothstep(0.025, 0.34, slope) * ${art.logo.wall.toFixed(3)} * resolved);
+        ` : ''}
         inkColor = mix(paint, mix(floorInk, cutMetal, wall), engraved);
         // The chosen monochrome relief catches the same moving softbox as the
         // plate. Coverage is preserved, so no exterior outline is introduced.
@@ -382,9 +404,9 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     text(data.position, vertical ? 212 : 152, vertical ? 12 : 13, finish.secondary);
     const y = vertical ? 278 : 188;
     const size = vertical ? 12 : 13, lineHeight = vertical ? 18 : 18;
-    // The email and personal site use name ink; Telegram retains secondary ink.
+    // Contacts share one dark ink tone; hierarchy comes from spacing and size.
     text('sbmaxx@yandex-team.ru', y, size, finish.ink, 'mailto:sbmaxx@yandex-team.ru');
-    text('t.me/sbmaxx', y + lineHeight, size, finish.secondary, 'https://t.me/sbmaxx');
+    text('t.me/sbmaxx', y + lineHeight, size, finish.ink, 'https://t.me/sbmaxx');
     if (vertical) text(data.site, y + lineHeight * 3, size, finish.ink, `https://${data.site}`);
     return { canvas, links, width, height, titleRelief, logoRelief };
 }

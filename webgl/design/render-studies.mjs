@@ -9,10 +9,10 @@ import { tmpdir } from 'node:os';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || '/tmp/ya-card-browser-check/node_modules/playwright/index.mjs');
 const root = fileURLToPath(new URL('../', import.meta.url));
-const out = resolve(root, 'snapshots/2026-09-24-visual-studies');
+const out = resolve(root, process.env.STUDY_OUTPUT || 'snapshots/2026-09-24-visual-studies');
 await mkdir(out, { recursive: true });
 const baseline = await mkdtemp(resolve(tmpdir(), 'ya-card-baseline-'));
-execFileSync('tar', ['-xzf', resolve(root, 'snapshots/2026-09-24-balanced-baseline/source.tar.gz'), '-C', baseline], { env: { ...process.env, LC_ALL: 'C' } });
+execFileSync('tar', ['-xzf', resolve(root, process.env.STUDY_BASELINE || 'snapshots/2026-09-24-balanced-baseline/source.tar.gz'), '-C', baseline], { env: { ...process.env, LC_ALL: 'C' } });
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.png': 'image/png' };
 const server = createServer(async (request, response) => {
     try {
@@ -32,35 +32,39 @@ await new Promise(done => server.listen(0, '127.0.0.1', done));
 let browser;
 try {
     browser = await chromium.launch({ channel: 'chrome', headless: true });
-    for (const name of ['baseline', 'satin', 'inset', 'polished']) {
-        for (const [shot, width, height, rx, ry, zoom] of [
+    for (const name of (process.env.STUDIES || 'baseline,satin,inset,polished').split(',')) {
+        for (const [shot, width, height, rx, ry, zoom, flipped = false, time = 0] of [
             ['desktop', 1440, 1000, 0, 0, 1],
             ['detail', 1440, 1000, -5, 12, 1.8],
-            ['mobile', 390, 844, 0, 0, 1]
-        ]) {
+            ['mobile', 390, 844, 0, 0, 1],
+            ['english', 1440, 1000, 0, 0, 1, true],
+            ['mobile-en', 390, 844, 0, 0, 1, true],
+            ['light', 1440, 1000, -5, 12, 1.8, false, 9]
+        ].filter(([shot]) => (process.env.STUDY_SHOTS || 'desktop,detail,mobile').split(',').includes(shot))) {
             const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
             const errors = [];
             page.on('pageerror', error => errors.push(error.message));
             await page.addInitScript(() => { Math.random = () => .5; });
             await page.goto(`http://127.0.0.1:${server.address().port}/${name === 'baseline' ? 'baseline' : 'candidate'}/index.html?study=${name}`);
-            const info = await page.evaluate(async ({ rx, ry, zoom }) => {
+            const info = await page.evaluate(async ({ rx, ry, zoom, flipped, time }) => {
                 const { CardRenderer } = await import('./renderer.js');
                 const renderer = await CardRenderer.create(document.querySelector('canvas'));
                 document.documentElement.classList.add('webgl-ready');
                 document.documentElement.classList.remove('webgl-loading');
                 clearTimeout(window.cardBootTimeout);
                 renderer.resize();
-                for (let i = 0; i < 100; i++) renderer.draw({ rx, ry, rz: 0, zoom, flipped: false, animate: false, idle: false, reduced: false, delta: .05 });
+                renderer.time = time;
+                for (let i = 0; i < 100; i++) renderer.draw({ rx, ry, rz: 0, zoom, flipped, animate: false, idle: false, reduced: false, delta: .05 });
                 document.querySelector('.ambient').style.setProperty('--ambient-opacity', renderer.ambientOpacity);
                 document.querySelector('.card-shadow polygon').setAttribute('points', renderer.shadowPoints);
                 window.studyRenderer = renderer;
                 return { error: renderer.gl.getError(), links: renderer.surfaces[0].links.length };
-            }, { rx, ry, zoom });
+            }, { rx, ry, zoom, flipped, time });
             if (errors.length || info.error) throw new Error(`${name}/${shot}: ${errors.join('; ')} GL ${info.error}`);
             await page.screenshot({ path: resolve(out, `${name}-${shot}.png`) });
             await page.close();
         }
-        console.log(`${name}: desktop/detail/mobile saved`);
+        console.log(`${name}: selected views saved`);
     }
     console.log(out);
 } finally {

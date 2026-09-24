@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-10`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-11`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 65133 |
-| index.html.gz | 28687 |
-| index.html.br | 25420 |
+| index.html | 67227 |
+| index.html.gz | 29210 |
+| index.html.br | 25843 |
 
 HTML SHA-256:
-`52b551d93a5db43a5ea73bae5c4c85bb09f40d490c45f86f5754fe707da5a559`.
+`acc36f6a8083c30052450855dbc80843abd565d6f44e30d4ed6e4f3bce368df8`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-10/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-11/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -97,9 +97,22 @@ browser checks and RU/EN desktop/mobile screenshots passed before publication.
 
 Before this round, the exact production source and build were preserved as
 commit `077eba6`, tag `ya-card-balanced-baseline-2026-09-24`, and local
-`snapshots/2026-09-24-balanced-baseline/`. This release's rollback script also
+`snapshots/2026-09-24-balanced-baseline/`. Release `20260924-10`'s rollback script also
 restores those production bytes. The selected darker recessed-metal logo,
 21px desktop name with finer relief, and smooth rounded-rim normals were chosen
 from three controlled visual studies. Details: `design/2026-09-24-visual-round.md`.
 No agents were used in this round.
 The final public Brotli response matches the local artifact byte-for-byte.
+
+## Polished engraving
+
+Release `20260924-11` preserves the preceding public version as tag
+`ya-card-inset-baseline-2026-09-24` (commit `a401257`) and local archive
+`snapshots/2026-09-24-inset-baseline/`. Its rollback script restores that version.
+The logo has a more defined inward bevel and a separate polished-metal reflection;
+the smaller portrait logo scales its relief proportionally. Desktop name size is
+22px, and both contact lines use the same dark ink. See
+`design/2026-09-24-material-round.md` for the comparison with raised and darker
+variants. No agents were used. Built-browser and engraving checks passed,
+including the shader without OES derivatives. Public Brotli bytes match the
+tested local artifact.

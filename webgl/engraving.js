@@ -11,7 +11,10 @@ export function createEngravingMap(surface, profiles = art) {
     const diagonal = Math.hypot(pixelX, pixelY);
     const context = canvas.getContext('2d');
     for (const [rect, profile] of [[titleRelief, profiles.name], [logoRelief, profiles.logo]]) {
-        const { depth, bevel, raised } = profile;
+        const { raised } = profile;
+        // Keep the bevel proportional to the smaller portrait wordmark.
+        const scale = profile.machined && width < height ? 100 / 145 : 1;
+        const depth = profile.depth * scale, bevel = profile.bevel * scale;
         const x0 = Math.max(0, Math.floor(rect[0] * canvas.width));
         const y0 = Math.max(0, Math.floor(rect[1] * canvas.height));
         const w = Math.min(canvas.width, Math.ceil(rect[2] * canvas.width)) - x0;
@@ -41,8 +44,8 @@ export function createEngravingMap(surface, profiles = art) {
         const heights = new Float32Array(w * h);
         for (let i = 0; i < heights.length; i++) {
             const t = Math.max(0, Math.min(1, (distance[i] - Math.min(pixelX, pixelY) * .5) / bevel));
-            // The name keeps its shallow recessed cut. The logo gets a subtler
-            // positive stamp, with the same absolute depth channel for shading.
+            // Signed height selects recess or emboss; the depth channel keeps
+            // the absolute profile for the material's cavity shading.
             heights[i] = (raised ? 1 : -1) * depth * t * t * (3 - 2 * t) * ink[i * 4 + 3] / 255;
         }
         for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {

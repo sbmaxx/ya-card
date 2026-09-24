@@ -180,6 +180,24 @@ try {
         canvas.remove();
         return { reports, changingResponse, error };
     });
+    // OES derivatives are optional in WebGL 1. Exercise the compiled fallback
+    // as well: the microtexture should disappear rather than fail to render.
+    const fallbackError = await page.evaluate(async () => {
+        const { CardRenderer } = await import('./renderer.js');
+        const canvas = document.createElement('canvas');
+        canvas.style.cssText = 'width:800px;height:600px';
+        document.body.append(canvas);
+        const gl = canvas.getContext('webgl');
+        const extension = gl.getExtension.bind(gl);
+        gl.getExtension = name => name === 'OES_standard_derivatives' ? null : extension(name);
+        const renderer = await CardRenderer.create(canvas);
+        try {
+            renderer.resize();
+            renderer.draw({ rx: 0, ry: 0, zoom: 1, flipped: false, animate: false, reduced: true, delta: .05 });
+            return gl.getError();
+        } finally { renderer.destroy(); canvas.remove(); }
+    });
+    assert.equal(fallbackError, 0, 'shader works without the derivatives extension');
     assert.equal(result.error, 0);
     assert.equal(shading.error, 0);
     assert.deepEqual(errors, []);
