@@ -196,3 +196,12 @@ One visual pass covered desktop/mobile RU/EN and changed light/tilt states,
 followed by the normal single-file build and upload hashes. No test suites or
 agents were used. Rollback restores release `20260924-18`.
 Details: `design/2026-09-24-studio-metal.md`.
+
+## Parallel visual editions
+
+Three independent editions are published at `/variants/ivory/`,
+`/variants/obsidian/` and `/variants/prism/`, with a comparison page at `/variants/`.
+They are ordinary static subdirectories; the root release and nginx configuration
+are unchanged. Source/build instructions: `variants/README.md`.
+Staging directory: `/home/sbmaxx/ya-card-variants-20260924-01`.
+Only builds were performed; no test suites or preview sweeps were run.
