@@ -22,9 +22,11 @@ const license = await readFile(resolve(root, 'assets/Onest-OFL.txt'), 'utf8');
 const inlinedCss = cssSource.replace('./assets/Onest-card.woff2', `data:font/woff2;base64,${font.toString('base64')}`);
 const css = await transform(inlinedCss, { loader: 'css', minify: true, target: 'es2020' });
 let html = template
-    .replace('<link rel="stylesheet" href="./styles.css">', `<style>${css.code}</style>`)
+    .replace('<link rel="stylesheet" href="./styles.css">', () => `<style>${css.code}</style>`)
     .replace('<script type="module" src="./app.js"></script>', '')
-    .replace('</body>', `<script>${javascript.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script></body>`);
+    // A replacement string interprets $& / $` sequences in minified JavaScript.
+    // A callback inserts generated code literally (including identifiers like $).
+    .replace('</body>', () => `<script>${javascript.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script></body>`);
 html = await minify(html, {
     collapseWhitespace: true, removeComments: true, removeRedundantAttributes: true,
     removeEmptyAttributes: true, useShortDoctype: true, minifyCSS: false,
@@ -32,9 +34,15 @@ html = await minify(html, {
     minifyJS: true, keepClosingSlash: false
 });
 // The bundled font is OFL-licensed; keep the required notice in the artifact.
-html = html.replace('</head>', `<!-- Bundled Onest font license:\n${license.replace(/-->/g, '-- >')}\n--></head>`);
+html = html.replace('</head>', () => `<!-- Bundled Onest font license:\n${license.replace(/-->/g, '-- >')}\n--></head>`);
 if (/<script\b[^>]*\bsrc\s*=/i.test(html) || /<link\b[^>]*rel=["']?stylesheet/i.test(html)) {
     throw new Error('Production output still refers to an external script or stylesheet');
+}
+// Validate after HTML insertion/minification, not just before it. The HTML
+// minifier can leave malformed scripts untouched instead of failing the build.
+for (const [, attributes, source] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (attributes.includes('application/ld+json')) continue;
+    await transform(source, { loader: 'js', target: 'es2020' });
 }
 const bytes = Buffer.from(html);
 const gzip = gzipSync(bytes, { level: 9 });

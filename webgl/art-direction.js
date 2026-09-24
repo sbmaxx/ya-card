@@ -1,6 +1,18 @@
 // Small material studies, selectable by URL for direct visual comparison.
 // No extra controls or resource requests are added to the card itself.
 const studies = {
+    etched: {
+        key: 'etched', nameSize: 22, studio: true,
+        name: { depth: .24, bevel: .55, raised: false },
+        logo: { depth: .36, bevel: .90, raised: false, face: .44, wall: .70, warmth: 0, machined: true,
+            broadPower: 12, polishPower: 48, sheen: .24 }
+    },
+    'satin-etch': {
+        key: 'satin-etch', nameSize: 22, studio: true,
+        name: { depth: .24, bevel: .55, raised: false },
+        logo: { depth: .32, bevel: .95, raised: false, face: .50, wall: .66, warmth: 0, machined: true,
+            broadPower: 6, polishPower: 30, sheen: .08 }
+    },
     milled: {
         key: 'milled', nameSize: 22, studio: true,
         name: { depth: .24, bevel: .55, raised: false },
@@ -39,4 +51,4 @@ const studies = {
 };
 
 const requested = new URLSearchParams(location.search).get('study');
-export const art = Object.hasOwn(studies, requested) ? studies[requested] : studies.milled;
+export const art = Object.hasOwn(studies, requested) ? studies[requested] : studies.etched;

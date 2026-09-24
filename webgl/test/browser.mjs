@@ -15,6 +15,17 @@ try {
         Math.random = () => 0.5;
         window.gpu = { draws: 0, model: null, hoverRects: 0 };
         const proto = WebGLRenderingContext.prototype;
+        const bufferData = proto.bufferData;
+        proto.bufferData = function (target, data, usage) {
+            if (data instanceof Float32Array && data.length % 8 === 0) {
+                let x = 0, y = 0, z = 0;
+                for (let i = 0; i < data.length; i += 8) {
+                    x = Math.max(x, Math.abs(data[i])); y = Math.max(y, Math.abs(data[i + 1])); z = Math.max(z, Math.abs(data[i + 2]));
+                }
+                gpu.dimensions = { width: x * 2, height: y * 2, faceZ: z };
+            }
+            return bufferData.call(this, target, data, usage);
+        };
         const uniformNames = new WeakMap();
         const location = proto.getUniformLocation;
         proto.getUniformLocation = function (program, name) {
@@ -162,7 +173,8 @@ try {
         const m = gpu.model;
         const [u0, v0, u1, v1] = gpu.focusRect;
         // Project the actual focused glyph bounds; back-side portrait UV reverses X.
-        const x = (.5 - (u0 + u1) / 2) * 2.333, y = (.5 - (v0 + v1) / 2) * 4.235, z = -.055;
+        const x = (.5 - (u0 + u1) / 2) * gpu.dimensions.width,
+            y = (.5 - (v0 + v1) / 2) * gpu.dimensions.height, z = -gpu.dimensions.faceZ;
         const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
         const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
         const wz = m[2] * x + m[6] * y + m[10] * z + m[14];

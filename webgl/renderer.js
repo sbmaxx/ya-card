@@ -2,8 +2,12 @@ import { cards, logos } from './data.js';
 import { createEngravingMap } from './engraving.js';
 import { art } from './art-direction.js';
 
-const HALF_THICKNESS = 0.055;
-const BEVEL = 0.018;
+const edgeOptions = { standard: [.055, .018], thin: [.022, .008], soft: [.032, .012] };
+const edgeStudy = new URLSearchParams(location.search).get('edge');
+const [HALF_THICKNESS, BEVEL] = Object.hasOwn(edgeOptions, edgeStudy) ? edgeOptions[edgeStudy] : edgeOptions.thin;
+const portraitOptions = { tall: 545, balanced: 500, compact: 460 };
+const portraitStudy = new URLSearchParams(location.search).get('proportion');
+const portraitHeight = Object.hasOwn(portraitOptions, portraitStudy) ? portraitOptions[portraitStudy] : 460;
 
 const finishes = {
     silver: { metal: [.847, .859, .878], edge: [.50, .54, .58], ink: '#20252b', secondary: '#30353a', link: '#30353a' },
@@ -184,10 +188,10 @@ void main() {
         vec3 reflected = reflect(-view, normal);
         vec3 sourceDirection = normalize(uKeyPosition);
         vec2 studioOffset = reflected.xy - (sourceDirection.xy - vec2(-0.42, 0.56)) - vec2(0.10, 0.14);
-        float faceReflection = ${art.studio ? 'exp(-(1.0 - max(dot(reflected, light), 0.0)) * 8.0)' : 'exp(-dot(studioOffset, studioOffset) * 7.0)'};
-        float polish = ${art.studio ? 'exp(-(1.0 - max(dot(reflected, light), 0.0)) * 36.0)' : 'exp(-dot(studioOffset, studioOffset) * 28.0)'};
+        float faceReflection = ${art.studio ? `exp(-(1.0 - max(dot(reflected, light), 0.0)) * ${(art.logo.broadPower ?? 8).toFixed(1)})` : 'exp(-dot(studioOffset, studioOffset) * 7.0)'};
+        float polish = ${art.studio ? `exp(-(1.0 - max(dot(reflected, light), 0.0)) * ${(art.logo.polishPower ?? 36).toFixed(1)})` : 'exp(-dot(studioOffset, studioOffset) * 28.0)'};
         vec3 faceMetal = uMetalTone * ${(.18 + art.logo.face * .24).toFixed(3)};
-        faceMetal += vec3(0.23, 0.25, 0.28) * faceReflection + vec3(0.15) * polish;
+        faceMetal += vec3(0.23, 0.25, 0.28) * faceReflection + vec3(${(art.logo.sheen ?? .15).toFixed(3)}) * polish;
         faceMetal += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
         float tooling = sin(vUV.x * uLayoutSize.x * 7.8 + sin(vUV.y * uLayoutSize.y * 0.23));
         faceMetal += vec3(tooling * 0.009 * grainVisibility);
@@ -369,7 +373,7 @@ function logoImage(lang) {
 }
 
 function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
-    const width = vertical ? 300 : 545, height = vertical ? (compact ? 460 : 545) : 300;
+    const width = vertical ? 300 : 545, height = vertical ? (compact ? 460 : portraitHeight) : 300;
     const data = cards[lang];
     const canvas = document.createElement('canvas');
     // WebGL 1 requires power-of-two dimensions for mipmapped textures.
@@ -448,6 +452,7 @@ export class CardRenderer {
     constructor(canvas, gl, images) {
         this.canvas = canvas;
         this.gl = gl;
+        this.halfThickness = HALF_THICKNESS;
         this.images = images;
         this.program = program(gl);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
@@ -513,7 +518,8 @@ export class CardRenderer {
         this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
         this.vertical = vertical;
         this.compact = compact;
-        this.width = vertical ? (compact ? 4.235 * 300 / 460 : 2.333) : 4.235;
+        const layoutHeight = compact ? 460 : portraitHeight;
+        this.width = vertical ? (layoutHeight === 545 ? 2.333 : 4.235 * 300 / layoutHeight) : 4.235;
         this.height = vertical ? 4.235 : 2.333;
         this.outline = roundedOutline(this.width, this.height, vertical);
         const meshes = geometry(this.width, this.height, vertical);

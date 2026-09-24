@@ -36,10 +36,15 @@ try {
         for (const [shot, width, height, rx, ry, zoom, flipped = false, time = 0] of [
             ['desktop', 1440, 1000, 0, 0, 1],
             ['detail', 1440, 1000, -5, 12, 1.8],
+            ['edge', 1440, 1000, 8, 76, 1.65],
+            ['edge-back', 1440, 1000, 8, 76, 1.65, true],
             ['mobile', 390, 844, 0, 0, 1],
             ['english', 1440, 1000, 0, 0, 1, true],
             ['mobile-en', 390, 844, 0, 0, 1, true],
+            ['mobile-light', 390, 844, -7, 11, 1, false, 9],
+            ['mobile-oblique', 390, 844, 12, 42, 1],
             ['small-mobile', 320, 568, 0, 0, 1],
+            ['small-mobile-en', 320, 568, 0, 0, 1, true],
             ['landscape', 844, 390, 0, 0, 1],
             ['small-landscape', 568, 320, 0, 0, 1],
             ['light', 1440, 1000, -5, 12, 1.8, false, 9]
@@ -50,7 +55,7 @@ try {
             const errors = [];
             page.on('pageerror', error => errors.push(error.message));
             await page.addInitScript(() => { Math.random = () => .5; });
-            await page.goto(`http://127.0.0.1:${server.address().port}/${name === 'baseline' ? 'baseline' : 'candidate'}/index.html?study=${name}&layout=${name}`);
+            await page.goto(`http://127.0.0.1:${server.address().port}/${name === 'baseline' ? 'baseline' : 'candidate'}/index.html?study=${name}&layout=${name}&proportion=${name}&edge=${name}`);
             const info = await page.evaluate(async ({ rx, ry, zoom, flipped, time }) => {
                 const { CardRenderer } = await import('./renderer.js');
                 const renderer = await CardRenderer.create(document.querySelector('canvas'));
@@ -66,7 +71,8 @@ try {
                 return { error: renderer.gl.getError(), links: renderer.surfaces[0].links.length };
             }, { rx, ry, zoom, flipped, time });
             if (errors.length || info.error) throw new Error(`${name}/${shot}: ${errors.join('; ')} GL ${info.error}`);
-            await page.screenshot({ path: resolve(out, `${name}-${shot}.png`) });
+            await page.screenshot({ path: resolve(out, `${name}-${shot}.png`),
+                scale: process.env.STUDY_CSS_SCALE === '1' ? 'css' : 'device' });
             await page.close();
         }
         console.log(`${name}: selected views saved`);

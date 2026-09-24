@@ -230,8 +230,9 @@ try {
         const x = 34;
         const width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
         const lastDescent = context.measureText('t.me/sbmaxx').actualBoundingBoxDescent;
-        const baseline = 290 + (545 - 76 - 312 - lastDescent) / 2;
-        return [x / 300, (baseline - 12.5) / 545, (x + width) / 300, (baseline + 7) / 545];
+        const height = 460;
+        const baseline = 290 + (height - 76 - 312 - lastDescent) / 2;
+        return [x / 300, (baseline - 12.5) / height, (x + width) / 300, (baseline + 7) / height];
     });
     assert.ok(mobileEmailRect.every((value, index) => Math.abs(value - expectedMobileEmailRect[index]) < 0.002), `portrait email UV bounds ${JSON.stringify(mobileEmailRect)} should match ${JSON.stringify(expectedMobileEmailRect)}`);
     assert.ok(desktopEmailRect.some((value, index) => Math.abs(value - mobileEmailRect[index]) > 0.05), 'focus UV bounds change when card layout changes');

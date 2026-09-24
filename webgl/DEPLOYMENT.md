@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-13`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-14`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 70019 |
-| index.html.gz | 29979 |
-| index.html.br | 26524 |
+| index.html | 70808 |
+| index.html.gz | 30218 |
+| index.html.br | 26723 |
 
 HTML SHA-256:
-`26e78505f7fa88042e2e6ebf0c92589429cdbb7862cac118edcc462ad48dbec0`.
+`d86a8afb9d9c415de5fad5ee08dbbadca35c948ac2e0c8b2b3d9a4a2be48f6eb`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-13/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-14/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -137,3 +137,15 @@ and the GitHub corner link. The final Telegram glyph descent now determines
 vertical balance. All layouts expose three card links: logo, email, Telegram.
 Contact/focus and four mobile-layout checks passed. Public Brotli bytes match
 the local build. This is the saved starting point for further visual work.
+
+## Compact plate, thin rim and logo optics
+
+Release `20260924-14` publishes three successive visual comparisons: 300×460
+portrait proportions, 0.022 half-thickness with a 0.008 bevel, and the darker
+`etched` logo with a narrower reflected highlight. No agents were used.
+The rollback restores cleanup release `20260924-13`, also preserved as tag
+`ya-card-clean-layout-2026-09-24` and a local source/build archive.
+The single-file builder now inserts generated content literally and validates
+inline JavaScript after HTML minification. Engraving, contact, built-browser and
+four mobile-layout checks passed. Public Brotli matches the tested artifact.
+Details and comparison images: `design/2026-09-24-post-cleanup-goal.md`.

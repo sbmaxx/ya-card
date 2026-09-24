@@ -16,7 +16,7 @@ await new Promise(done => server.listen(0, '127.0.0.1', done));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 try {
-    for (const [width, height, portraitHeight] of [[390, 844, 545], [320, 568, 460], [844, 390, 0], [568, 320, 0]]) {
+    for (const [width, height, portraitHeight] of [[390, 844, 460], [320, 568, 460], [844, 390, 0], [568, 320, 0]]) {
         const page = await browser.newPage({ viewport: { width, height }, screen: { width, height }, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
@@ -34,7 +34,7 @@ try {
             renderer.resize();
             renderer.draw({ rx: 0, ry: 0, zoom: 1, animate: false, flipped: false, reduced: true, delta: 1 });
             const surface = renderer.surfaces[0], m = renderer.model;
-            const project = (x, y, z = .055) => {
+            const project = (x, y, z = renderer.halfThickness) => {
                 const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
                 const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
                 const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
