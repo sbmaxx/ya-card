@@ -752,7 +752,7 @@ uniform float uFloorY;
 uniform vec2 uCardCenter;
 // Touch screens: the scene melts into flat edge colours that Safari extends
 // under its status bar and toolbar (fractions of height; 0 disables).
-uniform vec2 uEdgeFade;
+uniform vec4 uEdgeFade;
 uniform vec3 uEdgeTop;
 uniform vec3 uEdgeBottom;
 in vec2 vUV;
@@ -832,8 +832,11 @@ void main() {
     color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
     vec3 display = toSRGB(neutralTonemap(color));
     display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
-    if (uEdgeFade.x > 0.0) display = mix(display, uEdgeTop, smoothstep(1.0 - uEdgeFade.x, 1.0, vUV.y));
-    if (uEdgeFade.y > 0.0) display = mix(display, uEdgeBottom, smoothstep(uEdgeFade.y, 0.0, vUV.y));
+    // Touch screens: the backdrop is only a core in the middle. Above and below
+    // it ramps into the flat page colour, which continues under Safari's bars.
+    // x/y: flat band at the top/bottom, z/w: length of the ramp before it.
+    if (uEdgeFade.x > 0.0) display = mix(display, uEdgeTop, smoothstep(1.0 - uEdgeFade.x - uEdgeFade.z, 1.0 - uEdgeFade.x, vUV.y));
+    if (uEdgeFade.y > 0.0) display = mix(display, uEdgeBottom, smoothstep(uEdgeFade.y + uEdgeFade.w, uEdgeFade.y, vUV.y));
     outColor = vec4(display, 1.0);
 }`;
 
@@ -1373,24 +1376,35 @@ export class CardRenderer {
     }
 
     sampleEdges(backdrop) {
-        if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; return; }
+        if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; this.edgeColor = null; return; }
         this.edgeFrames = (this.edgeFrames || 0) + 1;
         const key = `${backdrop.title}:${this.canvas.width}x${this.canvas.height}`;
-        // The light pool drifts; refresh now and then, not every frame.
-        if (key === this.edgeKey && this.edgeFrames % 90) return;
+        // The light pool drifts: sample now and then and ease towards it, so the
+        // page colour never jumps. A new backdrop or size is taken at once.
+        const fresh = key !== this.edgeKey || !this.edgeColor;
+        if (!fresh && this.edgeFrames % 30) return;
         this.edgeKey = key;
-        const fade = [.10, .09];
-        const gl = this.gl, pixel = new Uint8Array(4);
+        // Flat bands of 14% / 16% of the height, each with a 20% ramp into the core.
+        const fade = [.14, .16, .20, .20];
+        const gl = this.gl, width = this.canvas.width, height = this.canvas.height;
+        const row = new Uint8Array(width * 4);
+        // Average a whole row where the ramp starts, i.e. where the core ends.
         const read = y => {
-            gl.readPixels(this.canvas.width >> 1, Math.round(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-            return [pixel[0], pixel[1], pixel[2]];
+            gl.readPixels(0, Math.round(y), width, 1, gl.RGBA, gl.UNSIGNED_BYTE, row);
+            const sum = [0, 0, 0];
+            for (let i = 0; i < row.length; i += 4) { sum[0] += row[i]; sum[1] += row[i + 1]; sum[2] += row[i + 2]; }
+            return sum.map(value => value / width);
         };
         // One colour for both edges: whatever Safari samples for either bar —
         // the page, the scene or an edge strip — it gets the same colour, and the
-        // scene fades into exactly that colour at the top and at the bottom.
-        const top = read(this.canvas.height * (1 - fade[0]) - 1), bottom = read(this.canvas.height * fade[1]);
-        const edge = top.map((v, i) => Math.round((v + bottom[i]) / 2));
+        // scene ramps into exactly that colour at the top and at the bottom.
+        const top = read(height * (1 - fade[0] - fade[2]) - 1), bottom = read(height * (fade[1] + fade[3]));
+        const target = top.map((value, i) => (value + bottom[i]) / 2);
+        this.edgeColor = fresh ? target : this.edgeColor.map((value, i) => value + (target[i] - value) * .15);
+        const edge = this.edgeColor.map(Math.round);
         this.edges = { fade, top: edge.map(v => v / 255), bottom: edge.map(v => v / 255) };
+        if (edge.join() === this.edgeCss) return;
+        this.edgeCss = edge.join();
         const color = `rgb(${edge.join(',')})`;
         const root = document.documentElement;
         root.style.backgroundColor = color;
@@ -1756,8 +1770,8 @@ export class CardRenderer {
             gl.uniform1f(u.uFocal, this.projection[5]);
             gl.uniform1f(u.uFloorY, this.floorY);
             gl.uniform2f(u.uCardCenter, this.model[12], 0);
-            const edge = this.edges || { fade: [0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
-            gl.uniform2f(u.uEdgeFade, ...edge.fade);
+            const edge = this.edges || { fade: [0, 0, 0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
+            gl.uniform4f(u.uEdgeFade, ...edge.fade);
             gl.uniform3f(u.uEdgeTop, ...edge.top);
             gl.uniform3f(u.uEdgeBottom, ...edge.bottom);
             // The pool sits behind the card, offset towards the key light.
