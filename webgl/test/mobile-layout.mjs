@@ -23,6 +23,8 @@ try {
         await page.addInitScript(() => { Math.random = () => .5; });
         await page.goto(url);
         await page.waitForFunction(() => document.documentElement.classList.contains('webgl-ready'));
+        assert.equal(await page.locator('.face a[href*="rozhdestvenskiy.ru"]').count(), 0);
+        assert.equal(await page.locator('.links-overlay a[href*="github.com"]').count(), 0);
         const report = await page.evaluate(async () => {
             const { CardRenderer } = await import('./renderer.js');
             const canvas = document.createElement('canvas');
@@ -71,7 +73,7 @@ try {
         assert.equal(report.vertical, Boolean(portraitHeight));
         assert.equal(report.layoutHeight, portraitHeight || 300);
         assert.equal(report.nativeLinks, report.links.length);
-        assert.equal(report.links.length, portraitHeight ? 4 : 3);
+        assert.equal(report.links.length, 3);
         for (const link of report.links) assert.equal(link.hit, link.url, 'projected link agrees with ray hit');
         for (const ink of report.inkBounds) {
             assert.ok(ink.left >= (portraitHeight ? 32 : 54));

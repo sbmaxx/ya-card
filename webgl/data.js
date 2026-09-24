@@ -16,14 +16,12 @@ export const cards = {
     "name": "Роман Рождественский",
     "position": "руководитель отдела поисковых интерфейсов",
     "positionLines": ["руководитель отдела", "поисковых интерфейсов"],
-    "site": "rozhdestvenskiy.ru",
     "companyUrl": "https://yandex.ru/company"
   },
   "en": {
     "name": "Roman Rozhdestvenskiy",
     "position": "head of search interfaces department",
     "positionLines": ["head of search", "interfaces department"],
-    "site": "rozhdestvenskiy.ru/#en",
     "companyUrl": "https://yandex.com/company"
   }
 };

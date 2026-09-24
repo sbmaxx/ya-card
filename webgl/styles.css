@@ -43,8 +43,7 @@ h1 span { display: block; }
 .position { margin: 14px 0 0; line-height: 17px; }
 .role-tail { display: block; }
 .details { margin-top: 34px; line-height: 28px; }
-.email, .telegram, .site { display: block; }
-.site { margin-top: 1.6em; }
+.email, .telegram { display: block; }
 .face a:hover { text-decoration: underline; }
 .face a:focus-visible { outline-color: #20252b; }
 .eyebrow, .edition { display: none; }
@@ -62,7 +61,6 @@ h1 span { display: block; }
   .role-tail { display: inline; }
   .details { top: 201px; }
   .email, .telegram { display: block; }
-  .site { display: none; }
 }
 /* A scrollable HTML card needs its footer in flow, so it cannot cover contacts. */
 :root:not(.webgl-ready):not(.webgl-loading) body { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; min-height: 100svh; }

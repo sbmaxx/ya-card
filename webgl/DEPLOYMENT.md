@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-12`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-13`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 70479 |
-| index.html.gz | 30105 |
-| index.html.br | 26588 |
+| index.html | 70019 |
+| index.html.gz | 29979 |
+| index.html.br | 26524 |
 
 HTML SHA-256:
-`3337d6b77a6eb07cbd56c90a836102cc55c05c76d67c8c0d5317143cbf3d34e2`.
+`26e78505f7fa88042e2e6ebf0c92589429cdbb7862cac118edcc462ad48dbec0`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-12/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-13/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -129,3 +129,11 @@ card above the bottom controls. The `milled` material unifies the round source
 reflection and compresses bright highlights. HTML fallback has matching type,
 silver cards and a footer that stays clear of scrolling contacts.
 See `design/2026-09-24-mobile-iterations.md` for comparison artifacts and checks.
+
+## Contact cleanup
+
+Release `20260924-13` removes the visible site address from both language faces
+and the GitHub corner link. The final Telegram glyph descent now determines
+vertical balance. All layouts expose three card links: logo, email, Telegram.
+Contact/focus and four mobile-layout checks passed. Public Brotli bytes match
+the local build. This is the saved starting point for further visual work.

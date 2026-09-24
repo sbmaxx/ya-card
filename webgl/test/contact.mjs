@@ -229,7 +229,9 @@ try {
         const metrics = context.measureText('sbmaxx@yandex-team.ru');
         const x = 34;
         const width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
-        return [x / 300, 335.5 / 545, (x + width) / 300, 355 / 545];
+        const lastDescent = context.measureText('t.me/sbmaxx').actualBoundingBoxDescent;
+        const baseline = 290 + (545 - 76 - 312 - lastDescent) / 2;
+        return [x / 300, (baseline - 12.5) / 545, (x + width) / 300, (baseline + 7) / 545];
     });
     assert.ok(mobileEmailRect.every((value, index) => Math.abs(value - expectedMobileEmailRect[index]) < 0.002), `portrait email UV bounds ${JSON.stringify(mobileEmailRect)} should match ${JSON.stringify(expectedMobileEmailRect)}`);
     assert.ok(desktopEmailRect.some((value, index) => Math.abs(value - mobileEmailRect[index]) > 0.05), 'focus UV bounds change when card layout changes');
@@ -249,7 +251,7 @@ try {
     await noGpu.waitForFunction(() => document.documentElement.classList.contains('webgl-fallback'));
     assert.equal(await noGpu.locator('.face--ru').isVisible(), true);
     assert.equal(await noGpu.locator('.face--en').isVisible(), false);
-    assert.deepEqual(await noGpu.locator('.face--ru a').evaluateAll(links => links.map(link => link.tabIndex)), [0, 0, 0, 0]);
+    assert.deepEqual(await noGpu.locator('.face--ru a').evaluateAll(links => links.map(link => link.tabIndex)), [0, 0, 0]);
     assert.equal(await noGpu.evaluate(() => {
         const event = new WheelEvent('wheel', { deltaY: 80, bubbles: true, cancelable: true });
         document.querySelector('.scene').dispatchEvent(event);
@@ -266,7 +268,7 @@ try {
     await noGpu.locator('[data-lang="en"]').click();
     assert.equal(await noGpu.locator('.face--en').isVisible(), true);
     assert.equal(await noGpu.locator('.face--ru').isVisible(), false);
-    assert.deepEqual(await noGpu.locator('.face--en a').evaluateAll(links => links.map(link => link.tabIndex)), [0, 0, 0, 0]);
+    assert.deepEqual(await noGpu.locator('.face--en a').evaluateAll(links => links.map(link => link.tabIndex)), [0, 0, 0]);
     await noGpu.goBack();
     assert.equal(await noGpu.locator('.face--ru').isVisible(), true);
     await noGpu.goForward();

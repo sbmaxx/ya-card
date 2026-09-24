@@ -389,10 +389,10 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
     const logoX = centered ? (width - logoWidth) / 2 : x;
     const logoY = vertical ? 76 : 42;
-    const textSize = vertical ? 12 : 13;
-    const finalBaseline = vertical ? 350 : 188 + 18;
+    const textSize = vertical ? 12.5 : 13;
+    const finalBaseline = vertical ? 312 : 188 + 18;
     context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
-    const finalMetrics = context.measureText(vertical ? data.site : 't.me/sbmaxx');
+    const finalMetrics = context.measureText('t.me/sbmaxx');
     const blockTop = logoY;
     const blockBottom = finalBaseline + finalMetrics.actualBoundingBoxDescent;
     const yOffset = (height - blockTop - blockBottom) / 2;
@@ -431,7 +431,6 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     // Contacts share one dark ink tone; hierarchy comes from spacing and size.
     text('sbmaxx@yandex-team.ru', y, size, finish.ink, 'mailto:sbmaxx@yandex-team.ru');
     text('t.me/sbmaxx', y + lineHeight, size, finish.ink, 'https://t.me/sbmaxx');
-    if (vertical) text(data.site, 350, 12, finish.ink, `https://${data.site}`);
     return { canvas, links, width, height, titleRelief, logoRelief, logoScale: logoWidth / 145 };
 }
 
