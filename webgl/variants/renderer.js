@@ -143,7 +143,7 @@ export const LIGHT_SETUPS = {
         ]
     },
     ring: {
-        // A ring light around the lens: a halo around the dark flag in every mirror.
+        // A ring light around the lens: a halo around the camera in every mirror.
         title: 'Кольцо', hint: 'Кольцевая лампа вокруг камеры: при наклоне в металле видно кольцо.', key: { c: [-.20, .26, 1], power: 3 }, shadow: [-.06, .14, 1], bounce: .7,
         lights: [
             ...ring(10, .24, .04, 'key', 5),
@@ -368,15 +368,15 @@ vec3 room(vec3 world, float rough) {
     // A soft, even fill from every side: turned far from its lamps (a phone
     // tilted hard, a hand spin) the metal still reads as metal, not a black slab.
     col += vec3(.04) * (.55 + .45 * smoothstep(-1.0, 1.0, d.y));
-    // A dim bounce card around the camera with a black flag in its centre:
-    // satin averages the two into a mid tone, a mirror sees the dark flag.
-    // Wide and soft, so a hard phone tilt slides it off gradually instead of
-    // leaving the plate facing an unlit room.
+    // A dim bounce card around the camera. Wide and soft, so a hard phone
+    // tilt slides it off gradually instead of leaving the plate facing an
+    // unlit room.
     float bounce = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(1.35, 1.05), blur + .22, uRoundLights);
-    // The flag is round and very soft: sliding across brushed steel with a
-    // phone's tilt it reads as a gentle shading, never as a dark block.
-    float flag = panel(d, vec3(0.0, 0.0, 1.0), vec3(1.0, 0.0, 0.0), vec3(0.0, 1.0, 0.0), vec2(.30, .24), blur + .20, 1.0);
-    col += vec3(${f(studio.bounce)}) * uBounce * (bounce - .55 * flag);
+    // Two soft side flats past it, about 70° to either side: a card turned
+    // far by hand still mirrors a lit wall, not a dark band across the plate.
+    float sides = panel(d, vec3(.94, 0.0, .34), vec3(.34, 0.0, -.94), vec3(0.0, 1.0, 0.0), vec2(1.1, 1.0), blur + .40, 1.0)
+        + panel(d, vec3(-.94, 0.0, .34), vec3(.34, 0.0, .94), vec3(0.0, 1.0, 0.0), vec2(1.1, 1.0), blur + .40, 1.0);
+    col += vec3(${f(studio.bounce)}) * uBounce * (bounce + .7 * sides);
     // Light walls (the paper backdrop) surround the card with brighter room.
     col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
     col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
