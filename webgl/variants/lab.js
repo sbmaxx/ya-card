@@ -2,7 +2,7 @@
 // Edition and relief rebuild the shader, so they reload; the rest is live.
 // All settings live in the URL, so a particular look can be shared as a link.
 import { directions, direction } from './directions.js';
-import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS } from './renderer.js';
+import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES } from './renderer.js';
 
 // An exported file carries its settings as a preset and shows no panel.
 const exported = typeof globalThis.__cardPreset === 'string';
@@ -25,6 +25,8 @@ const lab = globalThis.__cardLab = {
     exposure: number('exposure', 1),
     bloom: number('bloom', .3),
     keyGain: number('keyGain', .7),
+    keySoft: number('keySoft', .05),
+    keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'strip',
     idle: number('idle', 1),
     gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
@@ -184,6 +186,12 @@ panel.innerHTML = `
   <details class="text-fields"><summary>Текст карточки</summary>
     ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
   </details>
+  ${group('Ключевой свет', `
+    <div class="segments" data-live="keyShape">
+      ${Object.entries(KEY_SHAPES).map(([id, shape]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.keyShape}">${shape.title}</button>`).join('')}
+    </div>
+    <label class="range">Мягкость всего света <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
+    <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>`)}
   <div class="tuning"><fieldset><legend>Свет</legend>
     <label class="check"><input type="checkbox" name="manual" ${lab.manualLight ? 'checked' : ''}> Стоп-кадр света</label>
     <label class="range">Поворот <output data-for="yaw"></output><input type="range" name="yaw" min="-1.2" max="1.2" step=".01" value="${lab.yaw}"></label>
@@ -191,7 +199,6 @@ panel.innerHTML = `
   </fieldset>
   <fieldset><legend>Картинка</legend>
     <label class="range">Экспозиция <output data-for="exposure"></output><input type="range" name="exposure" min=".4" max="2" step=".01" value="${lab.exposure}"></label>
-    <label class="range">Световая полоса <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>
     <label class="range">Свечение (bloom) <output data-for="bloom"></output><input type="range" name="bloom" min="0" max="1.5" step=".01" value="${lab.bloom}"></label>
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
@@ -224,12 +231,13 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'keyGain', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'keyGain', 'keySoft', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'bodyDepth', 'textMute', 'yaw', 'pitch']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
     else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
     next.set('panel', panel.hidden ? '0' : '1');
+    next.set('keyShape', lab.keyShape);
     for (const [key] of textFields) if (lab.text[key]) next.set(key, lab.text[key]); else next.delete(key);
     next.delete('tintFinish');
     for (const [key, value] of Object.entries(lab.finish)) next.set(`${key}Finish`, value);
@@ -274,6 +282,13 @@ panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click
     row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
 }));
+panel.querySelector('[data-live="keyShape"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.keyShape = button.dataset.value;
+    panel.querySelectorAll('[data-live="keyShape"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    writeUrl();
+});
 panel.querySelectorAll('[data-finish]').forEach(group => group.addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;

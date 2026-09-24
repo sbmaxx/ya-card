@@ -99,10 +99,25 @@ const lights = [
     panel([.70, .70, .10], .5, [.10, .40], scale(studio.key, 3.0)),
     panel([.70, -.70, .10], -.5, [.10, .40], scale(studio.fill, 1.6))
 ];
-// The first two panels are the key strip and its wrap: the travelling light
-// band on the plate. uKeyGain scales them (the lab's "light band" slider).
-const lightCode = lights.map(({ c, right, up, size, color }, i) =>
-    `    col += ${v3(color)}${i < 2 ? ' * uKeyGain' : ''} * panel(d, ${v3(c)}, ${v3(right)}, ${v3(up)}, vec2(${f(size[0])}, ${f(size[1])}), blur);`).join('\n');
+// The first panel is the key softbox: its reflection is the travelling light
+// on the plate. Shape, edge softness and brightness are uniforms (lab controls);
+// the second panel, its wide wrap, follows the same brightness.
+const lightCode = lights.map(({ c, right, up, size, color }, i) => i === 0
+    ? `    col += ${v3(color)} * uKeyGain * keyPanel(d, ${v3(c)}, blur);`
+    : `    col += ${v3(color)}${i === 1 ? ' * uKeyGain' : ''} * panel(d, ${v3(c)}, ${v3(right)}, ${v3(up)}, vec2(${f(size[0])}, ${f(size[1])}), blur);`).join('\n');
+// Key softbox shapes: half-size and corner radius in gnomonic units, roll, and
+// a gain that keeps the emitted light (area × intensity) comparable.
+export const KEY_SHAPES = {
+    strip: { title: 'Полоса', size: [.50, .075], radius: .075, roll: -.52 },
+    round: { title: 'Круг', size: [.17, .17], radius: .17, roll: 0 },
+    window: { title: 'Окно', size: [.27, .20], radius: .06, roll: 0 }
+};
+for (const shape of Object.values(KEY_SHAPES)) {
+    const area = 4 * shape.size[0] * shape.size[1] - (4 - Math.PI) * shape.radius ** 2;
+    shape.gain = .15 / area;
+    const axes = panel(KEY_DIRECTION, shape.roll, shape.size, [0, 0, 0]);
+    shape.right = axes.right; shape.up = axes.up;
+}
 
 const toneCode = `vec3 neutralTonemap(vec3 color) {
     const float start = .76;
@@ -228,15 +243,44 @@ ${plate.f0 ? `const vec3 PLATE_F0 = ${v3(plate.f0)};` : ''}
 
 // Rectangular studio light in gnomonic coordinates. The edge softness grows
 // with roughness, so a mirror shows a crisp panel and satin a broad gradient.
+uniform vec3 uKeyRight;
+uniform vec3 uKeyUp;
+uniform vec2 uKeySize;
+uniform float uKeyRadius;
+uniform float uKeySoft;
+
+// The key softbox as a rounded rectangle (a circle at full radius). uKeySoft is
+// the studio's diffuser: it widens the edge of every light on top of roughness.
+
+float keyPanel(vec3 d, vec3 c, float blur) {
+    float z = dot(d, c);
+    vec2 p = vec2(dot(d, uKeyRight), dot(d, uKeyUp)) / max(z, .08);
+    vec2 q = abs(p) - uKeySize + uKeyRadius;
+    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - uKeyRadius;
+    float edge = blur + uKeySoft;
+    float inside = smoothstep(edge, -edge, sd);
+    vec2 span = uKeySize + edge;
+    float body = 1.0 - .25 * dot(p / span, p / span);
+    float energy = (uKeySize.x * uKeySize.y) / (span.x * span.y);
+    return inside * max(body, 0.0) * smoothstep(0.0, .25, z) * energy;
+}
+
 float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur) {
     float z = dot(d, c);
     vec2 p = vec2(dot(d, r), dot(d, u)) / max(z, .08);
-    vec2 inside = smoothstep(-blur, blur, size - abs(p));
+    // Capsule-shaped lights (fully rounded ends) with the studio's diffuser
+    // softness: no straight corners ever show in a reflection.
+    float radius = min(size.x, size.y);
+    vec2 q = abs(p) - size + radius;
+    float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - radius;
+    float edge = blur + uKeySoft;
+    float inside = smoothstep(edge, -edge, sd);
     // Real softboxes are a little brighter in the middle than at the frame.
-    float body = 1.0 - .25 * dot(p / (size + blur), p / (size + blur));
+    vec2 span = size + edge;
+    float body = 1.0 - .25 * dot(p / span, p / span);
     // A rough surface spreads the same energy over a larger solid angle.
-    float energy = (size.x * size.y) / ((size.x + blur) * (size.y + blur));
-    return inside.x * inside.y * max(body, 0.0) * smoothstep(0.0, .25, z) * energy;
+    float energy = (size.x * size.y) / (span.x * span.y);
+    return inside * max(body, 0.0) * smoothstep(0.0, .25, z) * energy;
 }
 
 vec3 room(vec3 world, float rough) {
@@ -1034,7 +1078,7 @@ export class CardRenderer {
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uMirror', 'uFloorY', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1486,7 +1530,13 @@ export class CardRenderer {
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
         gl.uniform1f(this.uniforms.uBounce, backdrop ? backdrop.bounce : 1);
-        gl.uniform1f(this.uniforms.uKeyGain, lab ? lab.keyGain : (direction.keyGain ?? .7));
+        const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.strip;
+        gl.uniform1f(this.uniforms.uKeyGain, (lab ? lab.keyGain : (direction.keyGain ?? .7)) * keyShape.gain);
+        gl.uniform3f(this.uniforms.uKeyRight, ...keyShape.right);
+        gl.uniform3f(this.uniforms.uKeyUp, ...keyShape.up);
+        gl.uniform2f(this.uniforms.uKeySize, ...keyShape.size);
+        gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius);
+        gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
         gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
         gl.uniform1f(this.uniforms.uMirror, 0);
         const tintOf = hex => {
