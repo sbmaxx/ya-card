@@ -924,12 +924,17 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     };
     // The lab can scale the name; the plans are drawn for the size in LAYOUTS.
     const nameScale = globalThis.__cardLab?.nameScale ?? direction.nameScale ?? 1;
-    const nameSize = plan.nameSize * nameScale, growth = nameSize - plan.nameSize;
+    let nameSize = plan.nameSize * nameScale;
     const nameLines = fits(data.name, nameSize, 500) ? [data.name] : splitTwo(data.name);
+    // A single long word can still be wider than the plate: shrink to fit.
+    context.font = `500 ${nameSize}px "Card Onest", Arial, sans-serif`;
+    const widest = Math.max(...nameLines.map(line => context.measureText(line).width));
+    if (widest > maxWidth) nameSize *= maxWidth / widest;
+    const growth = nameSize - plan.nameSize;
     const roleLines = fits(data.position, textSize, 400) ? [data.position] : (data.positionLines || splitTwo(data.position));
     // Plans are drawn for two-line portrait and one-line landscape blocks.
     const planGap = plan.name.length > 1 ? plan.name[1] - plan.name[0] : Math.round(plan.nameSize * 1.22);
-    const nameGap = planGap * nameScale;
+    const nameGap = planGap * nameSize / plan.nameSize;
     const roleGap = plan.role.length > 1 ? plan.role[1] - plan.role[0] : 17;
     // A larger name keeps its gap to the logo (the baseline moves down by the
     // cap height it gained) and pushes everything below by its extra size.
