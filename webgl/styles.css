@@ -49,17 +49,17 @@ h1 span { display: block; }
 .eyebrow, .edition { display: none; }
 @media (min-width: 701px), (pointer: coarse) and (orientation: landscape) {
   .fallback { max-width: none; width: 100%; }
-  .face { position: relative; width: 545px; max-width: 100%; height: 300px; margin: 0 auto 24px; padding: 0; }
-  .brand, .identity, .details { position: absolute; left: 56px; margin: 0; }
-  .brand { top: 68px; display: block; width: fit-content; }
-  .logo { display: block; width: 145px; }
-  .identity { top: 134px; }
-  h1 { margin: 0; font-size: 22px; line-height: 26px; font-weight: 500; }
+  .face { display: flex; align-items: center; width: 760px; max-width: 100%; min-height: 420px; margin: 0 auto 24px; padding: 64px 78px; }
+  .face__content { width: 100%; }
+  .brand, .identity, .details { position: static; margin: 0; }
+  .brand { display: block; width: fit-content; margin-bottom: 40px; }
+  .logo { display: block; width: 202px; }
+  h1 { margin: 0; font-size: 31px; line-height: 36px; font-weight: 500; }
   h1 span { display: inline; }
-  .position, .details { font-size: 13px; line-height: 18px; }
+  .position, .details { font-size: 18px; line-height: 25px; }
   .position { margin: 0; }
   .role-tail { display: inline; }
-  .details { top: 201px; }
+  .details { margin-top: 32px; }
   .email, .telegram { display: block; }
 }
 /* A scrollable HTML card needs its footer in flow, so it cannot cover contacts. */

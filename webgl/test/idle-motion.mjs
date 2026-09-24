@@ -33,6 +33,7 @@ try {
                 const matrix = p.uniformMatrix4fv;
                 p.uniformMatrix4fv = function (l, transpose, value) {
                     if (names.get(l) === 'uModel') { motionProbe.model = [...value]; motionProbe.samples.push([...value]); }
+                    if (names.get(l) === 'uProjection') motionProbe.projection = [...value];
                     return matrix.call(this, l, transpose, value);
                 };
                 const vector = p.uniform3f;
@@ -46,7 +47,7 @@ try {
             const report = await page.evaluate(() => {
                 const span = values => Math.max(...values) - Math.min(...values);
                 const degrees = 180 / Math.PI;
-                const bounds = [Infinity, Infinity, -Infinity, -Infinity], f = 1 / Math.tan(Math.PI / 8);
+                const bounds = [Infinity, Infinity, -Infinity, -Infinity], f = motionProbe.projection[5];
                 for (const m of motionProbe.samples) for (const [x, y, z] of motionProbe.vertices) {
                     const w = [0, 1, 2].map(i => m[i] * x + m[i + 4] * y + m[i + 8] * z + m[i + 12]);
                     const px = (w[0] * f / (innerWidth / innerHeight) / (7 - w[2]) + 1) * innerWidth / 2;
@@ -74,7 +75,7 @@ try {
                     const m = motionProbe.model, [x0, y0, x1, y1] = motionProbe.focus;
                     const x = ((x0 + x1) / 2 - .5) * 4.235, y = (.5 - (y0 + y1) / 2) * 2.333, z = .022;
                     const w = [0, 1, 2].map(i => m[i] * x + m[i + 4] * y + m[i + 8] * z + m[i + 12]);
-                    const f = 1 / Math.tan(Math.PI / 8);
+                    const f = motionProbe.projection[5];
                     return { x: (w[0] * f / (innerWidth / innerHeight) / (7 - w[2]) + 1) * innerWidth / 2,
                         y: (1 - w[1] * f / (7 - w[2])) * innerHeight / 2 };
                 });

@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-15`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-16`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 70917 |
-| index.html.gz | 30258 |
-| index.html.br | 26738 |
+| index.html | 71272 |
+| index.html.gz | 30348 |
+| index.html.br | 26868 |
 
 HTML SHA-256:
-`9c3b4c4f3144ca7ed339f2cfa0638864bd172b00461124db7728ba873854ad4a`.
+`4c1cb2992e52f415721861d8b0044e2a0cfa0a042da8de22a3c11be479234e1e`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-15/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-16/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -158,3 +158,12 @@ lets a parked pointer resume idle after 1.8 seconds, and selects the deeper
 The rollback restores release `20260924-14`. Motion, contact, core-browser,
 engraving and mobile-layout checks passed; the public Brotli file matches the
 tested build. Details: `design/2026-09-24-idle-relief.md`.
+
+## Fixed desktop size
+
+Release `20260924-16` uses a fixed pixel focal length for desktop: approximately
+760×420px wide or 400px portrait width, shrinking only when constrained. Ray
+hits and shadows use the same camera. Larger windows preserve the size and
+tilted perspective. The rollback restores release `20260924-15`.
+Fixed-size, contact, browser, mobile and idle-motion checks passed; public
+Brotli matches the tested artifact. See `design/2026-09-24-fixed-desktop-size.md`.

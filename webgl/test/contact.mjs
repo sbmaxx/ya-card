@@ -43,6 +43,7 @@ try {
         const matrix = proto.uniformMatrix4fv;
         proto.uniformMatrix4fv = function (location, transpose, value) {
             if (value[15] === 1) window.gpu.model = [...value];
+            else window.gpu.projection = [...value];
             return matrix.call(this, location, transpose, value);
         };
         const rect = proto.uniform4f;
@@ -153,7 +154,7 @@ try {
         const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
         const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
         const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
-        const f = 1 / Math.tan(Math.PI / 8);
+        const f = gpu.projection[5];
         return { x: (wx * f / (innerWidth / innerHeight) / (7 - wz) + 1) * innerWidth / 2,
             y: (1 - wy * f / (7 - wz)) * innerHeight / 2 };
     });
@@ -176,7 +177,7 @@ try {
         const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
         const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
         const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
-        const f = 1 / Math.tan(Math.PI / 8);
+        const f = gpu.projection[5];
         return { x: (wx * f / (innerWidth / innerHeight) / (7 - wz) + 1) * innerWidth / 2,
             y: (1 - wy * f / (7 - wz)) * innerHeight / 2 };
     });
@@ -195,7 +196,7 @@ try {
         const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
         const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
         const wz = m[2] * x + m[6] * y + m[10] * z + m[14];
-        const f = 1 / Math.tan(Math.PI / 8);
+        const f = gpu.projection[5];
         return { x: (wx * f / (innerWidth / innerHeight) / (7 - wz) + 1) * innerWidth / 2,
             y: (1 - wy * f / (7 - wz)) * innerHeight / 2 };
     });

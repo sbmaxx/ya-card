@@ -296,8 +296,8 @@ function follow(value, velocity, target, frequency, dt) {
     return [target + (offset + step) * decay, (velocity - frequency * step) * decay];
 }
 
-function projectionMatrix(aspect) {
-    const f = 1 / Math.tan(Math.PI / 8), near = 0.1, far = 30;
+function projectionMatrix(aspect, f = 1 / Math.tan(Math.PI / 8)) {
+    const near = 0.1, far = 30;
     return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) / (near - far), -1, 0, 0, 2 * far * near / (near - far), 0]);
 }
 
@@ -500,15 +500,20 @@ export class CardRenderer {
         }
         gl.viewport(0, 0, width, height);
         this.aspect = width / height;
-        this.viewportWidth = rect.width;
-        this.viewportHeight = rect.height;
+        this.viewportWidth = Math.max(1, rect.width);
+        this.viewportHeight = Math.max(1, rect.height);
         const touchLandscape = matchMedia('(pointer: coarse) and (orientation: landscape)').matches;
         const vertical = innerWidth <= 700 && !touchLandscape;
         // Physical screen size stays stable while Safari's toolbars expand.
         const compact = vertical && Math.max(screen.width, screen.height) < 740;
         this.touchLandscape = touchLandscape;
         if (vertical !== this.vertical || compact !== this.compact) this.rebuild(vertical, compact);
-        this.projection = projectionMatrix(this.aspect);
+        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : vertical ? 400 : 760;
+        // A desktop camera with a fixed CSS-pixel focal length keeps both size
+        // and perspective stable when the viewport grows. Touch keeps its fit.
+        const focalLength = this.fixedCardWidth
+            ? 14 * this.fixedCardWidth / (this.width * this.viewportHeight) : undefined;
+        this.projection = projectionMatrix(this.aspect, focalLength);
     }
 
     rebuild(vertical, compact = false) {
@@ -613,8 +618,11 @@ export class CardRenderer {
             const targetLift = Math.sin(idleTime * .55 + variation.floatPhase) * .06 * idleStrength;
             this.lift += (targetLift - this.lift) * blend;
         }
-        const pixelsPerUnit = this.viewportHeight / (14 * Math.tan(Math.PI / 8));
-        const fit = this.touchLandscape
+        const pixelsPerUnit = this.viewportHeight * this.projection[5] / 14;
+        const fit = this.fixedCardWidth
+            ? Math.min(1, Math.max(1, this.viewportWidth - (this.vertical ? 56 : 96)) / (this.width * pixelsPerUnit),
+                Math.max(1, this.viewportHeight - 192) / (this.height * pixelsPerUnit))
+            : this.touchLandscape
             ? Math.min((this.viewportWidth - 64) / (this.width * pixelsPerUnit),
                 (this.viewportHeight - 108) / (this.height * pixelsPerUnit))
             : this.vertical ? Math.min(1, (this.viewportWidth - 56) / (this.width * pixelsPerUnit))
@@ -688,7 +696,7 @@ export class CardRenderer {
         // Project the rounded card contour, not an axis-aligned bounding ellipse.
         const m = this.model;
         const [lx, ly, lz] = this.keyLight;
-        const f = 1 / Math.tan(Math.PI / 8);
+        const f = this.projection[5];
         const points = this.outline.map(([x, y]) => {
             const wx = m[0] * x + m[4] * y + m[12];
             const wy = m[1] * x + m[5] * y + m[13];
@@ -706,7 +714,7 @@ export class CardRenderer {
     surfacePoint(clientX, clientY) {
         if (!this.model || this.flipProgress < 1) return null;
         const rect = this.canvas.getBoundingClientRect();
-        const f = 1 / Math.tan(Math.PI / 8);
+        const f = this.projection[5];
         const ray = [(2 * (clientX - rect.left) / rect.width - 1) * this.aspect / f, (1 - 2 * (clientY - rect.top) / rect.height) / f, -1];
         const m = this.model;
         const scale2 = m[0] ** 2 + m[1] ** 2 + m[2] ** 2;
