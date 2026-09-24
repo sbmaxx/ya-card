@@ -106,10 +106,13 @@ export function decodePreset(code) {
 }
 
 // Expand `?c=` before anything else reads the query. Parameters written next
-// to the code (the card text, `panel=1`) win over it; the hash stays.
+// to the code (the card text, `panel=1`) win over it; the hash stays. Without
+// a code the lab starts from the look live on the homepage (`HOME_LOOK`, baked
+// in at build), and the link's own settings go on top of it.
 if (typeof location !== 'undefined' && typeof globalThis.__cardPreset !== 'string') {
     const query = new URLSearchParams(location.search);
-    const expanded = decodePreset(query.get('c'));
+    const live = typeof __LAB_DEFAULT__ === 'string' ? __LAB_DEFAULT__ : null;
+    const expanded = decodePreset(query.get('c') || live);
     if (expanded) {
         query.delete('c');
         for (const [key, value] of expanded) if (!query.has(key)) query.set(key, value);

@@ -99,7 +99,8 @@ window.cardFallbackUrl = '${fallback}';`)
 // /variants/lab/: every edition behind the demo panel.
 await page('lab', await studioPage({
     entry: "import './preset.js';\nimport './lab.js';\nimport '../app.js';",
-    define: { __CARD_VARIANT__: JSON.stringify('lab') },
+    // The lab opens on the homepage's look (see preset.js).
+    define: { __CARD_VARIANT__: JSON.stringify('lab'), __LAB_DEFAULT__: JSON.stringify(HOME_LOOK) },
     fallback: '../plain/',
     head: '<meta name="theme-color" content="#0b0d11"><meta name="robots" content="noindex">'
 }));

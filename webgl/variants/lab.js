@@ -205,7 +205,7 @@ panel.innerHTML = `
   </fieldset></div>
   <div class="actions"><button type="button" data-action="export">Скачать HTML</button><button type="button" data-action="share">Короткая ссылка</button></div>
   <div class="actions"><button type="button" data-action="copy">Скопировать настройки</button><button type="button" data-action="poses">Свет по позам</button></div>
-  <div class="actions"><button type="button" data-action="intro">Интро заново</button><button type="button" data-action="reset">Сбросить</button><button type="button" data-action="hide">Скрыть</button></div>
+  <div class="actions"><button type="button" data-action="intro">Интро заново</button><button type="button" data-action="reset" title="Вернуть настройки и текст, как на главной">Сбросить</button><button type="button" data-action="hide">Скрыть</button></div>
   <p>H — скрыть/показать панель. Колесо — зум, перетаскивание — поворот, клик — переворот.</p>`;
 // Sections fold by their heading; which ones are folded is remembered.
 {
@@ -412,7 +412,8 @@ const setHidden = hidden => {
 panel.addEventListener('click', event => {
     const action = event.target.closest('[data-action]')?.dataset.action;
     if (action === 'intro') { writeUrl(); location.reload(); }
-    if (action === 'reset') location.search = `edition=${direction.id}`;
+    // Back to the homepage's look and text: a bare lab address starts from it.
+    if (action === 'reset') location.href = location.pathname + location.hash;
     if (action === 'hide') setHidden(true);
     if (action === 'export') exportHtml();
     if (action === 'poses') showPoseSheet();
