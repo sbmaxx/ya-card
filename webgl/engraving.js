@@ -13,7 +13,7 @@ export function createEngravingMap(surface, profiles = art) {
     for (const [rect, profile] of [[titleRelief, profiles.name], [logoRelief, profiles.logo]]) {
         const { raised } = profile;
         // Keep the bevel proportional to the smaller portrait wordmark.
-        const scale = profile.machined && width < height ? 100 / 145 : 1;
+        const scale = profile.machined ? (surface.logoScale ?? 1) : 1;
         const depth = profile.depth * scale, bevel = profile.bevel * scale;
         const x0 = Math.max(0, Math.floor(rect[0] * canvas.width));
         const y0 = Math.max(0, Math.floor(rect[1] * canvas.height));

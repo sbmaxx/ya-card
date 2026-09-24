@@ -10,7 +10,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const artifact = resolve(fileURLToPath(new URL('../dist/index.html', import.meta.url)));
 const html = await readFile(artifact);
 assert.equal(/(?:Россия, Москва|Ulitsa Lva Tolstogo|739-70-00|tel:\+74957397000)/.test(html.toString()), false, 'built HTML contains no address or phone content');
-const sourceModules = new Set(['renderer.js', 'data.js', 'engraving.js']);
+const sourceModules = new Set(['renderer.js', 'data.js', 'engraving.js', 'art-direction.js']);
 const server = createServer(async (request, response) => {
     const module = new URL(request.url, 'http://127.0.0.1').pathname.slice(1);
     if (sourceModules.has(module)) {
@@ -224,12 +224,12 @@ try {
     const expectedMobileEmailRect = await page.evaluate(async () => {
         await document.fonts.ready;
         const context = document.createElement('canvas').getContext('2d');
-        context.textAlign = 'center';
-        context.font = '400 12px "Card Onest"';
+        context.textAlign = 'left';
+        context.font = '400 12.5px "Card Onest"';
         const metrics = context.measureText('sbmaxx@yandex-team.ru');
-        const x = 150 - metrics.actualBoundingBoxLeft;
+        const x = 34;
         const width = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
-        return [x / 300, 319.5 / 545, (x + width) / 300, 338.5 / 545];
+        return [x / 300, 335.5 / 545, (x + width) / 300, 355 / 545];
     });
     assert.ok(mobileEmailRect.every((value, index) => Math.abs(value - expectedMobileEmailRect[index]) < 0.002), `portrait email UV bounds ${JSON.stringify(mobileEmailRect)} should match ${JSON.stringify(expectedMobileEmailRect)}`);
     assert.ok(desktopEmailRect.some((value, index) => Math.abs(value - mobileEmailRect[index]) > 0.05), 'focus UV bounds change when card layout changes');

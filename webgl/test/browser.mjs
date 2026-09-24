@@ -15,6 +15,13 @@ try {
         Math.random = () => 0.5;
         window.gpu = { draws: 0, model: null, hoverRects: 0 };
         const proto = WebGLRenderingContext.prototype;
+        const uniformNames = new WeakMap();
+        const location = proto.getUniformLocation;
+        proto.getUniformLocation = function (program, name) {
+            const result = location.call(this, program, name);
+            if (result) uniformNames.set(result, name);
+            return result;
+        };
         const draw = proto.drawArrays;
         proto.drawArrays = function (...args) { window.gpu.draws++; return draw.apply(this, args); };
         const matrix = proto.uniformMatrix4fv;
@@ -24,7 +31,10 @@ try {
         };
         const rect = proto.uniform4f;
         proto.uniform4f = function (location, x, y, z, w) {
-            if (x >= 0 && z > x && w > y) window.gpu.hoverRects++;
+            if (x >= 0 && z > x && w > y) {
+                if (uniformNames.get(location) === 'uHoverRect') window.gpu.hoverRects++;
+                if (uniformNames.get(location) === 'uFocusRect') window.gpu.focusRect = [x, y, z, w];
+            }
             return rect.call(this, location, x, y, z, w);
         };
     });
@@ -146,11 +156,13 @@ try {
         await orientation.close();
     }
     // Verify an actual on-card link through the same model matrix used by the GPU.
+    await page.locator('.face--en .telegram').focus();
+    await page.waitForFunction(() => gpu.focusRect);
     const linkPoint = await page.evaluate(() => {
         const m = gpu.model;
-        const x = 0, y = (0.5 - 349.5 / 545) * 4.235, z = -.055;
-        // Back-side portrait UV reverses X only. Telegram has baseline 349.5
-        // after vertical balancing; this point remains inside the glyph row.
+        const [u0, v0, u1, v1] = gpu.focusRect;
+        // Project the actual focused glyph bounds; back-side portrait UV reverses X.
+        const x = (.5 - (u0 + u1) / 2) * 2.333, y = (.5 - (v0 + v1) / 2) * 4.235, z = -.055;
         const wx = m[0] * x + m[4] * y + m[8] * z + m[12];
         const wy = m[1] * x + m[5] * y + m[9] * z + m[13];
         const wz = m[2] * x + m[6] * y + m[10] * z + m[14];

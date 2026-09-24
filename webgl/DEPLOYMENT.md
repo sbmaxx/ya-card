@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-11`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-12`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 67227 |
-| index.html.gz | 29210 |
-| index.html.br | 25843 |
+| index.html | 70479 |
+| index.html.gz | 30105 |
+| index.html.br | 26588 |
 
 HTML SHA-256:
-`acc36f6a8083c30052450855dbc80843abd565d6f44e30d4ed6e4f3bce368df8`.
+`3337d6b77a6eb07cbd56c90a836102cc55c05c76d67c8c0d5317143cbf3d34e2`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-11/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-12/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -116,3 +116,16 @@ the smaller portrait logo scales its relief proportionally. Desktop name size is
 variants. No agents were used. Built-browser and engraving checks passed,
 including the shader without OES derivatives. Public Brotli bytes match the
 tested local artifact.
+
+## Mobile composition and coherent light
+
+Release `20260924-12` followed four successive visual passes, without agents.
+The starting production state is saved as tag
+`ya-card-polished-baseline-2026-09-24` (commit `36c2230`) and a complete local
+source/build archive. The release rollback script restores those public bytes.
+Portrait text is left-aligned, with two-line name/role and larger contacts;
+short phones use a shorter plate, and landscape touch screens fit the wide
+card above the bottom controls. The `milled` material unifies the round source
+reflection and compresses bright highlights. HTML fallback has matching type,
+silver cards and a footer that stays clear of scrolling contacts.
+See `design/2026-09-24-mobile-iterations.md` for comparison artifacts and checks.

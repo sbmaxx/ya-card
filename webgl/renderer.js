@@ -99,6 +99,18 @@ vec3 metalLighting(vec3 normal, vec3 view, vec3 light) {
     color += vec3(0.12, 0.12, 0.115) * highlightCore;
     color += vec3(0.30, 0.34, 0.39) * fresnel;
     color += vec3(0.22, 0.24, 0.27) * edgeGlint * uEdge;
+    ${art.studio ? `
+    // A single round studio source: satin broadens its reflected cone, while
+    // the engraved floor below uses a narrower lobe around the same direction.
+    float sourceDistance = 1.0 - max(dot(reflection, light), 0.0);
+    float satinReflection = exp(-sourceDistance * 5.0);
+    float sourceCore = exp(-sourceDistance * 30.0);
+    color = silver * (0.51 + 0.14 * diffuse + grain) + vec3(0.10, 0.11, 0.12);
+    color += vec3(0.45, 0.47, 0.49) * satinReflection;
+    color += vec3(0.11, 0.115, 0.12) * sourceCore;
+    color += vec3(0.24, 0.28, 0.33) * fresnel;
+    color += vec3(0.22, 0.24, 0.27) * edgeGlint * uEdge;
+    ` : ''}
     // The same source drives the background glow and its reflection on the rim.
     vec3 toGlow = uGlowPosition - vPosition;
     float facingGlow = max(dot(normal, normalize(toGlow)), 0.0);
@@ -109,6 +121,12 @@ vec3 metalLighting(vec3 normal, vec3 view, vec3 light) {
     // Roll off the brightest reflection rather than clipping it into a white patch.
     color = max(color, vec3(0.0));
     color = color / (vec3(1.0) + color * 0.12);
+    ${art.studio ? `
+    // Compress only the highlight shoulder; preserve midtone contrast and
+    // avoid a clipped white patch when the source reflects straight at us.
+    vec3 shoulder = max(color - vec3(0.82), vec3(0.0));
+    color = min(color, vec3(0.82)) + shoulder / (vec3(1.0) + shoulder / 0.18);
+    ` : ''}
     return color;
 }
 
@@ -166,8 +184,8 @@ void main() {
         vec3 reflected = reflect(-view, normal);
         vec3 sourceDirection = normalize(uKeyPosition);
         vec2 studioOffset = reflected.xy - (sourceDirection.xy - vec2(-0.42, 0.56)) - vec2(0.10, 0.14);
-        float faceReflection = exp(-dot(studioOffset, studioOffset) * 7.0);
-        float polish = exp(-dot(studioOffset, studioOffset) * 28.0);
+        float faceReflection = ${art.studio ? 'exp(-(1.0 - max(dot(reflected, light), 0.0)) * 8.0)' : 'exp(-dot(studioOffset, studioOffset) * 7.0)'};
+        float polish = ${art.studio ? 'exp(-(1.0 - max(dot(reflected, light), 0.0)) * 36.0)' : 'exp(-dot(studioOffset, studioOffset) * 28.0)'};
         vec3 faceMetal = uMetalTone * ${(.18 + art.logo.face * .24).toFixed(3)};
         faceMetal += vec3(0.23, 0.25, 0.28) * faceReflection + vec3(0.15) * polish;
         faceMetal += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
@@ -350,8 +368,8 @@ function logoImage(lang) {
     });
 }
 
-function textureCanvas(lang, vertical, logo, maxSize) {
-    const width = vertical ? 300 : 545, height = vertical ? 545 : 300;
+function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
+    const width = vertical ? 300 : 545, height = vertical ? (compact ? 460 : 545) : 300;
     const data = cards[lang];
     const canvas = document.createElement('canvas');
     // WebGL 1 requires power-of-two dimensions for mipmapped textures.
@@ -363,15 +381,16 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     // Transparent substrate: alpha is the printed-ink mask for the paint shader.
     context.clearRect(0, 0, width, height);
     const links = [];
-    const x = vertical ? width / 2 : 56;
-    context.textAlign = vertical ? 'center' : 'left';
-    const logoWidth = vertical ? 100 : 145;
+    const centered = vertical && new URLSearchParams(location.search).get('layout') === 'center';
+    const x = vertical ? (centered ? width / 2 : 34) : 56;
+    context.textAlign = centered ? 'center' : 'left';
+    const logoWidth = vertical ? 110 : 145;
     const viewBox = logos[lang].viewBox.split(' ').map(Number);
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
-    const logoX = vertical ? (width - logoWidth) / 2 : 56;
-    const logoY = vertical ? 104 : 42;
+    const logoX = centered ? (width - logoWidth) / 2 : x;
+    const logoY = vertical ? 76 : 42;
     const textSize = vertical ? 12 : 13;
-    const finalBaseline = vertical ? 278 + 18 * 3 : 188 + 18;
+    const finalBaseline = vertical ? 350 : 188 + 18;
     context.font = `400 ${textSize}px "Card Onest", Arial, sans-serif`;
     const finalMetrics = context.measureText(vertical ? data.site : 't.me/sbmaxx');
     const blockTop = logoY;
@@ -383,7 +402,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         context.fillStyle = color;
         const metrics = context.measureText(value);
         // Align visible glyph edges, not their differing left side bearings.
-        const drawX = vertical ? x : x + metrics.actualBoundingBoxLeft;
+        const drawX = centered ? x : x + metrics.actualBoundingBoxLeft;
         context.fillText(value, drawX, y);
         if (url) {
             const left = drawX - metrics.actualBoundingBoxLeft;
@@ -398,17 +417,22 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     }
     context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRelief = text(data.name, vertical ? 187 : 130, vertical ? 22 : art.nameSize, finish.ink, undefined, 500);
+    const titleRects = vertical
+        ? data.name.split(' ').map((line, i) => text(line, 164 + i * 29, 24, finish.ink, undefined, 500))
+        : [text(data.name, 130, art.nameSize, finish.ink, undefined, 500)];
+    const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
+        Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
         (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    text(data.position, vertical ? 212 : 152, vertical ? 12 : 13, finish.secondary);
-    const y = vertical ? 278 : 188;
-    const size = vertical ? 12 : 13, lineHeight = vertical ? 18 : 18;
+    if (vertical) data.positionLines.forEach((line, i) => text(line, 223 + i * 17, 12.5, finish.secondary));
+    else text(data.position, 152, 13, finish.secondary);
+    const y = vertical ? 290 : 188;
+    const size = vertical ? 12.5 : 13, lineHeight = vertical ? 22 : 18;
     // Contacts share one dark ink tone; hierarchy comes from spacing and size.
     text('sbmaxx@yandex-team.ru', y, size, finish.ink, 'mailto:sbmaxx@yandex-team.ru');
     text('t.me/sbmaxx', y + lineHeight, size, finish.ink, 'https://t.me/sbmaxx');
-    if (vertical) text(data.site, y + lineHeight * 3, size, finish.ink, `https://${data.site}`);
-    return { canvas, links, width, height, titleRelief, logoRelief };
+    if (vertical) text(data.site, 350, 12, finish.ink, `https://${data.site}`);
+    return { canvas, links, width, height, titleRelief, logoRelief, logoScale: logoWidth / 145 };
 }
 
 export class CardRenderer {
@@ -474,18 +498,23 @@ export class CardRenderer {
         this.aspect = width / height;
         this.viewportWidth = rect.width;
         this.viewportHeight = rect.height;
-        const vertical = innerWidth <= 700;
-        if (vertical !== this.vertical) this.rebuild(vertical);
+        const touchLandscape = matchMedia('(pointer: coarse) and (orientation: landscape)').matches;
+        const vertical = innerWidth <= 700 && !touchLandscape;
+        // Physical screen size stays stable while Safari's toolbars expand.
+        const compact = vertical && Math.max(screen.width, screen.height) < 740;
+        this.touchLandscape = touchLandscape;
+        if (vertical !== this.vertical || compact !== this.compact) this.rebuild(vertical, compact);
         this.projection = projectionMatrix(this.aspect);
     }
 
-    rebuild(vertical) {
+    rebuild(vertical, compact = false) {
         const gl = this.gl;
         this.buffers.forEach(buffer => gl.deleteBuffer(buffer));
         this.textures.forEach(texture => gl.deleteTexture(texture));
         this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
         this.vertical = vertical;
-        this.width = vertical ? 2.333 : 4.235;
+        this.compact = compact;
+        this.width = vertical ? (compact ? 4.235 * 300 / 460 : 2.333) : 4.235;
         this.height = vertical ? 4.235 : 2.333;
         this.outline = roundedOutline(this.width, this.height, vertical);
         const meshes = geometry(this.width, this.height, vertical);
@@ -497,7 +526,7 @@ export class CardRenderer {
             return buffer;
         });
         const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], maxSize));
+        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], maxSize, compact));
         this.textures = this.surfaces.map(({ canvas }) => {
             const texture = gl.createTexture();
             gl.bindTexture(gl.TEXTURE_2D, texture);
@@ -573,12 +602,18 @@ export class CardRenderer {
             const targetLift = Math.sin(idleTime * .55 + variation.floatPhase) * .035 * this.idleWeight;
             this.lift += (targetLift - this.lift) * blend;
         }
-        const fit = Math.min(1, this.aspect * (this.vertical ? 2.2 : 1.23)) * (this.vertical ? 1 : .81);
+        const pixelsPerUnit = this.viewportHeight / (14 * Math.tan(Math.PI / 8));
+        const fit = this.touchLandscape
+            ? Math.min((this.viewportWidth - 64) / (this.width * pixelsPerUnit),
+                (this.viewportHeight - 108) / (this.height * pixelsPerUnit))
+            : this.vertical ? Math.min(1, (this.viewportWidth - 48) / (this.width * pixelsPerUnit))
+                : Math.min(1, this.aspect * 1.23) * .81;
         // Pointer tilt lives in screen space; the card flips in its own space.
         // Adding Euler angles inverted pitch on the portrait back face.
         if (reduced) { this.zoom = zoom; this.zoomVelocity = 0; }
         else [this.zoom, this.zoomVelocity] = follow(this.zoom, this.zoomVelocity, zoom, 10, dt);
-        const tilt = modelMatrix(this.rotationX, this.rotationY, this.zoom * fit, this.lift, this.rotationZ);
+        const lift = this.lift + (this.touchLandscape ? 24 / pixelsPerUnit : 0);
+        const tilt = modelMatrix(this.rotationX, this.rotationY, this.zoom * fit, lift, this.rotationZ);
 
         const flip = modelMatrix(this.vertical ? 0 : this.flipAngle, this.vertical ? this.flipAngle : 0, 1, 0);
         this.model = multiplyMatrices(tilt, flip);

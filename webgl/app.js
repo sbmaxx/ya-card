@@ -336,7 +336,7 @@ import { CardRenderer } from './renderer.js';
         bounds = null;
         if (renderer && !contextLost) {
             renderer.resize();
-            if (innerWidth > 700 && focusedAnchor?.classList.contains('site')) scene.focus({ preventScroll: true });
+            if (!renderer.vertical && focusedAnchor?.classList.contains('site')) scene.focus({ preventScroll: true });
             refreshFocusedAnchor();
             schedule();
         }

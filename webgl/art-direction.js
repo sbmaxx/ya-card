@@ -1,6 +1,11 @@
 // Small material studies, selectable by URL for direct visual comparison.
 // No extra controls or resource requests are added to the card itself.
 const studies = {
+    milled: {
+        key: 'milled', nameSize: 22, studio: true,
+        name: { depth: .24, bevel: .55, raised: false },
+        logo: { depth: .40, bevel: 1.05, raised: false, face: .52, wall: .82, warmth: 0, machined: true }
+    },
     cut: {
         key: 'cut', nameSize: 22,
         name: { depth: .29, bevel: .65, raised: false },
@@ -34,4 +39,4 @@ const studies = {
 };
 
 const requested = new URLSearchParams(location.search).get('study');
-export const art = Object.hasOwn(studies, requested) ? studies[requested] : studies.cut;
+export const art = Object.hasOwn(studies, requested) ? studies[requested] : studies.milled;

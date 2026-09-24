@@ -30,30 +30,46 @@ a:focus-visible, .scene:focus-visible { outline: 2px solid #fff; outline-offset:
 .webgl-ready .fallback, .webgl-loading .fallback { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 .is-dragging { cursor: grabbing; user-select: none; }
 /* The actual contact content remains available without WebGL or JavaScript. */
-.fallback { max-width: 620px; margin: 100px auto; padding: 24px; }
-.face { padding: 32px; margin-bottom: 24px; border-radius: 10px; color: #222; background: #d8dbe0; font-family: 'Card Onest', Arial, sans-serif; }
+.fallback { max-width: 620px; margin: 80px auto 112px; padding: 24px; }
+.face { padding: 32px; margin-bottom: 24px; border-radius: 12px; color: #20252b;
+  background: linear-gradient(135deg, #e1e6ea, #b3b8be); border: 1px solid #e1e6ea66;
+  box-shadow: 0 18px 40px #0003; font-family: 'Card Onest', Arial, sans-serif; }
 .face .logo path:not(:last-child) { fill: #20252b; }
-.logo { width: 120px; height: auto; }
-h1 { font-size: 25px; font-weight: 500; }
-.position, .details { font-size: 13px; line-height: 1.6; }
+.logo { display: block; width: 110px; height: auto; }
+.brand { display: block; width: fit-content; margin-bottom: 32px; }
+h1 { margin: 0; font-size: 24px; line-height: 29px; font-weight: 500; }
+h1 span { display: block; }
+.position, .details { font-size: 12.5px; }
+.position { margin: 14px 0 0; line-height: 17px; }
+.role-tail { display: block; }
+.details { margin-top: 34px; line-height: 28px; }
 .email, .telegram, .site { display: block; }
 .site { margin-top: 1.6em; }
 .face a:hover { text-decoration: underline; }
+.face a:focus-visible { outline-color: #20252b; }
 .eyebrow, .edition { display: none; }
-@media (min-width: 701px) {
-  .fallback { max-width: none; width: 100%; margin: 0; padding: 0; }
-  .face { position: relative; width: 545px; height: 300px; margin: 0 auto 24px; padding: 0; border-radius: 0; background: transparent; color: #fff; }
+@media (min-width: 701px), (pointer: coarse) and (orientation: landscape) {
+  .fallback { max-width: none; width: 100%; }
+  .face { position: relative; width: 545px; max-width: 100%; height: 300px; margin: 0 auto 24px; padding: 0; }
   .brand, .identity, .details { position: absolute; left: 56px; margin: 0; }
   .brand { top: 68px; display: block; width: fit-content; }
   .logo { display: block; width: 145px; }
   .identity { top: 134px; }
   h1 { margin: 0; font-size: 22px; line-height: 26px; font-weight: 500; }
+  h1 span { display: inline; }
   .position, .details { font-size: 13px; line-height: 18px; }
   .position { margin: 0; }
+  .role-tail { display: inline; }
   .details { top: 201px; }
   .email, .telegram { display: block; }
   .site { display: none; }
 }
+/* A scrollable HTML card needs its footer in flow, so it cannot cover contacts. */
+:root:not(.webgl-ready):not(.webgl-loading) body { display: grid; grid-template-columns: 1fr auto; grid-template-rows: 1fr auto; min-height: 100svh; }
+:root:not(.webgl-ready):not(.webgl-loading) main { grid-column: 1 / -1; order: 1; }
+:root:not(.webgl-ready):not(.webgl-loading) .fallback { margin-top: 40px; margin-bottom: 24px; }
+:root:not(.webgl-ready):not(.webgl-loading) .languages { position: static; order: 2; justify-self: start; margin: 0 0 24px 24px; }
+:root:not(.webgl-ready):not(.webgl-loading) .links-overlay { position: static; order: 3; align-self: center; margin: 0 24px 24px 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @media (hover: none) and (pointer: coarse) {
   :root, body, .ambient { background-color: #101722; }

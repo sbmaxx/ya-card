@@ -39,13 +39,18 @@ try {
             ['mobile', 390, 844, 0, 0, 1],
             ['english', 1440, 1000, 0, 0, 1, true],
             ['mobile-en', 390, 844, 0, 0, 1, true],
+            ['small-mobile', 320, 568, 0, 0, 1],
+            ['landscape', 844, 390, 0, 0, 1],
+            ['small-landscape', 568, 320, 0, 0, 1],
             ['light', 1440, 1000, -5, 12, 1.8, false, 9]
         ].filter(([shot]) => (process.env.STUDY_SHOTS || 'desktop,detail,mobile').split(',').includes(shot))) {
-            const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: 1 });
+            const page = await browser.newPage({ viewport: { width, height },
+                deviceScaleFactor: Number(process.env.STUDY_DPR || 1),
+                isMobile: width <= 700 || shot.includes('landscape'), hasTouch: width <= 700 || shot.includes('landscape') });
             const errors = [];
             page.on('pageerror', error => errors.push(error.message));
             await page.addInitScript(() => { Math.random = () => .5; });
-            await page.goto(`http://127.0.0.1:${server.address().port}/${name === 'baseline' ? 'baseline' : 'candidate'}/index.html?study=${name}`);
+            await page.goto(`http://127.0.0.1:${server.address().port}/${name === 'baseline' ? 'baseline' : 'candidate'}/index.html?study=${name}&layout=${name}`);
             const info = await page.evaluate(async ({ rx, ry, zoom, flipped, time }) => {
                 const { CardRenderer } = await import('./renderer.js');
                 const renderer = await CardRenderer.create(document.querySelector('canvas'));
