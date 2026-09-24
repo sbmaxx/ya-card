@@ -1205,6 +1205,18 @@ export class CardRenderer {
         root.style.setProperty('--edge-top', top);
         root.style.setProperty('--edge-bottom', bottom);
         if (meta) meta.content = top;
+        // Safari (iOS 26) tints its bars from solid fixed elements touching the
+        // screen edges and from the page colour, not from canvas pixels.
+        root.style.backgroundColor = bottom;
+        for (const [side, color] of [['top', top], ['bottom', bottom]]) {
+            let edge = document.querySelector(`.safe-edge-${side}`);
+            if (!edge) {
+                edge = Object.assign(document.createElement('div'), { className: `safe-edge safe-edge-${side}` });
+                edge.setAttribute('aria-hidden', 'true');
+                document.body.prepend(edge);
+            }
+            edge.style.backgroundColor = color;
+        }
     }
 
     // Backdrop surface pattern: baked once per kind and canvas size.
