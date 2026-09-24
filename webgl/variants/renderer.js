@@ -94,7 +94,7 @@ const ring = (count, radius, size, color, power) => Array.from({ length: count }
 });
 export const LIGHT_SETUPS = {
     studio: {
-        title: 'Студия', key: { c: [-.24, .30, 1], power: 8 }, bounce: 1,
+        title: 'Студия', hint: 'Главный свет сверху слева, холодная заливка справа, яркие фаски. Универсальный вариант.', key: { c: [-.24, .30, 1], power: 8 }, bounce: 1,
         lights: [
             // Soft wide key wrap: gives satin a large, gentle gradient instead of a hot spot.
             { c: [-.30, .36, 1], roll: -.40, size: [.40, .30], color: 'key', power: .8, wrap: true },
@@ -112,7 +112,7 @@ export const LIGHT_SETUPS = {
     },
     softbox: {
         // One large overhead softbox and a white room: low contrast, even satin.
-        title: 'Софтбокс', key: { c: [-.16, .30, 1], power: 4.5 }, bounce: 1.25,
+        title: 'Софтбокс', hint: 'Один большой мягкий свет сверху: металл ровный, контраста мало.', key: { c: [-.16, .30, 1], power: 4.5 }, bounce: 1.25,
         lights: [
             { c: [-.05, .42, 1], size: [.62, .36], color: 'key', power: .6, wrap: true },
             { c: [.58, .02, 1], size: [.30, .45], color: 'fill', power: .9 },
@@ -124,7 +124,7 @@ export const LIGHT_SETUPS = {
     },
     drama: {
         // Hard key high on the left, almost nothing else: deep blacks, one flash.
-        title: 'Драма', key: { c: [-.52, .46, 1], power: 12 }, bounce: .3,
+        title: 'Драма', hint: 'Одна жёсткая лампа сбоку, остальное в темноте: глубокий чёрный и яркая вспышка.', key: { c: [-.52, .46, 1], power: 12 }, bounce: .3,
         lights: [
             { c: [-.62, .56, 1], size: [.16, .12], color: 'key', power: .6, wrap: true },
             { c: [1, .15, -.10], size: [.05, .60], color: 'fill', power: 3.2 },
@@ -133,7 +133,7 @@ export const LIGHT_SETUPS = {
     },
     rim: {
         // Lamps behind and above: the chamfers glow, the face stays dark until tilted.
-        title: 'Контровой', key: { c: [-.10, .95, .30], power: 9 }, shadow: [-.12, .35, 1], bounce: .35,
+        title: 'Контровой', hint: 'Свет сзади: горит контур, а пластина тёмная, пока её не наклонить.', key: { c: [-.10, .95, .30], power: 9 }, shadow: [-.12, .35, 1], bounce: .35,
         lights: [
             { c: [-1, .20, -.20], size: [.08, .80], color: 'key', power: 8 },
             { c: [1, .20, -.20], size: [.08, .80], color: 'fill', power: 7 },
@@ -144,7 +144,7 @@ export const LIGHT_SETUPS = {
     },
     ring: {
         // A ring light around the lens: a halo around the dark flag in every mirror.
-        title: 'Кольцо', key: { c: [-.20, .26, 1], power: 3 }, shadow: [-.06, .14, 1], bounce: .7,
+        title: 'Кольцо', hint: 'Кольцевая лампа вокруг камеры: при наклоне в металле видно кольцо.', key: { c: [-.20, .26, 1], power: 3 }, shadow: [-.06, .14, 1], bounce: .7,
         lights: [
             ...ring(10, .24, .04, 'key', 5),
             { c: [0, 1, .10], size: [.50, .30], color: 'key', power: 2.5 }
@@ -152,7 +152,7 @@ export const LIGHT_SETUPS = {
     },
     window: {
         // Daylight through a four-pane window on the left, a warm room on the right.
-        title: 'Окно', key: { c: [-.40, .24, 1], power: 7, color: [.90, .96, 1.06] }, bounce: .9,
+        title: 'Окно', hint: 'Дневной свет из окна слева и тёплая комната справа.', key: { c: [-.40, .24, 1], power: 7, color: [.90, .96, 1.06] }, bounce: .9,
         lights: [
             ...[[-.86, .38], [-.62, .38], [-.86, .10], [-.62, .10]].map(([x, y]) =>
                 ({ c: [x, y, 1], size: [.10, .12], color: [.88, .95, 1.08], power: 3.4, shape: 'rect' })),
@@ -164,7 +164,7 @@ export const LIGHT_SETUPS = {
     },
     neon: {
         // Two coloured tubes and a cool key: the metal picks up magenta and cyan.
-        title: 'Неон', key: { c: [-.24, .30, 1], power: 6, color: [.86, .92, 1] }, bounce: .35,
+        title: 'Неон', hint: 'Розовая и голубая неоновые трубки: металл окрашивается в их цвета.', key: { c: [-.24, .30, 1], power: 6, color: [.86, .92, 1] }, bounce: .35,
         lights: [
             { c: [.60, .05, 1], roll: .12, size: [.03, .60], color: [1, .10, .55], power: 9 },
             { c: [-.72, -.10, 1], roll: -.10, size: [.03, .55], color: [.05, .75, 1], power: 8 },
@@ -184,8 +184,7 @@ const toneOf = color => color === 'fill' ? studio.fill : color === 'key' || !col
 // a gain that keeps the emitted light (area × intensity) comparable.
 export const KEY_SHAPES = {
     strip: { title: 'Полоса', size: [.50, .075], radius: .075, roll: -.52 },
-    round: { title: 'Круг', size: [.17, .17], radius: .17, roll: 0 },
-    window: { title: 'Окно', size: [.27, .20], radius: .06, roll: 0 }
+    round: { title: 'Круг', size: [.17, .17], radius: .17, roll: 0 }
 };
 for (const shape of Object.values(KEY_SHAPES)) {
     const area = 4 * shape.size[0] * shape.size[1] - (4 - Math.PI) * shape.radius ** 2;

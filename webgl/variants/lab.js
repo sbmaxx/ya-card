@@ -90,6 +90,8 @@ style.textContent = direction.css + `
 .lab .group h3 { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: #e8ebf0; }
 .lab .group .segments { margin-bottom: 8px; }
 .lab .group label.range { margin-bottom: 8px; }
+.lab .group .caption { margin: 2px 2px 6px; color: #9aa4b2; }
+.lab .group .hint { margin: -2px 2px 12px; color: #9aa4b2; font-size: 11px; line-height: 1.4; min-height: 2.8em; }
 .lab .tint-row { margin-bottom: 9px; }
 .lab .tint-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; color: #9aa3b0; }
 .lab .mini { display: flex; gap: 1px; padding: 1px; border-radius: 6px; background: #ffffff10; }
@@ -142,6 +144,13 @@ const panel = document.createElement('aside');
 panel.className = 'lab';
 panel.setAttribute('aria-label', 'Демо-стенд');
 // Panel building blocks: one group per lettering object with everything about it.
+// Round softboxes, or a long key strip with capsule lamps.
+const LAMP_SHAPES = {
+    round: { title: 'Круглые', settings: { keyShape: 'round', lamps: 'round' } },
+    long: { title: 'Вытянутые', settings: { keyShape: 'strip', lamps: 'capsule' } }
+};
+const lampShape = () => Object.keys(LAMP_SHAPES).find(id =>
+    Object.entries(LAMP_SHAPES[id].settings).every(([key, value]) => lab[key] === value));
 const group = (title, body) => `<section class="group"><h3>${title}</h3>${body}</section>`;
 const shapeRow = (param, options, current) => `<div class="segments" data-param="${param}">
     ${Object.entries(options).map(([id, label]) => `<button type="button" data-value="${id}" aria-pressed="${id === current}">${label}</button>`).join('')}
@@ -183,20 +192,19 @@ panel.innerHTML = `
   <details class="text-fields"><summary>Текст карточки</summary>
     ${textFields.map(([key, label, placeholder]) => `<label class="field">${label}<input type="text" name="${key}" value="${(params.get(key) || '').replace(/"/g, '&quot;')}" placeholder="${placeholder}" autocomplete="off" spellcheck="false"></label>`).join('')}
   </details>
-  ${group('Тип света', `
+  ${group('Свет', `
+    <div class="caption">Схема</div>
     <div class="segments" data-live="lightSetup">
       ${Object.entries(LIGHT_SETUPS).map(([id, setup]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.lightSetup}">${setup.title}</button>`).join('')}
-    </div>`)}
-  ${group('Ключевой свет', `
-    <div class="segments" data-live="keyShape">
-      ${Object.entries(KEY_SHAPES).map(([id, shape]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.keyShape}">${shape.title}</button>`).join('')}
     </div>
-    <div class="segments" data-live="lamps">
-      <button type="button" data-value="round" aria-pressed="${lab.lamps === 'round'}">Лампы: круги</button><button type="button" data-value="capsule" aria-pressed="${lab.lamps === 'capsule'}">Капсулы</button>
+    <p class="hint" data-hint="lightSetup">${LIGHT_SETUPS[lab.lightSetup].hint}</p>
+    <div class="caption">Форма бликов</div>
+    <div class="segments" data-live="lampShape">
+      ${Object.entries(LAMP_SHAPES).map(([id, shape]) => `<button type="button" data-value="${id}" aria-pressed="${id === lampShape()}">${shape.title}</button>`).join('')}
     </div>
-    <label class="range">Мягкость всего света <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
+    <label class="range">Мягкость <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
     <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>`)}
-  <div class="tuning"><fieldset><legend>Свет</legend>
+  <div class="tuning"><fieldset><legend>Движение света</legend>
     <label class="check"><input type="checkbox" name="manual" ${lab.manualLight ? 'checked' : ''}> Стоп-кадр света</label>
     <label class="range">Поворот <output data-for="yaw"></output><input type="range" name="yaw" min="-1.2" max="1.2" step=".01" value="${lab.yaw}"></label>
     <label class="range">Высота <output data-for="pitch"></output><input type="range" name="pitch" min="-.6" max=".6" step=".01" value="${lab.pitch}"></label>
@@ -287,25 +295,20 @@ panel.querySelectorAll('[data-tint]').forEach(row => row.addEventListener('click
     row.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
 }));
-panel.querySelector('[data-live="lamps"]').addEventListener('click', event => {
-    const button = event.target.closest('button');
-    if (!button) return;
-    lab.lamps = button.dataset.value;
-    panel.querySelectorAll('[data-live="lamps"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
-    writeUrl();
-});
 panel.querySelector('[data-live="lightSetup"]').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
     lab.lightSetup = button.dataset.value;
     panel.querySelectorAll('[data-live="lightSetup"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    panel.querySelector('[data-hint="lightSetup"]').textContent = LIGHT_SETUPS[lab.lightSetup].hint;
     writeUrl();
 });
-panel.querySelector('[data-live="keyShape"]').addEventListener('click', event => {
+// One switch for the shape of every highlight: the key softbox and the other lamps.
+panel.querySelector('[data-live="lampShape"]').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
-    lab.keyShape = button.dataset.value;
-    panel.querySelectorAll('[data-live="keyShape"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    Object.assign(lab, LAMP_SHAPES[button.dataset.value].settings);
+    panel.querySelectorAll('[data-live="lampShape"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     writeUrl();
 });
 panel.querySelectorAll('[data-finish]').forEach(group => group.addEventListener('click', event => {
