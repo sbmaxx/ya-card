@@ -104,6 +104,7 @@ style.textContent = direction.css + `
 .lab .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 7px; }
 .lab .swatches button { appearance: none; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid #ffffff33; background: var(--swatch); cursor: pointer; padding: 0; }
 .lab .swatches button[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 2px; }
+.lab .swatches .break { flex-basis: 100%; height: 0; }
 .lab details.text-fields { margin: 0 0 12px; }
 .lab details.text-fields summary { cursor: pointer; color: #9aa3b0; margin-bottom: 6px; }
 .lab .field { display: grid; gap: 3px; margin-bottom: 7px; color: #9aa3b0; }
@@ -140,11 +141,13 @@ style.textContent = direction.css + `
 document.head.append(style);
 document.title = `Lab · ${direction.title}`;
 
-// Neutrals only, light to dark, plus the Yandex red for the first letter.
+// Two rows: neutrals light to dark, then the reds used on ya.ru, light to dark.
+const BREAK = ['break'];
 const swatches = [['', 'Металл'],
     ['f2f1ee', 'Белый'], ['f1e9d6', 'Молочный'], ['e1e6ec', 'Холодный белый'], ['cfd2d6', 'Жемчужный'], ['b4b8bd', 'Светло-серый'],
-    ['8a8e94', 'Серый'], ['5d6168', 'Тёмно-серый'], ['3b3f45', 'Графит'], ['25282c', 'Антрацит'], ['111214', 'Чёрный'],
-    ['fc3f1d', 'Яндекс-красный']];
+    ['8a8e94', 'Серый'], ['5d6168', 'Тёмно-серый'], ['3b3f45', 'Графит'], ['25282c', 'Антрацит'], ['111214', 'Чёрный'], BREAK,
+    ['fa7e6c', 'Светлый коралл'], ['f8604a', 'Коралловый'], ['fc3f1d', 'Яндекс-красный'], ['ff3333', 'Ярко-красный'],
+    ['e00009', 'Красный'], ['ba2528', 'Гранатовый'], ['9d204e', 'Малиновый'], ['890006', 'Тёмно-красный']];
 const labels = { vcut: 'V-резка', deboss: 'Углублённый', raised: 'Выпуклый' };
 const panel = document.createElement('aside');
 panel.className = 'lab';
@@ -167,7 +170,7 @@ const tintRow = (object, label) => `<div class="tint-row">
       <button type="button" data-value="enamel" aria-pressed="${lab.finish[object] === 'enamel'}">Эмаль</button><button type="button" data-value="anod" aria-pressed="${lab.finish[object] === 'anod'}">Анод</button>
     </div></div>
     <div class="swatches" data-tint="${object}Tint">
-    ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
+    ${(object === 'logoFirst' ? [['same', 'Как логотип'], ...swatches] : swatches).map(([hex, title]) => hex === 'break' ? '<span class="break"></span>' : `<button type="button" title="${title}" data-value="${hex}" aria-pressed="${hex === lab[object + 'Tint']}" style="--swatch:${hex === 'same' ? 'conic-gradient(#fff 0 25%,#0000 0 50%,#fff 0 75%,#0000 0) 0 0/8px 8px,#555' : hex ? '#' + hex : 'linear-gradient(135deg,#eee,#777)'}"></button>`).join('')}
   </div></div>`;
 panel.innerHTML = `
   <h2>Демо-стенд <span class="meta"><output class="fps">— fps</output><button type="button" class="close" data-action="hide" aria-label="Скрыть панель">×</button></span></h2>
@@ -188,7 +191,7 @@ panel.innerHTML = `
     ${tintRow('logoFirst', 'Первая буква')}`)}
   ${group('Имя', `
     ${shapeRow('name', { edition: 'Материал', vcut: 'V-резка', deboss: 'Вглубь', raised: 'Выпуклое' }, currentNameShape)}
-    <label class="range">Размер <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
+    <label class="range">Размер имени <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
     ${depthRow('nameDepth', 'Глубина')}
     ${tintRow('name', 'Цвет')}`)}
   ${group('Должность и контакты', `
