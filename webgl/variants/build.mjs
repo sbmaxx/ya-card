@@ -35,7 +35,7 @@ const loaderCss = `.card-loader{position:fixed;left:50%;top:50%;width:140px;heig
 opacity:0;transition:opacity .8s ease;mix-blend-mode:difference;background:#ffffff2e}
 .webgl-loading .card-loader{opacity:1;transition-duration:.35s}
 .card-loader::after{content:'';position:absolute;left:0;top:0;width:48px;height:1px;background:linear-gradient(90deg,transparent,#fff,transparent);
-will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite}
+will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite alternate}
 @keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(92px);opacity:0}}
 @media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(46px)}}
 .safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none}

@@ -676,6 +676,7 @@ precision highp float;
 uniform sampler2D uShadow;
 uniform vec2 uResolution;
 uniform vec2 uPool;
+uniform float uTime;
 uniform vec3 uWall;
 uniform vec3 uFloor;
 uniform vec3 uPoolColor;
@@ -700,18 +701,29 @@ vec2 screenUnits(vec2 uv) {
     return uv * vec2(aspect, 1.0) / min(aspect, 1.0);
 }
 
+// 0 on landscape and square screens, 1 on a phone held upright (2:1 and taller).
+float tallness() {
+    return clamp(uResolution.y / uResolution.x - 1.0, 0.0, 1.0);
+}
+
 // Wall lighting at a screen position: base tone and the key light's pool.
+// The pool drifts and breathes slowly, so the room feels alive; on a tall
+// screen it stretches upwards and downwards to fill it.
 vec3 wallColor(vec2 uv) {
-    vec2 d = (screenUnits(uv) - screenUnits(uPool)) * vec2(.85, 1.1);
-    return uWall + uPoolColor * exp(-dot(d, d) * 2.6);
+    vec2 drift = vec2(sin(uTime * .21), cos(uTime * .17 + 1.3)) * vec2(.035, .03);
+    vec2 d = (screenUnits(uv) - screenUnits(uPool + drift)) * vec2(.85, mix(1.1, .62, tallness()));
+    float breath = 1.0 + .08 * sin(uTime * .33) + .04 * sin(uTime * .57 + 2.0);
+    return uWall + uPoolColor * breath * exp(-dot(d, d) * 2.6);
 }
 
 void main() {
     vec2 p = screenUnits(vUV) - screenUnits(vec2(.5));
+    float tall = tallness();
     // Cyclorama: the wall curves softly into a darker floor below the card.
     vec3 wall = wallColor(vUV);
-    vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y));
-    color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, 1.0)));
+    float floorScale = mix(1.0, 1.7, tall);
+    vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12 * floorScale, -.62 * floorScale, p.y));
+    color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, mix(1.0, .62, tall))));
     color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
     vec3 display = toSRGB(neutralTonemap(color));
     display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
@@ -1068,7 +1080,7 @@ export class CardRenderer {
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom']);
+            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
@@ -1282,8 +1294,8 @@ export class CardRenderer {
         const key = `${backdrop.title}:${this.lightSetup ? this.lightSetup.title : ''}:${this.canvas.width}x${this.canvas.height}`;
         if (key === this.edgeKey) return;
         this.edgeKey = key;
-        // Flat bands of 14% / 16% of the height, each with a 20% ramp into the core.
-        const fade = [.14, .16, .20, .20];
+        // Flat bands of 7% / 9% of the height (Safari's bars), each with a 12% ramp.
+        const fade = [.07, .09, .12, .12];
         const gl = this.gl, u = this.backdropUniforms, width = this.canvas.width, height = this.canvas.height;
         // A throwaway frame of the bare backdrop with the light at rest.
         light(this.lightSetup ? this.lightSetup.shadowDirection : this.keyDirection);
@@ -1650,6 +1662,7 @@ export class CardRenderer {
             gl.uniform3f(u.uPoolColor, ...backdrop.pool);
             gl.uniform1f(u.uGrain, backdrop.grain);
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
+            gl.uniform1f(u.uTime, reduced ? 0 : this.time);
             // The pool sits behind the card, offset towards the key light.
             const light = k => gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
             this.sampleEdges(backdrop, light);
