@@ -517,8 +517,47 @@ void main() {
     vec2 surfacePx = vUV * uLayoutSize;
     float footprint = max(fwidth(vUV.x) * uLayoutSize.x, fwidth(vUV.y) * uLayoutSize.y);
     float resolved = 1.0 - smoothstep(.85, 1.8, footprint);
-    vec4 ink = texture(uTexture, vUV);
-    vec4 relief = texture(uEngraving, vUV);
+    // Where the lettering is sampled. Raised letters move it (below).
+    vec2 texUV = vUV;
+    ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
+    // Parallax occlusion: raised letters stand proud of the plate by a few
+    // layout px. The relief map alone only tilts their light, so seen at an
+    // angle — a turn, a spin — they looked printed on a flat sheet. Here the
+    // view ray is marched down through the relief heights (B: 0 plate, 1 top):
+    // it meets a letter's top, its wall, or the plate beyond, so the letters
+    // show their walls and hide the metal behind them. The geometry's plane is
+    // the letters' top; the plate sits that height below it.
+    if (uEdge < .5) {
+        vec4 pad = vec4(-6.0, -6.0, 6.0, 6.0) / uLayoutSize.xyxy;
+        float nearLogo = inRect(uLogoRect + pad);
+        float nearName = inRect(uTitleRect + pad) * (1.0 - nearLogo);
+        float nearText = inRect(uTextRect + pad) * (1.0 - nearLogo) * (1.0 - nearName);
+        float height = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x + nearText * uRaisedHeight.z;
+        vec3 toEye = vec3(dot(v, T), dot(v, B), dot(v, n));
+        if (height > 0.0 && toEye.z > .06) {
+            // UV travelled from the top to the plate, and steps of ~⅓ layout px.
+            vec2 shift = -toEye.xy / toEye.z * height / uLayoutSize;
+            float layers = clamp(ceil(length(shift * uLayoutSize) * 3.0), 1.0, 40.0);
+            vec2 stepUV = shift / layers;
+            float stepDepth = 1.0 / layers;
+            vec2 uv = vUV;
+            float depth = 0.0;
+            float below = 1.0 - textureLod(uEngraving, uv, 0.0).b;
+            for (int i = 0; i < 40; i++) {
+                if (float(i) >= layers || depth >= below) break;
+                uv += stepUV;
+                depth += stepDepth;
+                below = 1.0 - textureLod(uEngraving, uv, 0.0).b;
+            }
+            // Between the last two samples, where the ray crossed the surface.
+            vec2 last = uv - stepUV;
+            float after = below - depth;
+            float before = (1.0 - textureLod(uEngraving, last, 0.0).b) - (depth - stepDepth);
+            texUV = depth > 0.0 ? mix(uv, last, clamp(after / (after - before - 1e-5), 0.0, 1.0)) : vUV;
+        }
+    }` : ''}
+    vec4 ink = texture(uTexture, texUV);
+    vec4 relief = texture(uEngraving, texUV);
     vec3 color;
 
     if (uEdge > .5) {
@@ -599,9 +638,9 @@ void main() {
         float nearText = inRect(uTextRect + pad) * (1.0 - nearLogo) * (1.0 - nearName);
         float raisedHeight = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x + nearText * uRaisedHeight.z;
         vec2 castStep = lightSlope * raisedHeight * 1.6 / uLayoutSize;
-        float occluder = texture(uEngraving, vUV + castStep * .5).a * .45
-                       + texture(uEngraving, vUV + castStep).a * .35
-                       + texture(uEngraving, vUV + castStep * 1.8).a * .20;
+        float occluder = texture(uEngraving, texUV + castStep * .5).a * .45
+                       + texture(uEngraving, texUV + castStep).a * .35
+                       + texture(uEngraving, texUV + castStep * 1.8).a * .20;
         color *= 1.0 - occluder * (1.0 - ink.a) * .6 * step(.001, raisedHeight) * resolved;` : ''}
         float coverage = max(ink.a, max(underline, focusStroke));
         if (coverage > .001) {
