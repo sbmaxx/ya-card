@@ -26,8 +26,9 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 @media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(46px)}}
 .webgl-ready .scene,.webgl-loading .scene{bottom:auto;height:100lvh}
 .safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none}
-.safe-edge-top{top:0;height:max(1px,env(safe-area-inset-top,0px))}
-.safe-edge-bottom{bottom:0;height:max(1px,env(safe-area-inset-bottom,0px))}
+.safe-edge-top{top:0;height:max(6px,env(safe-area-inset-top,0px))}
+.safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
+@media (pointer:fine){.safe-edge{display:none}}
 :root.webgl-backdrop body{background:transparent}
 @media (hover:none) and (pointer:coarse){.ambient{display:none}}`;
 // Corners stay clean on the WebGL card: language flips with the card itself.

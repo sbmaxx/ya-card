@@ -611,6 +611,11 @@ uniform float uShadowFade;
 uniform float uFocal;
 uniform float uFloorY;
 uniform vec2 uCardCenter;
+// Touch screens: the scene melts into flat edge colours that Safari extends
+// under its status bar and toolbar (fractions of height; 0 disables).
+uniform vec2 uEdgeFade;
+uniform vec3 uEdgeTop;
+uniform vec3 uEdgeBottom;
 in vec2 vUV;
 out vec4 outColor;
 ${toneCode}
@@ -688,6 +693,8 @@ void main() {
     color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
     vec3 display = toSRGB(neutralTonemap(color));
     display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
+    if (uEdgeFade.x > 0.0) display = mix(display, uEdgeTop, smoothstep(1.0 - uEdgeFade.x, 1.0, vUV.y));
+    if (uEdgeFade.y > 0.0) display = mix(display, uEdgeBottom, smoothstep(uEdgeFade.y, 0.0, vUV.y));
     outColor = vec4(display, 1.0);
 }`;
 
@@ -1004,7 +1011,7 @@ export class CardRenderer {
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uPattern', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uAccent', 'uKeyDirection', 'uKind', 'uGrain', 'uShadowStrength', 'uShadowFade', 'uFocal', 'uFloorY', 'uCardCenter']);
+            'uAccent', 'uKeyDirection', 'uKind', 'uGrain', 'uShadowStrength', 'uShadowFade', 'uFocal', 'uFloorY', 'uCardCenter', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom']);
         this.patternUniforms = locate(this.patternProgram, ['uKind', 'uAspect']);
         this.pattern = null;
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
@@ -1184,39 +1191,46 @@ export class CardRenderer {
 
     // Safari paints the status bar and the area under its toolbars with the page
     // colour. Read the rendered frame's top and bottom edge and continue them.
-    matchSafeAreas(backdrop) {
-        const root = document.documentElement;
-        root.classList.toggle('webgl-backdrop', Boolean(backdrop));
-        const key = backdrop ? `${backdrop.title}:${this.canvas.width}x${this.canvas.height}` : 'none';
-        if (key === this.safeAreaKey) return;
-        this.safeAreaKey = key;
-        const meta = document.querySelector('meta[name="theme-color"]');
-        if (!backdrop) {
-            root.style.removeProperty('--edge-top');
-            root.style.removeProperty('--edge-bottom');
-            return;
-        }
+    // Safari (iOS 26) paints its status bar and toolbar areas with a flat colour
+    // sampled from fixed elements at the screen edges, never from canvas pixels.
+    // On touch screens the backdrop melts into flat colours read from itself
+    // just inside the fade; the same colours go to the page, the scene and thin
+    // fixed edge strips, so the scene continues into Safari's bars.
+    sampleEdges(backdrop) {
+        if (!matchMedia('(pointer: coarse)').matches) { this.edges = null; return; }
+        this.edgeFrames = (this.edgeFrames || 0) + 1;
+        const key = `${backdrop.title}:${this.canvas.width}x${this.canvas.height}`;
+        // The light pool drifts; refresh now and then, not every frame.
+        if (key === this.edgeKey && this.edgeFrames % 90) return;
+        this.edgeKey = key;
+        const fade = [.07, .09];
         const gl = this.gl, pixel = new Uint8Array(4);
-        const hex = y => {
-            gl.readPixels(this.canvas.width >> 1, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-            return '#' + [0, 1, 2].map(i => pixel[i].toString(16).padStart(2, '0')).join('');
+        const read = y => {
+            gl.readPixels(this.canvas.width >> 1, Math.round(y), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+            return [pixel[0], pixel[1], pixel[2]];
         };
-        const top = hex(this.canvas.height - 1), bottom = hex(0);
-        root.style.setProperty('--edge-top', top);
-        root.style.setProperty('--edge-bottom', bottom);
-        if (meta) meta.content = top;
-        // Safari (iOS 26) tints its bars from solid fixed elements touching the
-        // screen edges and from the page colour, not from canvas pixels.
-        root.style.backgroundColor = bottom;
+        const top = read(this.canvas.height * (1 - fade[0]) - 1), bottom = read(this.canvas.height * fade[1]);
+        this.edges = { fade, top: top.map(v => v / 255), bottom: bottom.map(v => v / 255) };
+        const css = rgb => `rgb(${rgb.join(',')})`;
+        const root = document.documentElement;
+        root.style.backgroundColor = css(bottom);
+        const scene = document.querySelector('.scene');
+        if (scene) scene.style.backgroundColor = css(bottom);
+        const meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.content = css(top);
         for (const [side, color] of [['top', top], ['bottom', bottom]]) {
-            let edge = document.querySelector(`.safe-edge-${side}`);
-            if (!edge) {
-                edge = Object.assign(document.createElement('div'), { className: `safe-edge safe-edge-${side}` });
-                edge.setAttribute('aria-hidden', 'true');
-                document.body.prepend(edge);
+            let strip = document.querySelector(`.safe-edge-${side}`);
+            if (!strip) {
+                strip = Object.assign(document.createElement('div'), { className: `safe-edge safe-edge-${side}` });
+                strip.setAttribute('aria-hidden', 'true');
+                document.body.prepend(strip);
             }
-            edge.style.backgroundColor = color;
+            strip.style.backgroundColor = css(color);
         }
+    }
+
+    matchSafeAreas(backdrop) {
+        document.documentElement.classList.toggle('webgl-backdrop', Boolean(backdrop));
     }
 
     // Backdrop surface pattern: baked once per kind and canvas size.
@@ -1551,6 +1565,10 @@ export class CardRenderer {
             gl.uniform1f(u.uFocal, this.projection[5]);
             gl.uniform1f(u.uFloorY, this.floorY);
             gl.uniform2f(u.uCardCenter, this.model[12], 0);
+            const edge = this.edges || { fade: [0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
+            gl.uniform2f(u.uEdgeFade, ...edge.fade);
+            gl.uniform3f(u.uEdgeTop, ...edge.top);
+            gl.uniform3f(u.uEdgeBottom, ...edge.bottom);
             // The pool sits behind the card, offset towards the key light.
             const k = this.keyDirection;
             gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
@@ -1562,6 +1580,7 @@ export class CardRenderer {
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
             gl.uniform1f(u.uShadowFade, shadowFade);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
+            this.sampleEdges(backdrop);
         }
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.program);
