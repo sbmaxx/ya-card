@@ -106,7 +106,9 @@ import { CardRenderer } from './renderer.js';
         const delta = Math.max(.001, (now - previousTime) / 1000);
         previousTime = now;
         lastDraw = now;
-        const poseHeld = Boolean(focusedAnchor || pointerOverLink);
+        // Hold a hovered link long enough to click, then let a parked mouse
+        // return to idle motion. Keyboard focus keeps a stable target.
+        const poseHeld = Boolean(focusedAnchor || (pointerOverLink && now - lastPointerMove < 1800));
         const idle = !gesture && !flipLocked && !poseHeld && (!userControlled || now - lastPointerMove > 1400);
         const settling = renderer.draw({ rx, ry, rz, zoom, dragging: Boolean(gesture), flipped: lang === 'en', animate, idle, freezeTilt: flipLocked || poseHeld, freezeHover: flipLocked, focusLink: focusRect, reduced: reducedMotion.matches, delta });
         motionSettling = settling && userControlled && !idle;
@@ -170,13 +172,6 @@ import { CardRenderer } from './renderer.js';
         ry = clamp(baseRy + hoverRy, -45, 45);
         rz = clamp(baseRz + hoverRz, -3, 3);
     }
-    function holdCardPose() {
-        if (!renderer) return;
-        baseRx = rx = (renderer.rotationX - renderer.restPose[0]) * 180 / Math.PI;
-        baseRy = ry = (renderer.rotationY - renderer.restPose[1]) * 180 / Math.PI;
-        baseRz = rz = (renderer.rotationZ - renderer.restPose[2]) * 180 / Math.PI;
-        hoverRx = hoverRy = hoverRz = 0;
-    }
     function clearPointerHover() {
         pointerOverLink = false;
         if (renderer) renderer.hoverPointer = null;
@@ -236,13 +231,15 @@ import { CardRenderer } from './renderer.js';
     // Keep tracking over RU/EN too, so entering an overlay does not reset tilt.
     window.addEventListener('pointermove', event => {
         if (renderer && !contextLost && root.classList.contains('webgl-ready') && event.pointerType === 'mouse') {
+            lastPointerMove = performance.now();
             renderer.hoverPointer = scene.contains(event.target) ? { x: event.clientX, y: event.clientY } : null;
             const overLink = finePointer.matches && !reducedMotion.matches
                 && Boolean(renderer.linkAt(event.clientX, event.clientY));
             if (overLink !== pointerOverLink) {
                 pointerOverLink = overLink;
-                if (overLink) holdCardPose();
-                else { hoverRx = hoverRy = hoverRz = 0; applyHover(); }
+                // freezeTilt holds the rendered pose; do not bake the current
+                // idle angle into the user's base rotation on every hover.
+                if (!overLink) { hoverRx = hoverRy = hoverRz = 0; applyHover(); }
             }
             schedule();
         }
@@ -250,9 +247,7 @@ import { CardRenderer } from './renderer.js';
             && event.pointerType === 'mouse' && finePointer.matches && !reducedMotion.matches) hoverTilt(event);
     });
     function updateFocusedAnchor(target) {
-        const wasFocused = Boolean(focusedAnchor);
         focusedAnchor = target?.closest('.face a') || null;
-        if (focusedAnchor && !wasFocused && !pointerOverLink) holdCardPose();
         focusRect = null;
         if (focusedAnchor && renderer) {
             const face = focusedAnchor.closest('.face');

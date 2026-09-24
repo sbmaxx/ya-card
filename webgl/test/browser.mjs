@@ -215,7 +215,8 @@ try {
     await touch.waitForTimeout(100);
     await touch.touchscreen.tap(20, 750);
     assert.equal(await touch.locator('html').getAttribute('lang'), 'ru', 'background tap must not flip');
-    await touch.touchscreen.tap(195, 160);
+    // Use the blank interior above the logo, with room for the idle-safe inset.
+    await touch.touchscreen.tap(195, 210);
     assert.equal(await touch.locator('html').getAttribute('lang'), 'en', 'tap flips after pinch');
     const nojs = await browser.newPage({ javaScriptEnabled: false });
     await nojs.goto(base);

@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-14`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-15`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 70808 |
-| index.html.gz | 30218 |
-| index.html.br | 26723 |
+| index.html | 70917 |
+| index.html.gz | 30258 |
+| index.html.br | 26738 |
 
 HTML SHA-256:
-`d86a8afb9d9c415de5fad5ee08dbbadca35c948ac2e0c8b2b3d9a4a2be48f6eb`.
+`9c3b4c4f3144ca7ed339f2cfa0638864bd172b00461124db7728ba873854ad4a`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -34,7 +34,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-14/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-15/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -149,3 +149,12 @@ The single-file builder now inserts generated content literally and validates
 inline JavaScript after HTML minification. Engraving, contact, built-browser and
 four mobile-layout checks passed. Public Brotli matches the tested artifact.
 Details and comparison images: `design/2026-09-24-post-cleanup-goal.md`.
+
+## Idle movement and readable relief
+
+Release `20260924-15` strengthens three-axis idle movement and light travel,
+lets a parked pointer resume idle after 1.8 seconds, and selects the deeper
+`sculpted` engraving. Keyboard focus and reduced-motion behavior remain stable.
+The rollback restores release `20260924-14`. Motion, contact, core-browser,
+engraving and mobile-layout checks passed; the public Brotli file matches the
+tested build. Details: `design/2026-09-24-idle-relief.md`.

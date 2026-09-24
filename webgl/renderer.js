@@ -24,8 +24,8 @@ const variation = {
     poseX: between(-.035, .035), poseY: between(-.045, .045), poseZ: between(-.012, .012),
     phaseX: between(0, Math.PI * 2), phaseY: between(0, Math.PI * 2), phaseZ: between(0, Math.PI * 2),
     floatPhase: between(0, Math.PI * 2), idleSpeed: between(.85, 1.15), idleAmplitude: between(.8, 1.15),
-    lightPhase: between(0, Math.PI * 2), lightPeriod: between(19, 27),
-    lightX: between(-3.3, -2.7), lightY: between(3.7, 4.3), lightTravel: between(1.25, 1.85),
+    lightPhase: between(0, Math.PI * 2), lightPeriod: between(14, 20),
+    lightX: between(-3.3, -2.7), lightY: between(3.7, 4.3), lightTravel: between(1.8, 2.4),
     backgroundPhase: between(0, Math.PI * 2)
 };
 
@@ -571,13 +571,19 @@ export class CardRenderer {
         const dt = Math.min(delta, 0.05);
         if (animate) this.time += dt;
         const lightPhase = this.time * Math.PI * 2 / variation.lightPeriod + variation.lightPhase;
-        this.keyLight = [variation.lightX + Math.sin(lightPhase) * variation.lightTravel, variation.lightY + Math.sin(lightPhase + .7) * .65, 6];
+        this.keyLight = [variation.lightX + Math.sin(lightPhase) * variation.lightTravel,
+            variation.lightY + Math.sin(lightPhase + .7) * .9, 5.6 + Math.cos(lightPhase) * .6];
         const idleTarget = animate && idle && !dragging ? 1 : 0;
         if (reduced) this.idleWeight = 0;
         else if (!freezeTilt) this.idleWeight += (idleTarget - this.idleWeight) * (1 - Math.exp(-dt * (idleTarget ? 1.6 : 10)));
         const idleTime = this.time * variation.idleSpeed;
-        const breathX = Math.sin(idleTime * .48 + variation.phaseX) * .065 * variation.idleAmplitude * this.idleWeight;
-        const breathY = Math.cos(idleTime * .36 + variation.phaseY) * .085 * variation.idleAmplitude * this.idleWeight;
+        const idleStrength = variation.idleAmplitude * this.idleWeight * (this.touchLandscape ? .60 : this.vertical ? .85 : 1);
+        // Different, overlapping arcs keep the idle pose perceptible even near
+        // one axis's turning point. Pointer/drag response stays independent.
+        const breathX = (Math.sin(idleTime * .56 + variation.phaseX) * .10
+            + Math.sin(idleTime * .89 + variation.phaseY) * .022) * idleStrength;
+        const breathY = (Math.cos(idleTime * .43 + variation.phaseY) * .145
+            + Math.sin(idleTime * .71 + variation.phaseX + .9) * .025) * idleStrength;
         const nextFlip = flipped ? Math.PI : 0;
         if (nextFlip !== this.flipTarget) {
             this.flipFrom = this.flipAngle;
@@ -590,7 +596,7 @@ export class CardRenderer {
         this.flipAngle = this.flipFrom + (this.flipTarget - this.flipFrom) * ease;
         const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX);
         const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY);
-        const targetZ = variation.poseZ + (reduced ? 0 : rz * Math.PI / 180 + Math.sin(idleTime * .28 + variation.phaseZ) * .012 * this.idleWeight);
+        const targetZ = variation.poseZ + (reduced ? 0 : rz * Math.PI / 180 + Math.sin(idleTime * .36 + variation.phaseZ) * .025 * idleStrength);
         const blend = reduced ? 1 : 1 - Math.exp(-dt * 3);
         if (reduced) {
             this.rotationX = targetX; this.rotationY = targetY; this.rotationZ = targetZ;
@@ -604,14 +610,14 @@ export class CardRenderer {
             this.velocityX = this.velocityY = this.velocityZ = 0;
         }
         if (!freezeTilt || reduced) {
-            const targetLift = Math.sin(idleTime * .55 + variation.floatPhase) * .035 * this.idleWeight;
+            const targetLift = Math.sin(idleTime * .55 + variation.floatPhase) * .06 * idleStrength;
             this.lift += (targetLift - this.lift) * blend;
         }
         const pixelsPerUnit = this.viewportHeight / (14 * Math.tan(Math.PI / 8));
         const fit = this.touchLandscape
             ? Math.min((this.viewportWidth - 64) / (this.width * pixelsPerUnit),
                 (this.viewportHeight - 108) / (this.height * pixelsPerUnit))
-            : this.vertical ? Math.min(1, (this.viewportWidth - 48) / (this.width * pixelsPerUnit))
+            : this.vertical ? Math.min(1, (this.viewportWidth - 56) / (this.width * pixelsPerUnit))
                 : Math.min(1, this.aspect * 1.23) * .81;
         // Pointer tilt lives in screen space; the card flips in its own space.
         // Adding Euler angles inverted pitch on the portrait back face.
