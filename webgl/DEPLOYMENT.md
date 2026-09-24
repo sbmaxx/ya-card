@@ -7,18 +7,18 @@ Published from this standalone `webgl/` version on 2026-09-24.
 - Site configuration: `/etc/nginx/sites-available/rozhdestvenskiy.ru.conf`.
 - Checked-in configuration: `deploy/nginx-site.conf`. Existing API proxy and
   other paths in this vhost are preserved. No other virtual host was changed.
-- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-18`.
+- Release and previous files: `/home/sbmaxx/ya-card-deploy-20260924-19`.
 
 ## Artifacts
 
 | File | Bytes |
 |---|---:|
-| index.html | 73166 |
-| index.html.gz | 30887 |
-| index.html.br | 27317 |
+| index.html | 75733 |
+| index.html.gz | 31846 |
+| index.html.br | 28127 |
 
 HTML SHA-256:
-`ad4871d40ec406241f27193f346eb0d28654cacb1fcec012fdeb0cd3241fd512`.
+`ff015fea22c50a5f8693521a7e340d952abbce956ff908ae30f13d404f22fa9a`.
 
 Compression is negotiated without installing new nginx modules. Requests with
 `br;q=0` / `gzip;q=0` are respected. Public responses for Brotli, gzip and identity
@@ -35,7 +35,7 @@ The previous silver HTML and compressed variants were copied outside the
 public document root. This release changes only site files; nginx is unchanged. To restore that release:
 
 ```sh
-ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-18/rollback.sh'
+ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/ya-card-deploy-20260924-19/rollback.sh'
 ```
 
 The script atomically restores the previous site files. No nginx reload is needed.
@@ -184,3 +184,15 @@ Release `20260924-18` scales desktop cards down by 10%: approximately 684×378px
 wide and 360px portrait width. Constrained desktop fits also shrink by 10%.
 Touch sizing is unchanged. The normal build and upload hash checks passed;
 no test suites were run. Rollback restores release `20260924-17`.
+
+## Studio metal and background
+
+Release `20260924-19` implements the approved studio-metal plan: centered
+portrait logos, filtered horizontal brushing, separately polished engraving
+walls/rim, rounded two-segment bevels, a moving graphite light field, static
+grain and one tilt-dependent shadow. The safe-area mask stays stationary.
+Size, type, engraving depth, thickness and three WebGL draw calls are retained.
+One visual pass covered desktop/mobile RU/EN and changed light/tilt states,
+followed by the normal single-file build and upload hashes. No test suites or
+agents were used. Rollback restores release `20260924-18`.
+Details: `design/2026-09-24-studio-metal.md`.

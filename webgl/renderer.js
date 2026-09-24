@@ -25,8 +25,7 @@ const variation = {
     phaseX: between(0, Math.PI * 2), phaseY: between(0, Math.PI * 2), phaseZ: between(0, Math.PI * 2),
     floatPhase: between(0, Math.PI * 2), idleSpeed: between(.85, 1.15), idleAmplitude: between(.8, 1.15),
     lightPhase: between(0, Math.PI * 2), lightPeriod: between(14, 20),
-    lightX: between(-3.3, -2.7), lightY: between(3.7, 4.3), lightTravel: between(1.8, 2.4),
-    backgroundPhase: between(0, Math.PI * 2)
+    lightX: between(-3.3, -2.7), lightY: between(3.7, 4.3), lightTravel: between(1.8, 2.4)
 };
 
 const vertexSource = `
@@ -77,7 +76,7 @@ varying vec2 vUV;
 varying vec3 vTangent;
 varying vec3 vBitangent;
 
-vec3 metalLighting(vec3 normal, vec3 view, vec3 light) {
+vec3 metalLighting(vec3 normal, vec3 view, vec3 light, float polish, float brushVisibility) {
     // One moving softbox drives the illumination, reflection and cast shadow.
     vec3 lightOffset = normalize(uKeyPosition) - normalize(vec3(-3.0, 4.0, 6.0));
     vec3 halfVector = normalize(light + view);
@@ -95,9 +94,13 @@ vec3 metalLighting(vec3 normal, vec3 view, vec3 light) {
     float highlightCore = exp(-reflectionDistance * 34.0);
     float edgeGlint = pow(max(dot(normal, halfVector), 0.0), 96.0);
     vec3 silver = mix(uMetalTone, uEdgeTone, uEdge);
-    float grain = (sin(vUV.y * 420.0 + sin(vUV.x * 4.0) * 0.3)
-                 + sin(vUV.y * 193.0)) * 0.0012;
-    vec3 color = silver * (0.43 + 0.22 * diffuse + grain);
+    // Horizontal tooling, below one percent contrast; fade before subpixel
+    // frequencies can shimmer. Polished walls and edges have no brushing.
+    vec2 surface = vUV * uLayoutSize;
+    float grain = (sin(surface.y * 5.2 + sin(surface.x * .13) * .7) * .65
+                 + sin(surface.y * 3.8 + sin(surface.x * .31)) * .35)
+                 * .009 * brushVisibility * (1.0 - smoothstep(0.0, 0.5, polish));
+    vec3 color = silver * (0.43 + 0.22 * diffuse);
     color += vec3(0.15, 0.17, 0.19) * softbox + vec3(0.11) * specular;
     color += vec3(0.22, 0.235, 0.25) * polishedReflection * (1.0 + finishVariation);
     color += vec3(0.12, 0.12, 0.115) * highlightCore;
@@ -107,11 +110,11 @@ vec3 metalLighting(vec3 normal, vec3 view, vec3 light) {
     // A single round studio source: satin broadens its reflected cone, while
     // the engraved floor below uses a narrower lobe around the same direction.
     float sourceDistance = 1.0 - max(dot(reflection, light), 0.0);
-    float satinReflection = exp(-sourceDistance * 5.0);
-    float sourceCore = exp(-sourceDistance * 30.0);
-    color = silver * (0.51 + 0.14 * diffuse + grain) + vec3(0.10, 0.11, 0.12);
-    color += vec3(0.45, 0.47, 0.49) * satinReflection;
-    color += vec3(0.11, 0.115, 0.12) * sourceCore;
+    float satinReflection = exp(-sourceDistance * mix(5.0, 18.0, polish));
+    float sourceCore = exp(-sourceDistance * mix(30.0, 72.0, polish));
+    color = silver * (0.51 + 0.14 * diffuse) + vec3(0.10, 0.11, 0.12);
+    color += vec3(0.45, 0.47, 0.49) * satinReflection * (1.0 + .12 * polish);
+    color += vec3(1.0, 1.04, 1.09) * mix(.11, .26, polish) * sourceCore;
     color += vec3(0.24, 0.28, 0.33) * fresnel;
     color += vec3(0.22, 0.24, 0.27) * edgeGlint * uEdge;
     ` : ''}
@@ -119,9 +122,10 @@ vec3 metalLighting(vec3 normal, vec3 view, vec3 light) {
     vec3 toGlow = uGlowPosition - vPosition;
     float facingGlow = max(dot(normal, normalize(toGlow)), 0.0);
     float falloff = 1.0 / (1.0 + dot(toGlow, toGlow) * 0.15);
-    vec3 glowColor = mix(vec3(0.16, 0.67, 0.88), vec3(0.57, 0.28, 0.86),
+    vec3 glowColor = mix(vec3(0.28, 0.44, 0.65), vec3(0.40, 0.44, 0.60),
                          smoothstep(-2.0, 2.0, vPosition.x - uGlowPosition.x));
-    color += glowColor * facingGlow * falloff * (0.48 * uEdge + 0.06 * fresnel) * uGlowIntensity;
+    color += glowColor * facingGlow * falloff * (0.78 * uEdge + 0.06 * fresnel) * uGlowIntensity;
+    color *= 1.0 + grain;
     // Roll off the brightest reflection rather than clipping it into a white patch.
     color = max(color, vec3(0.0));
     color = color / (vec3(1.0) + color * 0.12);
@@ -138,7 +142,6 @@ void main() {
     vec3 normal = normalize(vNormal);
     vec3 view = normalize(vec3(0.0, 0.0, 7.0) - vPosition);
     vec3 light = normalize(uKeyPosition - vPosition);
-    vec3 color = metalLighting(normal, view, light);
     vec4 ink = texture2D(uTexture, vUV);
     vec4 relief = texture2D(uEngraving, vUV);
     float engraved = clamp(relief.a / max(ink.a, 0.001), 0.0, 1.0) * (1.0 - uEdge);
@@ -155,6 +158,7 @@ void main() {
     #endif
     // Subpixel tooling marks fade out before they can alias during rotation.
     float grainVisibility = 1.0 - smoothstep(0.28, 0.65, footprint);
+    vec3 color = metalLighting(normal, view, light, uEdge, grainVisibility);
     float logoRegion = step(uLogoRect.x, vUV.x) * step(uLogoRect.y, vUV.y)
                      * step(vUV.x, uLogoRect.z) * step(vUV.y, uLogoRect.w);
     ${art.cavity ? `
@@ -180,14 +184,14 @@ void main() {
         vec3 floorInk = paint * (0.91 + 0.09 * max(dot(normal, light), 0.0)) * (1.0 - 0.18 * relief.b);
         float facetLight = max(dot(facetNormal, light), 0.0);
         float wallExposure = smoothstep(-0.20, 0.10, facetLight - max(dot(normal, light), 0.0));
-        vec3 litWall = metalLighting(facetNormal, view, light) * (0.65 + 0.28 * facetLight);
+        vec3 litWall = metalLighting(facetNormal, view, light, .55, 0.0) * (0.65 + 0.28 * facetLight);
         // The occluded wall must become darker, not a second silver outline.
         vec3 cutMetal = mix(floorInk * 0.58, litWall, wallExposure);
-        vec3 stampedFace = metalLighting(normal, view, light) * ${art.logo.face.toFixed(3)} + uMetalTone * 0.018;
+        vec3 stampedFace = metalLighting(normal, view, light, .45, 0.0) * ${art.logo.face.toFixed(3)} + uMetalTone * 0.018;
         stampedFace += vec3(${art.logo.warmth.toFixed(3)}, ${(art.logo.warmth * .5).toFixed(3)}, 0.0);
         stampedFace *= ${art.logo.raised ? '1.0' : '(1.0 - 0.14 * relief.b)'};
         vec3 stampedWall = mix(stampedFace * 0.64,
-                               metalLighting(facetNormal, view, light) * (1.02 + 0.12 * facetLight),
+                               metalLighting(facetNormal, view, light, .55, 0.0) * (1.02 + 0.12 * facetLight),
                                smoothstep(-0.16, 0.13, facetLight - max(dot(normal, light), 0.0)));
         float stampedBevel = smoothstep(0.035, 0.30, slope) * ${art.logo.wall.toFixed(3)} * resolved;
         vec3 stampedMetal = mix(stampedFace, stampedWall, stampedBevel);
@@ -207,7 +211,7 @@ void main() {
         faceMetal += vec3(tooling * 0.009 * grainVisibility);
         faceMetal *= ${art.logo.raised ? '1.0' : '(1.0 - 0.17 * relief.b)'};
         float facetExposure = smoothstep(-0.28, 0.22, dot(facetNormal, light) - dot(normal, light));
-        vec3 bevelMetal = mix(faceMetal * 0.42, metalLighting(facetNormal, view, light) * 1.08, facetExposure);
+        vec3 bevelMetal = mix(faceMetal * 0.42, metalLighting(facetNormal, view, light, .55, 0.0) * 1.08, facetExposure);
         stampedMetal = mix(faceMetal, bevelMetal, smoothstep(0.025, 0.34, slope) * ${art.logo.wall.toFixed(3)} * resolved);
         ` : ''}
         inkColor = mix(paint, mix(floorInk, cutMetal, wall), engraved);
@@ -219,7 +223,7 @@ void main() {
         // wall shifts with the viewing angle, while the letter opening stays fixed.
         float floorAmount = smoothstep(0.20, 0.85, relief.b);
         inkColor *= 1.0 - cavityShadow * floorAmount * 0.62 * resolved;
-        vec3 innerWall = mix(paint * 0.36, metalLighting(facetNormal, view, light) * 1.03, wallExposure);
+        vec3 innerWall = mix(paint * 0.36, metalLighting(facetNormal, view, light, .55, 0.0) * 1.03, wallExposure);
         inkColor = mix(inkColor, innerWall, visibleInnerWall * mix(0.64, 0.80, logoRegion) * resolved);
         ` : ''}
     }
@@ -354,7 +358,14 @@ function geometry(width, height, vertical) {
     });
     const faces = [[], [], []];
     const depth = HALF_THICKNESS;
-    const inset = point => [point[0] * (1 - BEVEL * 2 / width), point[1] * (1 - BEVEL * 2 / height)];
+    const inset = (point, normal, amount) => [point[0] - normal[0] * amount, point[1] - normal[1] * amount];
+    // Two segments trace each quarter-circle; adjacent bands share position
+    // and normal at the face, rounded bevel and straight sidewall.
+    const section = (angle, back = false) => [BEVEL * (1 - Math.sin(angle)),
+        (back ? -1 : 1) * (depth - BEVEL * (1 - Math.cos(angle))),
+        Math.sin(angle), (back ? -1 : 1) * Math.cos(angle)];
+    const profile = [section(0), section(Math.PI / 4), section(Math.PI / 2),
+        section(Math.PI / 2, true), section(Math.PI / 4, true), section(0, true)];
     function vertex(target, x, y, z, nx, ny, nz, back = false) {
         let u = x / width + .5, v = .5 - y / height;
         if (back) { if (vertical) u = 1 - u; else v = 1 - v; }
@@ -362,19 +373,17 @@ function geometry(width, height, vertical) {
     }
     outline.forEach((a, i) => {
         const b = outline[(i + 1) % outline.length];
-        const ai = inset(a), bi = inset(b);
+        const normalA = rimNormals[i], normalB = rimNormals[(i + 1) % outline.length];
+        const ai = inset(a, normalA, BEVEL), bi = inset(b, normalB, BEVEL);
         for (const p of [[0, 0], bi, ai]) vertex(faces[0], ...p, depth, 0, 0, 1);
         for (const p of [[0, 0], ai, bi]) vertex(faces[1], ...p, -depth, 0, 0, -1, true);
-        const normalA = rimNormals[i], normalB = rimNormals[(i + 1) % outline.length];
-        function ring(topA, topB, topZ, bottomA, bottomB, bottomZ, nz) {
-            const length = Math.hypot(1, nz);
-            for (const [p, z, n] of [[topA, topZ, normalA], [topB, topZ, normalB], [bottomA, bottomZ, normalA], [bottomA, bottomZ, normalA], [topB, topZ, normalB], [bottomB, bottomZ, normalB]]) {
-                vertex(faces[2], ...p, z, n[0] / length, n[1] / length, nz / length);
+        function ring(top, bottom) {
+            for (const [point, normal, band] of [[a, normalA, top], [b, normalB, top], [a, normalA, bottom],
+                [a, normalA, bottom], [b, normalB, top], [b, normalB, bottom]]) {
+                vertex(faces[2], ...inset(point, normal, band[0]), band[1], normal[0] * band[2], normal[1] * band[2], band[3]);
             }
         }
-        ring(ai, bi, depth, a, b, depth - BEVEL, 1);
-        ring(a, b, depth - BEVEL, a, b, -depth + BEVEL, 0);
-        ring(a, b, -depth + BEVEL, ai, bi, -depth, -1);
+        for (let band = 1; band < profile.length; band++) ring(profile[band - 1], profile[band]);
     });
     return faces.map(face => new Float32Array(face));
 }
@@ -409,7 +418,7 @@ function textureCanvas(lang, vertical, logo, maxSize, compact = false) {
     const logoWidth = vertical ? 110 : 145;
     const viewBox = logos[lang].viewBox.split(' ').map(Number);
     const logoHeight = logoWidth * viewBox[3] / viewBox[2];
-    const logoX = centered ? (width - logoWidth) / 2 : x;
+    const logoX = vertical ? (width - logoWidth) / 2 : x;
     const logoY = vertical ? 76 : 42;
     const textSize = vertical ? 12.5 : 13;
     const finalBaseline = vertical ? 312 : 188 + 18;
@@ -665,10 +674,12 @@ export class CardRenderer {
         gl.uniform3f(this.uniforms.uMetalTone, ...finish.metal);
         gl.uniform3f(this.uniforms.uEdgeTone, ...finish.edge);
         gl.uniform3f(this.uniforms.uHoverColor, ...[1, 3, 5].map(index => parseInt(finish.ink.slice(index, index + 2), 16) / 255));
-        const phase = this.time * Math.PI * 2 / 18 + variation.backgroundPhase;
-        this.ambientOpacity = .62 + Math.sin(phase) * .055;
-        // Background and subtle coloured rim breathe together; no travelling spot.
-        gl.uniform3f(this.uniforms.uGlowPosition, -1.4, .6, -1.5);
+        const driftX = Math.sin(lightPhase), driftY = Math.sin(lightPhase + .7);
+        this.ambientOpacity = .62 * (1 + Math.sin(lightPhase + .4) * .04);
+        this.ambientShift = [driftX * 3, -driftY * 2];
+        // The cool room reflection follows the broad background light; its
+        // source sits outside the plate so the visible bevel can catch it.
+        gl.uniform3f(this.uniforms.uGlowPosition, -3.6 + driftX * .65, .7 + driftY * .4, -.5);
         gl.uniform1f(this.uniforms.uGlowIntensity, this.ambientOpacity / .62);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
@@ -715,7 +726,7 @@ export class CardRenderer {
         const m = this.model;
         const [lx, ly, lz] = this.keyLight;
         const f = this.projection[5];
-        const points = this.outline.map(([x, y]) => {
+        const project = ([x, y]) => {
             const wx = m[0] * x + m[4] * y + m[12];
             const wy = m[1] * x + m[5] * y + m[13];
             const wz = m[2] * x + m[6] * y + m[14];
@@ -724,8 +735,21 @@ export class CardRenderer {
             const sy = ly + (wy - ly) * distance;
             return [(sx * f / (7.9 * this.aspect) + 1) * this.viewportWidth / 2,
                 (1 - sy * f / 7.9) * this.viewportHeight / 2];
-        });
+        };
+        const points = this.outline.map(project);
         this.shadowPoints = points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+        const heightSlope = Math.hypot(m[2], m[6]);
+        const direction = heightSlope > 1e-6 ? [m[2] / heightSlope, m[6] / heightSlope] : [0, 1];
+        const axis = [direction[0] * this.width * .45, direction[1] * this.height * .40];
+        const near = project(axis.map(v => -v)), far = project(axis);
+        const range = Math.abs(m[2]) * this.width + Math.abs(m[6]) * this.height;
+        const blend = Math.max(0, Math.min(1, (range - .03) / .30));
+        const weight = blend * blend * (3 - 2 * blend);
+        this.shadowGradient = [near[0], near[1], far[0], far[1], .18 + .10 * weight, .18 - .08 * weight];
+        const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
+        // Three blur radii of padding also keep edge-on shadows from being clipped.
+        this.shadowBounds = [Math.min(...xs) - 60, Math.min(...ys) - 60,
+            Math.max(...xs) - Math.min(...xs) + 120, Math.max(...ys) - Math.min(...ys) + 120];
     }
 
     // Ray / local card plane intersection. Links follow the actual GPU transform.

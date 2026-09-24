@@ -4,13 +4,17 @@
 body { margin: 0; min-width: 280px; }
 .ambient { position: fixed; inset: 0; overflow: hidden; pointer-events: none; }
 .ambient::before {
-  content: ''; position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 46% 38%, #53668280 0%, #36456048 30%, transparent 66%),
-              linear-gradient(115deg, #122d3a, #22283f 50%, #301c40);
+  content: ''; position: absolute; inset: -6%; z-index: 0;
+  background: radial-gradient(ellipse at 48% 40%, #6f82973b 0%, #6f829714 34%, transparent 70%),
+              linear-gradient(115deg, #0b1119, #1b2635 53%, #151b29);
   opacity: var(--ambient-opacity, .62);
+  transform: translate3d(var(--ambient-x, 0vw), var(--ambient-y, 0vh), 0);
+  will-change: transform, opacity;
 }
-.ambient::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 44%, transparent 20%, #02050c30 53%, #010207bd 100%); }
-.card-shadow { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; visibility: hidden; }
+.ambient::after { content: ''; position: absolute; inset: 0; z-index: 1; background: radial-gradient(ellipse at 50% 44%, transparent 20%, #02050c30 53%, #010207bd 100%); }
+.ambient-grain { position: absolute; inset: 0; z-index: 3; opacity: .009;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='128' height='128'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='2' stitchTiles='stitch' seed='7'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Cpath fill='%23fff' d='M0 0h128v128H0z' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.card-shadow { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; visibility: hidden; }
 .webgl-ready .card-shadow { visibility: visible; }
 main { position: relative; }
 a { color: inherit; text-decoration: none; }
@@ -36,7 +40,7 @@ a:focus-visible, .scene:focus-visible { outline: 2px solid #fff; outline-offset:
   box-shadow: 0 18px 40px #0003; font-family: 'Card Onest', Arial, sans-serif; }
 .face .logo path:not(:last-child) { fill: #20252b; }
 .logo { display: block; width: 110px; height: auto; }
-.brand { display: block; width: fit-content; margin-bottom: 32px; }
+.brand { display: block; width: fit-content; margin: 0 auto 32px; }
 h1 { margin: 0; font-size: 24px; line-height: 29px; font-weight: 500; }
 h1 span { display: block; }
 .position, .details { font-size: 12.5px; }
@@ -80,9 +84,9 @@ h1 span { display: block; }
 @media (hover: none) and (pointer: coarse) {
   :root, body, .ambient { background-color: #101722; }
   body { min-height: 100svh; }
-  /* The animated colour fades into the same solid colour Safari uses for its
-     status bar / overscroll, so breathing cannot expose a black seam. */
-  .ambient::before {
+  /* The viewport mask stays still while the oversized gradient moves beneath
+     it. Every background layer fades into Safari's solid safe-area colour. */
+  .ambient {
     -webkit-mask-image: linear-gradient(to bottom, transparent, #000 96px, #000 calc(100% - 96px), transparent);
     mask-image: linear-gradient(to bottom, transparent, #000 96px, #000 calc(100% - 96px), transparent);
   }

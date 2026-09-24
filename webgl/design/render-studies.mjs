@@ -36,6 +36,7 @@ try {
         for (const [shot, width, height, rx, ry, zoom, flipped = false, time = 0] of [
             ['desktop', 1440, 1000, 0, 0, 1],
             ['detail', 1440, 1000, -5, 12, 1.8],
+            ['studio-tilt', 1440, 1000, 8, -12, 1, false, 9],
             ['edge', 1440, 1000, 8, 76, 1.65],
             ['edge-back', 1440, 1000, 8, 76, 1.65, true],
             ['mobile', 390, 844, 0, 0, 1],
@@ -67,6 +68,22 @@ try {
                 for (let i = 0; i < 100; i++) renderer.draw({ rx, ry, rz: 0, zoom, flipped, animate: false, idle: false, reduced: false, delta: .05 });
                 document.querySelector('.ambient').style.setProperty('--ambient-opacity', renderer.ambientOpacity);
                 document.querySelector('.card-shadow polygon').setAttribute('points', renderer.shadowPoints);
+                if (renderer.ambientShift) {
+                    document.querySelector('.ambient').style.setProperty('--ambient-x', `${renderer.ambientShift[0]}vw`);
+                    document.querySelector('.ambient').style.setProperty('--ambient-y', `${renderer.ambientShift[1]}vh`);
+                }
+                if (renderer.shadowGradient) {
+                    const gradient = document.querySelector('#shadow-density'), filter = document.querySelector('#shadow-soften');
+                    ['x1', 'y1', 'x2', 'y2'].forEach((name, i) => gradient.setAttribute(name, renderer.shadowGradient[i]));
+                    gradient.children[0].setAttribute('stop-opacity', renderer.shadowGradient[4]);
+                    gradient.children[1].setAttribute('stop-opacity', renderer.shadowGradient[5]);
+                    ['x', 'y', 'width', 'height'].forEach((name, i) => filter.setAttribute(name, renderer.shadowBounds[i]));
+                }
+                document.documentElement.lang = flipped ? 'en' : 'ru';
+                document.querySelectorAll('[data-lang]').forEach(link => {
+                    if (link.dataset.lang === document.documentElement.lang) link.setAttribute('aria-current', 'true');
+                    else link.removeAttribute('aria-current');
+                });
                 window.studyRenderer = renderer;
                 return { error: renderer.gl.getError(), links: renderer.surfaces[0].links.length };
             }, { rx, ry, zoom, flipped, time });

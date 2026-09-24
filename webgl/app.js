@@ -7,6 +7,8 @@ import { CardRenderer } from './renderer.js';
     const canvas = document.querySelector('#card-canvas');
     const ambient = document.querySelector('.ambient');
     const shadow = document.querySelector('.card-shadow polygon');
+    const shadowDensity = document.querySelector('#shadow-density');
+    const shadowFilter = document.querySelector('#shadow-soften');
     let renderer = null;
     let contextLost = false;
     let previousTime = performance.now();
@@ -123,7 +125,17 @@ import { CardRenderer } from './renderer.js';
     }
     function syncAmbient() {
         ambient.style.setProperty('--ambient-opacity', renderer.ambientOpacity.toFixed(4));
+        if (renderer.ambientShift) {
+            ambient.style.setProperty('--ambient-x', `${renderer.ambientShift[0].toFixed(3)}vw`);
+            ambient.style.setProperty('--ambient-y', `${renderer.ambientShift[1].toFixed(3)}vh`);
+        }
         if (renderer.shadowPoints) shadow.setAttribute('points', renderer.shadowPoints);
+        if (renderer.shadowGradient) {
+            ['x1', 'y1', 'x2', 'y2'].forEach((name, i) => shadowDensity.setAttribute(name, renderer.shadowGradient[i].toFixed(2)));
+            shadowDensity.children[0].setAttribute('stop-opacity', renderer.shadowGradient[4].toFixed(4));
+            shadowDensity.children[1].setAttribute('stop-opacity', renderer.shadowGradient[5].toFixed(4));
+            ['x', 'y', 'width', 'height'].forEach((name, i) => shadowFilter.setAttribute(name, renderer.shadowBounds[i].toFixed(1)));
+        }
     }
     function schedule() {
         if (!frame && renderer && !contextLost && !document.hidden) frame = requestAnimationFrame(render);
