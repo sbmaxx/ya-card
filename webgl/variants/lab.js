@@ -183,6 +183,10 @@ panel.innerHTML = `
   ${group('Имя', `
     ${shapeRow('name', reliefLabels, currentNameShape)}
     <label class="range">Размер имени <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
+    <div class="caption">Начертание</div>
+    <div class="segments" data-live="nameWeight">
+      ${[[400, 'Обычное'], [500, 'Среднее'], [600, 'Полужирное']].map(([w, title]) => `<button type="button" data-value="${w}" aria-pressed="${w === lab.nameWeight}">${title}</button>`).join('')}
+    </div>
     ${depthRow('nameDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="nameGloss"></output><input type="range" name="nameGloss" min="0" max="1" step=".05" value="${lab.nameGloss}"></label>
     ${tintRow('name', 'Цвет')}`)}
@@ -296,7 +300,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     // «Not set» stays in the link: left out, the default look would fill it on reload.
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) next.set(key, lab[key] || '');
@@ -445,6 +449,14 @@ panel.querySelector('[data-live="bodyWeight"]').addEventListener('click', event 
     globalThis.__cardRenderer?.refreshText();
     writeUrl();
 });
+panel.querySelector('[data-live="nameWeight"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.nameWeight = Number(button.dataset.value);
+    panel.querySelectorAll('[data-live="nameWeight"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    globalThis.__cardRenderer?.refreshText();
+    writeUrl();
+});
 panel.querySelector('[data-live="typography"]').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
@@ -517,7 +529,7 @@ function describeSettings() {
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
         `Первая буква: ${colour('logoFirst')}`,
-        `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')}`,
+        `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.nameWeight]} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')}`,
         `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.bodyWeight]} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
         `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)}`
     ];

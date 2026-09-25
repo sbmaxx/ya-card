@@ -1291,12 +1291,14 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     };
     // The lab can scale the name; the plans are drawn for the size in LAYOUTS.
     const nameScale = globalThis.__cardLab?.nameScale ?? direction.nameScale ?? 1;
-    // Role and contacts: Regular (400) or the name's Medium (500) — the font's range.
+    // Weights: role and contacts Regular by default, the name Medium; the lab
+    // sets each to 400, 500 or 600 (the card fonts' range).
     const bodyWeight = globalThis.__cardLab?.bodyWeight ?? 400;
+    const nameWeight = globalThis.__cardLab?.nameWeight ?? 500;
     let nameSize = plan.nameSize * nameScale;
-    const nameLines = fits(data.name, nameSize, 500, trackName) ? [data.name] : splitTwo(data.name);
+    const nameLines = fits(data.name, nameSize, nameWeight, trackName) ? [data.name] : splitTwo(data.name);
     // A single long word can still be wider than the plate: shrink to fit.
-    context.font = `500 ${nameSize}px "${cardFont()}", Arial, sans-serif`;
+    context.font = `${nameWeight} ${nameSize}px "${cardFont()}", Arial, sans-serif`;
     const widest = Math.max(...nameLines.map(line => context.measureText(line).width + tracked(line, nameSize, trackName)));
     if (widest > maxWidth) nameSize *= maxWidth / widest;
     const growth = nameSize - plan.nameSize;
@@ -1314,8 +1316,8 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         // logo gets a little more; the name lines sit at a heading's leading.
         const gap = 22, logoGap = 30, roleLeading = 17 * bodyGrow;
         nameGap = nameSize * 1.12;
-        nameY = logoY + logoHeight + logoGap + ink(nameLines[0], nameSize, 500).ascent;
-        const nameBottom = nameY + (nameLines.length - 1) * nameGap + ink(nameLines.at(-1), nameSize, 500).descent;
+        nameY = logoY + logoHeight + logoGap + ink(nameLines[0], nameSize, nameWeight).ascent;
+        const nameBottom = nameY + (nameLines.length - 1) * nameGap + ink(nameLines.at(-1), nameSize, nameWeight).descent;
         const roleY = nameBottom + gap + ink(roleLines[0], textSize, bodyWeight).ascent;
         roleYs = roleLines.map((_, i) => roleY + i * roleLeading);
         lineHeight = roleLeading;
@@ -1353,7 +1355,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         contactsShift = usable - margin - blockBottom;
         const top = logoY + logoHeight + logoShift;
         const bottom = contactsY - ink(data.email, textSize, bodyWeight).ascent + contactsShift;
-        const middleTop = nameY - ink(nameLines[0], nameSize, 500).ascent;
+        const middleTop = nameY - ink(nameLines[0], nameSize, nameWeight).ascent;
         const middleBottom = roleYs.at(-1) + ink(roleLines.at(-1), textSize, bodyWeight).descent;
         // A little above the geometric middle, which reads as the centre.
         middleShift = (top + bottom - middleTop - middleBottom) / 2 - (bottom - top) * .04;
@@ -1386,7 +1388,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
             return metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight + tracked(value, size, tracking);
         };
         const widest = Math.max(plan.center ? 0 : logoWidth,
-            ...nameLines.map(line => inkWidth(line, nameSize, 500, trackName)),
+            ...nameLines.map(line => inkWidth(line, nameSize, nameWeight, trackName)),
             ...roleLines.map(line => inkWidth(line, textSize, bodyWeight, trackBody)),
             inkWidth(data.email, textSize, bodyWeight, trackBody), inkWidth(`t.me/${data.telegram}`, textSize, bodyWeight, trackBody));
         x = (width - widest) / 2;
@@ -1394,7 +1396,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     }
     context.drawImage(logo, logoX, logoY + logoShift, logoWidth, logoHeight);
     links.push({ x: logoX, y: logoY + logoShift, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRects = nameLines.map((line, i) => text(line, nameY + i * nameGap, nameSize, undefined, 500, trackName));
+    const titleRects = nameLines.map((line, i) => text(line, nameY + i * nameGap, nameSize, undefined, nameWeight, trackName));
     const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
     const logoRelief = [(logoX - 2) / width, (logoY + logoShift - 2) / height,

@@ -54,6 +54,8 @@ export const lab = globalThis.__cardLab = {
     nameScale: number('nameScale', 1.2),
     // Role and contacts: 400 Regular, 500 Medium (as the name) or 600 Semibold.
     bodyWeight: [400, 500, 600].reduce((best, w) => Math.abs(w - number('bodyWeight', 400)) < Math.abs(best - number('bodyWeight', 400)) ? w : best, 400),
+    // The name: 500 Medium by default.
+    nameWeight: [400, 500, 600].reduce((best, w) => Math.abs(w - number('nameWeight', 500)) < Math.abs(best - number('nameWeight', 500)) ? w : best, 500),
     // Typeface for all the card's text: an index into FONTS (fonts.js).
     font: Math.max(0, Math.round(number('font', 0))),
     // Role and contacts: px added to their size (12.5–13 px).
