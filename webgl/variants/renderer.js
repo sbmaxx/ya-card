@@ -831,6 +831,19 @@ void main() {
         color *= 1.0 - (occluder * .6 + contact * .22) * (1.0 - ink.a) * step(.001, raisedHeight) * shadowShown;` : ''}
         float coverage = max(ink.a, max(underline, focusStroke));
         if (coverage > .001) {
+            // The first letter of the wordmark is drawn red-only in the mask.
+            vec3 inkColor = ink.rgb / max(ink.a, .001);
+            float firstLetter = smoothstep(.6, .3, inkColor.g);
+            // Letters with a colour (a tint or the plate's material), against
+            // letters left in the edition's own metal.
+            float coloured = logoRegion * mix(step(.5, uLogoTint.a), step(.5, uLogoFirstTint.a), firstLetter)
+                           + titleRegion * step(.5, uNameTint.a) + textRegion * step(.5, uBodyTint.a);
+            // Raised letters in bare metal get satin shoulders: polished, a steep
+            // shoulder mirrored the whole room at once — floor, horizon, lamps —
+            // in a busy chrome outline of parallel dark and bright lines.
+            float raisedRegion = ${[[logoShape, 'logoRegion'], [nameShape, 'titleRegion'], [bodyShape, 'textRegion']]
+                .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
+            letterRough = max(letterRough, .45 * smoothstep(.1, .6, slope) * (1.0 - coloured) * raisedRegion);
             ${letteringCode('logo', look.logo)}
             ${occlusion(logoShape) ? `
             // Recessed logo: the floor sees less of the room than the plate.
@@ -851,9 +864,6 @@ void main() {
                 plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, plateAniso, 1.0) * (1.0 + grooves * .05);
                 ${plate.coat ? `plateLetter += ${f(plate.coat)} * roomFor(reflect(-v, facet), .10, 1.0);` : ''}
             }
-            // The first letter of the wordmark is drawn red-only in the mask.
-            vec3 inkColor = ink.rgb / max(ink.a, .001);
-            float firstLetter = smoothstep(.6, .3, inkColor.g);
             logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.y),
                             tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.x), firstLetter);
             nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
@@ -871,7 +881,9 @@ void main() {
             // role and contacts are too small for a cut and keep theirs whole.
             float cutRegion = ${[[logoShape, 'logoRegion'], [nameShape, 'titleRegion']]
                 .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
-            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * ink.a;
+            // Only through a colour: letters in bare metal are that metal through
+            // and through, and a mirror rim on them drew a chrome outline.
+            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * ink.a * coloured;
             lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
             // The wordmark and the name sit back towards the plate as a whole,
             // bevels included: muted letters with bright edges read as outlines.
