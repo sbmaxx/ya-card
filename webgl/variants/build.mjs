@@ -8,6 +8,7 @@ import { minify } from 'html-minifier-terser';
 import { cards } from '../data.js';
 import { directions } from './directions.js';
 import { decodePreset } from './preset.js';
+import { FONTS, fontOf } from './fonts.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
@@ -25,8 +26,19 @@ await rm(variantsOut, { recursive: true, force: true });
 await rm(homeOut, { recursive: true, force: true });
 const template = await readFile(resolve(root, 'index.html'), 'utf8');
 const baseCss = await readFile(resolve(root, 'styles.css'), 'utf8');
-const font = await readFile(resolve(root, 'assets/Onest-card.woff2'));
-const license = await readFile(resolve(root, 'assets/Onest-OFL.txt'), 'utf8');
+// Typefaces (fonts.js): the lab embeds every one with Latin and Cyrillic, so
+// any name can be typed; the homepage and the plain card only the chosen one,
+// cut to the card's own characters. styles.css keeps its own face for the dev page.
+const fontFaces = async (fonts, card) => (await Promise.all(fonts.map(async f => {
+    const bytes = await readFile(resolve(root, `assets/fonts/${f.id}${card ? '-card' : ''}.woff2`));
+    return `@font-face{font-family:'${f.family}';src:url(data:font/woff2;base64,${bytes.toString('base64')}) format('woff2');font-weight:400 600;font-style:normal;font-display:swap}`;
+}))).join('\n');
+const fontLicenses = async fonts => (await Promise.all(fonts.map(async f =>
+    `<!-- ${f.title} font license:\n${(await readFile(resolve(root, `assets/fonts/${f.id}-OFL.txt`), 'utf8')).replace(/-->/g, '-- >')}\n-->`))).join('');
+// The page's own CSS with the given faces; the HTML faces use the given family.
+const pageCss = async (fonts, card, extra = '') => (await fontFaces(fonts, card)) + '\n'
+    + baseCss.replace(/^@font-face[^\n]*\n/, '').replaceAll("'Card Onest'", `'${fonts[0].family}'`) + '\n' + extra;
+const homeFont = fontOf(Number(decodePreset(HOME_LOOK).get('font') ?? 0));
 // Minimal loader: a hairline with a travelling glint, a real element so it can
 // fade out while the card fades in. Transform and opacity animate on the
 // compositor, so it keeps moving while warm-up keeps the main thread busy.
@@ -51,7 +63,7 @@ const labCss = cornersCss + loaderCss;
 
 // A studio page: the WebGL card with the loader, a watchdog that opens the
 // plain card if the scene never starts, and everything inlined.
-async function studioPage({ entry, define, direction, fallback, head, source = template }) {
+async function studioPage({ entry, define, direction, fallback, head, source = template, fonts = FONTS, card = false }) {
     const js = await build({
         stdin: { contents: entry, resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
@@ -66,8 +78,7 @@ async function studioPage({ entry, define, direction, fallback, head, source = t
             }
         } }]
     });
-    const css = await transform((baseCss + '\n' + labCss)
-        .replace('./assets/Onest-card.woff2', `data:font/woff2;base64,${font.toString('base64')}`), { loader: 'css', minify: true, target: 'es2020' });
+    const css = await transform(await pageCss(fonts, card, labCss), { loader: 'css', minify: true, target: 'es2020' });
     let html = source
         // The backdrop is rendered in WebGL: no CSS ambient layer or SVG shadow.
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '<div class="card-loader" aria-hidden="true"></div>')
@@ -93,7 +104,8 @@ window.cardFallbackUrl = '${fallback}';`)
         .replace('<script type="module" src="./app.js"></script>', '')
         .replace('</body>', () => `<script>${js.outputFiles[0].text.replace(/<\/script/gi, '<\\/script')}</script></body>`);
     html = await minify(html, { collapseWhitespace: true, removeComments: true, removeRedundantAttributes: true, minifyJS: true });
-    return html.replace('</head>', () => `<!-- Onest font license:\n${license.replace(/-->/g, '-- >')}\n--></head>`);
+    const licenses = await fontLicenses(fonts);
+    return html.replace('</head>', () => `${licenses}</head>`);
 }
 
 // /variants/lab/: every edition behind the demo panel.
@@ -170,7 +182,8 @@ function homeSource(lang) {
             fallback: '/plain/',
             // Indexed, unlike the lab. The scene sets the exact page colour at start.
             head: '<meta name="theme-color" content="#0b0c0f">',
-            source: homeSource(lang)
+            source: homeSource(lang),
+            fonts: [homeFont], card: true
         }), homeOut);
     }
     // Share images: generated covers (see og/PROMPT.md), 1200×630.
@@ -195,8 +208,7 @@ for (const [id, target] of [['', 'lab/'], ...['steel', 'noir', 'gold', 'aurora']
 
 // Plain card for browsers without WebGL 2: the same accessible HTML faces, no scripts.
 {
-    const css = await transform(baseCss.replace('./assets/Onest-card.woff2', `data:font/woff2;base64,${font.toString('base64')}`),
-        { loader: 'css', minify: true, target: 'es2020' });
+    const css = await transform(await pageCss([homeFont], true), { loader: 'css', minify: true, target: 'es2020' });
     let plain = template
         .replace(/<script>\n\/\/ Reserve[\s\S]*?<\/script>\n/, '')
         .replace('<meta name="theme-color" content="#101722">', '<meta name="theme-color" content="#101722"><meta name="robots" content="noindex">')

@@ -6,6 +6,8 @@ import { encodePreset } from './preset.js';
 import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
 import { exported, params, textFields, lab } from './settings.js';
 import { showPoseSheet } from './poses.js';
+import { FONTS } from './fonts.js';
+import { loadCardFont } from './renderer.js';
 
 if (!exported) {
 const style = document.createElement('style');
@@ -150,6 +152,9 @@ panel.innerHTML = `
   <fieldset><legend>Отделка пластины</legend><div class="segments" data-live="finish">
     ${['Шлифовка', 'Пескоструй', 'Полировка'].map((title, i) => `<button type="button" data-value="${i}" aria-pressed="${i === lab.plateFinish}">${title}</button>`).join('')}
   </div></fieldset>
+  <fieldset><legend>Шрифт</legend><div class="segments" data-live="font">
+    ${FONTS.map((font, i) => `<button type="button" data-value="${i}" aria-pressed="${i === lab.font}" style="font-family:'${font.family}',sans-serif">${font.title}</button>`).join('')}
+  </div></fieldset>
   <fieldset><legend>Фон</legend><div class="segments" data-live="backdrop">
     ${Object.entries(BACKDROPS).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b.title}</button>`).join('')}
   </div></fieldset>
@@ -171,7 +176,10 @@ panel.innerHTML = `
     ${tintRow('name', 'Цвет')}`)}
   ${group('Должность и контакты', `
     ${shapeRow('body', reliefLabels, currentBodyShape)}
-    <label class="check"><input type="checkbox" name="bodyMedium" ${lab.bodyWeight === 500 ? 'checked' : ''}> Среднее начертание, как у имени</label>
+    <div class="caption">Начертание</div>
+    <div class="segments" data-live="bodyWeight">
+      ${[[400, 'Обычное'], [500, 'Среднее'], [600, 'Полужирное']].map(([w, title]) => `<button type="button" data-value="${w}" aria-pressed="${w === lab.bodyWeight}">${title}</button>`).join('')}
+    </div>
     <label class="range">Размер, +px <output data-for="bodySize"></output><input type="range" name="bodySize" min="0" max="3" step=".5" value="${lab.bodySize}"></label>
     ${depthRow('bodyDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="bodyGloss"></output><input type="range" name="bodyGloss" min="0" max="1" step=".05" value="${lab.bodyGloss}"></label>
@@ -273,7 +281,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -413,9 +421,21 @@ panel.querySelectorAll('input[type=range]').forEach(input => {
     });
 });
 panel.querySelector('input[name=manual]').addEventListener('change', event => { lab.manualLight = event.target.checked; writeUrl(); });
-// The text is redrawn with its relief: the weight changes every stroke.
-panel.querySelector('input[name=bodyMedium]').addEventListener('change', event => {
-    lab.bodyWeight = event.target.checked ? 500 : 400;
+// The text is redrawn with its relief: weight and typeface change every stroke.
+panel.querySelector('[data-live="bodyWeight"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.bodyWeight = Number(button.dataset.value);
+    panel.querySelectorAll('[data-live="bodyWeight"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    globalThis.__cardRenderer?.refreshText();
+    writeUrl();
+});
+panel.querySelector('[data-live="font"]').addEventListener('click', async event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.font = Number(button.dataset.value);
+    panel.querySelectorAll('[data-live="font"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    await loadCardFont().catch(() => {});
     globalThis.__cardRenderer?.refreshText();
     writeUrl();
 });
@@ -468,13 +488,14 @@ function describeSettings() {
     };
     const lines = [
         'Визитка — настройки стенда',
+        `Шрифт: ${FONTS[lab.font]?.title ?? FONTS[0].title}`,
         `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${currentLayout === 'accent' ? 'акцент на имени' : 'классика'} · размер карточки: ${n(lab.cardSize)}`,
         `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
         `Первая буква: ${colour('logoFirst')}`,
         `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')}`,
-        `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${lab.bodyWeight === 500 ? 'среднее' : 'обычное'} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
+        `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.bodyWeight]} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
         `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)}`
     ];
     const text = textFields.filter(([key]) => lab.text[key]).map(([key, label]) => `${label}: ${lab.text[key]}`);

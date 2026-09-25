@@ -1,4 +1,9 @@
 import { cards, logos } from '../data.js';
+import { fontOf } from './fonts.js';
+
+// The card's typeface (lab setting or the baked look), and its three weights loaded.
+const cardFont = () => fontOf(globalThis.__cardLab?.font ?? 0).family;
+export const loadCardFont = () => Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "${cardFont()}"`)));
 import { createReliefMap } from './relief.js';
 import { direction } from './directions.js';
 
@@ -1169,7 +1174,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     // that does not fit is split in two, and everything below moves with it.
     const maxWidth = vertical ? width - 2 * 26 : 440;
     const fits = (value, size, weight) => {
-        context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+        context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
         return context.measureText(value).width <= maxWidth;
     };
     // The lab can scale the name; the plans are drawn for the size in LAYOUTS.
@@ -1179,13 +1184,13 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     let nameSize = plan.nameSize * nameScale;
     const nameLines = fits(data.name, nameSize, 500) ? [data.name] : splitTwo(data.name);
     // A single long word can still be wider than the plate: shrink to fit.
-    context.font = `500 ${nameSize}px "Card Onest", Arial, sans-serif`;
+    context.font = `500 ${nameSize}px "${cardFont()}", Arial, sans-serif`;
     const widest = Math.max(...nameLines.map(line => context.measureText(line).width));
     if (widest > maxWidth) nameSize *= maxWidth / widest;
     const growth = nameSize - plan.nameSize;
     const roleLines = fits(data.position, textSize, bodyWeight) ? [data.position] : (data.positionLines || splitTwo(data.position));
     const ink = (value, size, weight = 400) => {
-        context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+        context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
         const metrics = context.measureText(value);
         return { ascent: metrics.actualBoundingBoxAscent, descent: Math.max(0, metrics.actualBoundingBoxDescent) };
     };
@@ -1230,7 +1235,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     const yOffset = (usable - blockTop - blockBottom) / 2 - (vertical ? 0 : usable * .015);
     function text(value, y, size, url, weight = 400) {
         y += yOffset;
-        context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+        context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
         const metrics = context.measureText(value);
         const drawX = x + metrics.actualBoundingBoxLeft;
         context.fillText(value, drawX, y);
@@ -1249,7 +1254,7 @@ function textureCanvas(lang, vertical, logo, maxSize) {
         // Left-aligned lines, but equal metal on both sides of the widest one:
         // a fixed left margin left the long name almost touching the right edge.
         const inkWidth = (value, size, weight = 400) => {
-            context.font = `${weight} ${size}px "Card Onest", Arial, sans-serif`;
+            context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
             const metrics = context.measureText(value);
             return metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
         };
@@ -1300,7 +1305,7 @@ export class CardRenderer {
             compilePrograms(gl, [[vertexSource, fragmentSource], [screenVertex, blurFragment], [screenVertex, compositeFragment],
                 [shadowVertex, shadowFragment], [screenVertex, backdropFragment]])
                 .then(result => { performance.mark('card:compiled'); return result; }),
-            Promise.all([document.fonts.load('400 12px "Card Onest"'), document.fonts.load('500 20px "Card Onest"')]).catch(() => {})
+            loadCardFont().catch(() => {})
         ]);
         const renderer = new CardRenderer(canvas, gl, images, programs);
         renderer.resize();
