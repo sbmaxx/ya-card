@@ -151,7 +151,11 @@ panel.innerHTML = `
   </div></fieldset>
   <fieldset><legend>Отделка пластины</legend><div class="segments" data-live="finish">
     ${['Шлифовка', 'Пескоструй', 'Полировка'].map((title, i) => `<button type="button" data-value="${i}" aria-pressed="${i === lab.plateFinish}">${title}</button>`).join('')}
-  </div></fieldset>
+  </div>
+    <label class="range">Фактура <output data-for="surface"></output><input type="range" name="surface" min="0" max="3" step=".05" value="${lab.surface}"></label>
+    <label class="range">Искра <output data-for="sparkle"></output><input type="range" name="sparkle" min="0" max="1" step=".05" value="${lab.sparkle}"></label>
+    <p class="hint">Фактура — сила зерна у шлифовки и матовой изморози у пескоструя, 1 — как сделано. Искра — у пескоструя: грани вмятин вспыхивают под лампой и гаснут при движении.</p>
+  </fieldset>
   <fieldset><legend>Шрифт</legend><div class="segments" data-live="font">
     ${FONTS.map((font, i) => `<button type="button" data-value="${i}" aria-pressed="${i === lab.font}" style="font-family:'${font.family}',sans-serif">${font.title}</button>`).join('')}
   </div></fieldset>
@@ -161,7 +165,15 @@ panel.innerHTML = `
   <fieldset><legend>Композиция</legend><div class="segments" data-param="layout">
     <button type="button" data-value="classic" aria-pressed="${currentLayout === 'classic'}">Классика</button>
     <button type="button" data-value="accent" aria-pressed="${currentLayout === 'accent'}">Акцент на имени</button>
-  </div></fieldset>
+    <button type="button" data-value="grid" aria-pressed="${currentLayout === 'grid'}">Сетка</button>
+  </div>
+  <p class="hint">Сетка — логотип на верхнем поле, контакты на нижнем (оба на расстоянии левого поля от края), имя и должность в оптическом центре.</p>
+  <div class="caption">Типографика</div>
+  <div class="segments" data-live="typography">
+    <button type="button" data-value="0" aria-pressed="${lab.typography === 0}">Обычная</button>
+    <button type="button" data-value="1" aria-pressed="${lab.typography === 1}">Тонкая</button>
+  </div>
+  <p class="hint">Тонкая: мелкий текст чуть разрежен (+2,5%), имя чуть плотнее (−1%), как набирают для печати.</p></fieldset>
   ${group('Логотип', `
     ${shapeRow('relief', labels, currentLogoShape)}
     ${depthRow('logoDepth', 'Глубина')}
@@ -200,7 +212,10 @@ panel.innerHTML = `
     </div>
     <label class="range">Размер бликов <output data-for="lampSize"></output><input type="range" name="lampSize" min=".3" max="1.5" step=".05" value="${lab.lampSize}"></label>
     <label class="range">Мягкость <output data-for="keySoft"></output><input type="range" name="keySoft" min="0" max=".35" step=".01" value="${lab.keySoft}"></label>
-    <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>`)}
+    <label class="range">Яркость <output data-for="keyGain"></output><input type="range" name="keyGain" min="0" max="1.5" step=".05" value="${lab.keyGain}"></label>
+    <label class="range">Световая дорожка <output data-for="strip"></output><input type="range" name="strip" min="0" max="1" step=".05" value="${lab.strip}"></label>
+    <label class="range">Температура <output data-for="warmth"></output><input type="range" name="warmth" min="0" max="1" step=".05" value="${lab.warmth}"></label>
+    <p class="hint">Дорожка — длинный свет над камерой: по пластине идёт мягкая диагональная полоса и скользит при наклоне. Температура — ключевой свет теплее, заполняющий холоднее, при той же яркости.</p>`)}
   <div class="tuning"><fieldset><legend>Движение света</legend>
     <label class="range">Облёт света <output data-for="orbit"></output><input type="range" name="orbit" min="0" max="1" step=".05" value="${lab.orbit}"></label>
     <p class="hint">0 — главный свет слегка покачивается. Больше — ходит широкой дугой спереди, а свет сзади облетает карточку и зажигает только грани и буквы.</p>
@@ -281,7 +296,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
     if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
@@ -430,6 +445,14 @@ panel.querySelector('[data-live="bodyWeight"]').addEventListener('click', event 
     globalThis.__cardRenderer?.refreshText();
     writeUrl();
 });
+panel.querySelector('[data-live="typography"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.typography = Number(button.dataset.value);
+    panel.querySelectorAll('[data-live="typography"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    globalThis.__cardRenderer?.refreshText();
+    writeUrl();
+});
 panel.querySelector('[data-live="font"]').addEventListener('click', async event => {
     const button = event.target.closest('button');
     if (!button) return;
@@ -489,8 +512,8 @@ function describeSettings() {
     const lines = [
         'Визитка — настройки стенда',
         `Шрифт: ${FONTS[lab.font]?.title ?? FONTS[0].title}`,
-        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${currentLayout === 'accent' ? 'акцент на имени' : 'классика'} · размер карточки: ${n(lab.cardSize)}`,
-        `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)}`
+        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]}, фактура ${n(lab.surface)}, искра ${n(lab.sparkle)} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${{ accent: 'акцент на имени', grid: 'сетка' }[currentLayout] || 'классика'}, типографика ${lab.typography ? 'тонкая' : 'обычная'} · размер карточки: ${n(lab.cardSize)}`,
+        `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)} · дорожка ${n(lab.strip)} · температура ${n(lab.warmth)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
         `Первая буква: ${colour('logoFirst')}`,

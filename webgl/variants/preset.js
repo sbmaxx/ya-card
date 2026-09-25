@@ -12,7 +12,7 @@ const SHAPES = ['edition', 'vcut', 'deboss', 'raised'];
 const CHOICES = [
     ['edition', ['steel', 'noir', 'gold', 'aurora']],
     ['backdrop', ['studio', 'dark']],
-    ['layout', ['classic', 'accent']],
+    ['layout', ['classic', 'accent', 'grid']],
     ['relief', ['vcut', 'deboss', 'raised']],
     ['name', SHAPES],
     ['body', SHAPES],
@@ -44,7 +44,9 @@ const TINTS = ['logoTint', 'nameTint', 'bodyTint', 'logoFirstTint'];
 const LATER = [
     ['cardSize', .5, .01, .8], ['logoGloss', 0, .05, 1], ['nameGloss', 0, .05, 1], ['bodyGloss', 0, .05, 1],
     ['logoFirstSheer', 0, .05, 0], ['logoSheer', 0, .05, 0], ['nameSheer', 0, .05, 0], ['bodySheer', 0, .05, 0],
-    ['orbit', 0, .05, 0], ['bodyWeight', 400, 100, 400], ['bodySize', 0, .5, 0], ['plateFinish', 0, 1, 0], ['font', 0, 1, 0]
+    ['orbit', 0, .05, 0], ['bodyWeight', 400, 100, 400], ['bodySize', 0, .5, 0], ['plateFinish', 0, 1, 0], ['font', 0, 1, 0],
+    ['strip', 0, .05, 0], ['surface', 0, .05, 1], ['sparkle', 0, .05, 0], ['warmth', 0, .05, 0],
+    ['typography', 0, 1, 0]
 ];
 
 const encodeNumbers = (params, fields, digit) => fields.map(([key, min, step, fallback]) => {

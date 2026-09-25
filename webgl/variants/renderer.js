@@ -86,6 +86,17 @@ function panel(center, roll, size, color) {
     const up = up0.map((value, i) => -right0[i] * sr + value * cr);
     return { c, right, up, size, color };
 }
+// «Световая дорожка»: a long strip light just above the camera, on the diagonal.
+// At rest the plate mirrors it right of the text block, top-left to bottom-right
+// (the face's reflections run upside down in world y: the centre sits at y 0).
+const STRIP = panel([.043, 0, 1], .45, [2.0, .035]);
+const STRIP_POWER = 1.0;
+// Colour at the same brightness: a tone scaled to unit luminance.
+const byLuma = color => { const luma = .2126 * color[0] + .7152 * color[1] + .0722 * color[2]; return color.map(value => value / luma); };
+const tinted3 = (color, tint) => color.map((value, i) => value * tint[i]);
+// «Температура»: warmer key, cooler fill, at equal brightness.
+const warmTint = w => byLuma([1 + .10 * w, 1, 1 - .28 * w]);
+const coolTint = w => byLuma([1 - .14 * w, 1, 1 + .18 * w]);
 // The plate's face sees lamps near the camera (up to ~50° off axis), fading
 // out by ~65°; lamps further out are there for the chamfer. `face: 1` on a
 // lamp overrides it (the rim setup lights the face only when tilted).
@@ -298,6 +309,10 @@ uniform float uLetterGlow;
 uniform vec3 uGloss;
 // Plate finish: 0 brushed, 1 bead-blasted, 2 polished.
 uniform float uFinish;
+// How strongly the finish shows, its grain or frost (1 — as finished), and the
+// sparkle of the bead-blasted one (0 — none).
+uniform float uSurface;
+uniform float uSparkle;
 // Colour density: x first letter, y wordmark, z name, w role and contacts (1 — opaque).
 uniform vec4 uTintAmount;
 uniform float uRoomBase;
@@ -338,6 +353,23 @@ uniform vec3 uLightColor[${MAX_LIGHTS}];
 uniform float uLightFace[${MAX_LIGHTS}];
 // The back light circling the card with the light orbit (edges and lettering only).
 uniform vec3 uOrbitCenter, uOrbitRight, uOrbitUp, uOrbitColor;
+// The strip light fixed to the view (colour × power; black — off) and the tint
+// of the room's fill — tent, bounce, ambient — which «Температура» cools.
+uniform vec3 uStrip;
+uniform vec3 uFillTint;
+const vec3 STRIP_C = ${v3(STRIP.c)}, STRIP_R = ${v3(STRIP.right)}, STRIP_U = ${v3(STRIP.up)};
+
+// The strip light: a long band ~2° wide across the view. The whole face mirrors
+// only ~±9° of directions at rest, so the band must be narrower than that, with
+// its own soft edge rather than the studio's diffuser, or it covers the plate.
+float stripLight(vec3 d, float blur) {
+    float z = dot(d, STRIP_C);
+    vec2 p = vec2(dot(d, STRIP_R), dot(d, STRIP_U)) / max(z, .08);
+    float edge = blur + .02;
+    float inside = smoothstep(edge, -edge, abs(p.y) - ${f(STRIP.size[1])}) * smoothstep(edge, -edge, abs(p.x) - ${f(STRIP.size[0])});
+    // A rough surface spreads the same light over a wider band.
+    return inside * ${f(STRIP.size[1])} / (${f(STRIP.size[1])} + edge) * smoothstep(0.0, .25, z);
+}
 
 // The key softbox as a rounded rectangle (a circle at full radius). uKeySoft is
 // the studio's diffuser: it widens the edge of every light on top of roughness.
@@ -394,7 +426,7 @@ vec3 roomFor(vec3 world, float rough, float face) {
     col += vec3(.10, .10, .095) * exp(-d.y * d.y * mix(40.0, 5.0, rough)) * smoothstep(.3, -.2, d.z);
     // A soft, even fill from every side: turned far from its lamps (a phone
     // tilted hard, a hand spin) the metal still reads as metal, not a black slab.
-    col += vec3(.04) * (.55 + .45 * smoothstep(-1.0, 1.0, d.y));
+    col += vec3(.04) * uFillTint * (.55 + .45 * smoothstep(-1.0, 1.0, d.y));
     // A dim bounce card around the camera. Wide and soft, so a hard phone
     // tilt slides it off gradually instead of leaving the plate facing an
     // unlit room.
@@ -422,10 +454,16 @@ vec3 roomFor(vec3 world, float rough, float face) {
     tent += .30 * smoothstep(.45, 1.0, dot(d, vec3(-.33, .14, -.93)));
     tent += 1.1 * (1.0 - smoothstep(.0, .09, abs(-d.z - .82)));
     float wall = mix(.45 * (1.0 - smoothstep(.45, .95, abs(d.y))), tent, face);
-    col += vec3(${f(studio.bounce)}) * uBounce * max(bounce, wall);
+    col += vec3(${f(studio.bounce)}) * uFillTint * uBounce * max(bounce, wall);
     // Light walls (the paper backdrop) surround the card with brighter room.
     col += vec3(uRoomBase) * smoothstep(-.9, .3, d.y);
     col += uKeyColor * uKeyGain * keyPanel(d, uKeyCenter, blur);
+    // The strip light, fixed to the view rather than travelling with the room:
+    // the face mirrors it as a soft band that the least tilt slides across, the
+    // sweep of a product shot. On a matt finish it spreads into a broad sheen,
+    // on a polished one it stays a band. It only adds light, so it cannot open
+    // a darker gap between lamps.
+    if (uStrip.g > 0.0) col += uStrip * stripLight(world, blur);
     for (int i = 0; i < ${MAX_LIGHTS}; i++) {
         if (i >= uLightCount) break;
         vec3 shape = uLightShape[i];
@@ -669,8 +707,8 @@ void main() {
             float bundles = (scratches(groove * .28, along, 160.0, 41) - .5) * (1.0 - smoothstep(.25, .6, fine * .28));
             float bands = (scratches(groove * .11, along, 330.0, 53) - .5);
             float deep = smoothstep(.92, .985, scratches(groove * .4, along, 240.0, 37)) * (1.0 - smoothstep(.25, .6, fine * .4));
-            grooves = (layer1 * .8 + layer2 * .6 + bundles * .9 + bands * .6 + deep * .7) * brushing;
-            grainTilt = layer2 * .3 + bundles + bands * .6;
+            grooves = (layer1 * .8 + layer2 * .6 + bundles * .9 + bands * .6 + deep * .7) * brushing * uSurface;
+            grainTilt = (layer2 * .3 + bundles + bands * .6) * uSurface;
         }
         // The sheet's sheen is a touch uneven over a fifth of the card.
         float sheen = cloud(surfacePx / 170.0) - .5;
@@ -687,9 +725,26 @@ void main() {
         vec2 frost = vec2(0.0);
         if (blasted > 0.0) frost = vec2(cloud(surfacePx * 1.1) - .5, cloud(surfacePx * 1.1 + 91.0) - .5) * (1.0 - smoothstep(.25, .6, fine * 1.1))
                    + vec2(cloud(surfacePx * .45 + 13.0) - .5, cloud(surfacePx * .45 + 57.0) - .5) * .35;
+        frost *= uSurface;
         plateN = normalize(plateN + (T * frost.x + B * frost.y) * .04 * blasted);
         color = fresnel(plateF0, nv) * brushed(plateN, v, across, plateRough, plateAniso, 1.0);
         color *= 1.0 + grooves * .05 + sheen * mix(.05, .02, polished) + frost.x * .02 * blasted;
+        // Sparkle: blasted steel is a field of dents a fraction of a millimetre
+        // across, each a tiny mirror at its own tilt. The few that sit between
+        // the key and the eye flash, and hand the flash on as the card moves.
+        // One dent per cell; they fade once a cell is under a couple of pixels.
+        if (blasted > 0.0 && uSparkle > 0.0) {
+            vec2 dent = surfacePx / .75;
+            ivec2 id = ivec2(floor(dent));
+            vec2 tilt = (vec2(hashI(id.x, id.y * 3 + 1), hashI(id.x * 5 + 2, id.y)) - .5) * .9;
+            vec2 centre = vec2(hashI(id.x + 11, id.y * 7 + 5), hashI(id.x * 3 + 7, id.y + 13)) - .5;
+            vec3 halfway = normalize(normalize(uKeyDirection) + v);
+            vec2 facing = vec2(dot(halfway, T), dot(halfway, B)) / max(dot(halfway, n), .2) - tilt;
+            float glint = exp(-dot(facing, facing) / .0025);
+            float cellPx = footprint / .75;
+            float speck = 1.0 - smoothstep(.2 - cellPx * .5, .2 + cellPx * .5, length(fract(dent) - .5 - centre * .5));
+            color += uSparkle * uKeyColor * uKeyGain * plateF0 * glint * speck * (1.0 - smoothstep(.8, 1.6, cellPx)) * .35;
+        }
         ${plate.coat ? `
         // PVD coatings keep a faint clear reflection above the dark metal.
         color += ${f(plate.coat)} * roomFor(reflect(-v, n), .10, 1.0);` : ''}
@@ -1145,6 +1200,13 @@ const LAYOUTS = {
     accent: {
         landscape: { logo: 92, logoY: 46, center: false, name: [128], nameSize: 32, role: [154], contacts: 190 },
         portrait: { logo: 78, logoY: 76, center: false, name: [152, 185], nameSize: 27, role: [216, 233], contacts: 284 }
+    },
+    // The accent's type on a frame: the wordmark on the top margin, the contacts
+    // on the bottom one, each as far from its edge as the text is from the left;
+    // name and role at the optical centre between them.
+    grid: {
+        landscape: { logo: 92, logoY: 46, center: false, name: [128], nameSize: 32, role: [154], contacts: 190, anchored: true },
+        portrait: { logo: 78, logoY: 76, center: false, name: [152, 185], nameSize: 27, role: [216, 233], contacts: 284, anchored: true }
     }
 };
 const requestedLayout = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('layout');
@@ -1206,22 +1268,38 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     // Name and role stay on one line whenever they fit the plate; only a line
     // that does not fit is split in two, and everything below moves with it.
     const maxWidth = vertical ? width - 2 * 26 : 440;
-    const fits = (value, size, weight) => {
+    // «Тонкая типографика»: small type opened up a little and the large name set
+    // a touch tighter, as type is set for print at those sizes (em fractions).
+    const fine = (globalThis.__cardLab?.typography ?? 0) > 0;
+    const trackName = fine ? -.01 : 0, trackBody = fine ? .025 : 0;
+    // Tracking glyph by glyph (canvas letterSpacing is not in every browser):
+    // each glyph where the untracked line puts it, kerning kept, plus spacing.
+    const tracked = (value, size, tracking) => size * tracking * Math.max(0, [...value].length - 1);
+    const fillTracked = (value, left, baseline, spacing) => {
+        if (!spacing) { context.fillText(value, left, baseline); return; }
+        let before = '';
+        [...value].forEach((glyph, i) => {
+            const at = context.measureText(before + glyph).width - context.measureText(glyph).width;
+            context.fillText(glyph, left + at + i * spacing, baseline);
+            before += glyph;
+        });
+    };
+    const fits = (value, size, weight, tracking) => {
         context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
-        return context.measureText(value).width <= maxWidth;
+        return context.measureText(value).width + tracked(value, size, tracking) <= maxWidth;
     };
     // The lab can scale the name; the plans are drawn for the size in LAYOUTS.
     const nameScale = globalThis.__cardLab?.nameScale ?? direction.nameScale ?? 1;
     // Role and contacts: Regular (400) or the name's Medium (500) — the font's range.
     const bodyWeight = globalThis.__cardLab?.bodyWeight ?? 400;
     let nameSize = plan.nameSize * nameScale;
-    const nameLines = fits(data.name, nameSize, 500) ? [data.name] : splitTwo(data.name);
+    const nameLines = fits(data.name, nameSize, 500, trackName) ? [data.name] : splitTwo(data.name);
     // A single long word can still be wider than the plate: shrink to fit.
     context.font = `500 ${nameSize}px "${cardFont()}", Arial, sans-serif`;
-    const widest = Math.max(...nameLines.map(line => context.measureText(line).width));
+    const widest = Math.max(...nameLines.map(line => context.measureText(line).width + tracked(line, nameSize, trackName)));
     if (widest > maxWidth) nameSize *= maxWidth / widest;
     const growth = nameSize - plan.nameSize;
-    const roleLines = fits(data.position, textSize, bodyWeight) ? [data.position] : (data.positionLines || splitTwo(data.position));
+    const roleLines = fits(data.position, textSize, bodyWeight, trackBody) ? [data.position] : (data.positionLines || splitTwo(data.position));
     const ink = (value, size, weight = 400) => {
         context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
         const metrics = context.measureText(value);
@@ -1266,50 +1344,66 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     // sits a touch above the geometric centre, which reads as centred.
     const usable = vertical ? height * .92 : height;
     const yOffset = (usable - blockTop - blockBottom) / 2 - (vertical ? 0 : usable * .015);
-    function text(value, y, size, url, weight = 400) {
-        y += yOffset;
+    // Each group's vertical shift: one for the whole block, unless anchored.
+    let logoShift = yOffset, middleShift = yOffset, contactsShift = yOffset;
+    if (plan.anchored) {
+        const margin = vertical ? 50 : x;
+        logoShift = margin - logoY;
+        contactsShift = usable - margin - blockBottom;
+        const top = logoY + logoHeight + logoShift;
+        const bottom = contactsY - ink(data.email, textSize, bodyWeight).ascent + contactsShift;
+        const middleTop = nameY - ink(nameLines[0], nameSize, 500).ascent;
+        const middleBottom = roleYs.at(-1) + ink(roleLines.at(-1), textSize, bodyWeight).descent;
+        // A little above the geometric middle, which reads as the centre.
+        middleShift = (top + bottom - middleTop - middleBottom) / 2 - (bottom - top) * .04;
+    }
+    let shift = middleShift;
+    function text(value, y, size, url, weight = 400, tracking = 0) {
+        y += shift;
         context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
         const metrics = context.measureText(value);
+        const extra = tracked(value, size, tracking);
         const drawX = x + metrics.actualBoundingBoxLeft;
-        context.fillText(value, drawX, y);
+        fillTracked(value, drawX, y, size * tracking);
         if (url) {
             const left = drawX - metrics.actualBoundingBoxLeft;
-            const measure = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
+            const measure = metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight + extra;
             links.push({ x: left, y: y - size, width: measure, height: size + 7,
                 underlineY: y + Math.max(0, metrics.actualBoundingBoxDescent) + 2, url });
         }
         return [(drawX - metrics.actualBoundingBoxLeft - 2) / width,
             (y - metrics.actualBoundingBoxAscent - 2) / height,
-            (drawX + metrics.actualBoundingBoxRight + 2) / width,
+            (drawX + metrics.actualBoundingBoxRight + extra + 2) / width,
             (y + metrics.actualBoundingBoxDescent + 2) / height];
     }
     if (vertical) {
         // Left-aligned lines, but equal metal on both sides of the widest one:
         // a fixed left margin left the long name almost touching the right edge.
-        const inkWidth = (value, size, weight = 400) => {
+        const inkWidth = (value, size, weight = 400, tracking = 0) => {
             context.font = `${weight} ${size}px "${cardFont()}", Arial, sans-serif`;
             const metrics = context.measureText(value);
-            return metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight;
+            return metrics.actualBoundingBoxLeft + metrics.actualBoundingBoxRight + tracked(value, size, tracking);
         };
         const widest = Math.max(plan.center ? 0 : logoWidth,
-            ...nameLines.map(line => inkWidth(line, nameSize, 500)),
-            ...roleLines.map(line => inkWidth(line, textSize, bodyWeight)),
-            inkWidth(data.email, textSize, bodyWeight), inkWidth(`t.me/${data.telegram}`, textSize, bodyWeight));
+            ...nameLines.map(line => inkWidth(line, nameSize, 500, trackName)),
+            ...roleLines.map(line => inkWidth(line, textSize, bodyWeight, trackBody)),
+            inkWidth(data.email, textSize, bodyWeight, trackBody), inkWidth(`t.me/${data.telegram}`, textSize, bodyWeight, trackBody));
         x = (width - widest) / 2;
         if (!plan.center) logoX = x;
     }
-    context.drawImage(logo, logoX, logoY + yOffset, logoWidth, logoHeight);
-    links.push({ x: logoX, y: logoY + yOffset, width: logoWidth, height: logoHeight, url: data.companyUrl });
-    const titleRects = nameLines.map((line, i) => text(line, nameY + i * nameGap, nameSize, undefined, 500));
+    context.drawImage(logo, logoX, logoY + logoShift, logoWidth, logoHeight);
+    links.push({ x: logoX, y: logoY + logoShift, width: logoWidth, height: logoHeight, url: data.companyUrl });
+    const titleRects = nameLines.map((line, i) => text(line, nameY + i * nameGap, nameSize, undefined, 500, trackName));
     const titleRelief = [Math.min(...titleRects.map(r => r[0])), Math.min(...titleRects.map(r => r[1])),
         Math.max(...titleRects.map(r => r[2])), Math.max(...titleRects.map(r => r[3]))];
-    const logoRelief = [(logoX - 2) / width, (logoY + yOffset - 2) / height,
-        (logoX + logoWidth + 2) / width, (logoY + yOffset + logoHeight + 2) / height];
-    const bodyRects = roleLines.map((line, i) => text(line, roleYs[i], textSize, undefined, bodyWeight));
+    const logoRelief = [(logoX - 2) / width, (logoY + logoShift - 2) / height,
+        (logoX + logoWidth + 2) / width, (logoY + logoShift + logoHeight + 2) / height];
+    const bodyRects = roleLines.map((line, i) => text(line, roleYs[i], textSize, undefined, bodyWeight, trackBody));
     const y = contactsY;
     const size = textSize;
-    bodyRects.push(text(data.email, y, size, `mailto:${data.email}`, bodyWeight));
-    bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`, bodyWeight));
+    shift = contactsShift;
+    bodyRects.push(text(data.email, y, size, `mailto:${data.email}`, bodyWeight, trackBody));
+    bodyRects.push(text(`t.me/${data.telegram}`, y + lineHeight, size, `https://t.me/${data.telegram}`, bodyWeight, trackBody));
     const textRelief = [Math.min(...bodyRects.map(r => r[0])), Math.min(...bodyRects.map(r => r[1])),
         Math.max(...bodyRects.map(r => r[2])), Math.max(...bodyRects.map(r => r[3]))];
     return { canvas, links, width, height, titleRelief, logoRelief, textRelief, logoScale: logoWidth / 145 };
@@ -1366,7 +1460,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1581,14 +1675,17 @@ export class CardRenderer {
     // `size` scales every lamp; the light it emits (area × intensity) stays the same.
     uploadLights(setup, keyShape, keyGain, size) {
         const { gl } = this, u = this.uniforms;
-        const signature = `${setup.title}|${keyShape.title}|${keyGain}|${size}`;
+        const warmth = globalThis.__cardLab?.warmth ?? 0;
+        const signature = `${setup.title}|${keyShape.title}|${keyGain}|${size}|${warmth}`;
+        const toned = color => color === 'fill' ? tinted3(toneOf(color), coolTint(warmth))
+            : color === 'key' || !color ? tinted3(toneOf(color), warmTint(warmth)) : toneOf(color);
         if (this.lightSignature === signature) return;
         this.lightSignature = signature;
         const key = panel(setup.key.c, keyShape.roll, keyShape.size, [0, 0, 0]);
         gl.uniform3f(u.uKeyCenter, ...key.c);
         gl.uniform3f(u.uKeyRight, ...key.right);
         gl.uniform3f(u.uKeyUp, ...key.up);
-        gl.uniform3fv(u.uKeyColor, scale(toneOf(setup.key.color), setup.key.power));
+        gl.uniform3fv(u.uKeyColor, scale(toned(setup.key.color), setup.key.power));
         const count = Math.min(MAX_LIGHTS, setup.lights.length);
         const pack = read => new Float32Array(setup.lights.slice(0, count).flatMap(read));
         gl.uniform1i(u.uLightCount, count);
@@ -1596,7 +1693,7 @@ export class CardRenderer {
         gl.uniform3fv(u.uLightRight, pack((_, i) => setup.lamps[i].right));
         gl.uniform3fv(u.uLightUp, pack((_, i) => setup.lamps[i].up));
         gl.uniform3fv(u.uLightShape, pack(light => [...scale(light.size, size), light.shape === 'rect' ? 0 : -1]));
-        gl.uniform3fv(u.uLightColor, pack(light => scale(toneOf(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2)));
+        gl.uniform3fv(u.uLightColor, pack(light => scale(toned(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2)));
         gl.uniform1fv(u.uLightFace, pack((light, i) => [light.face ?? faceSees(setup.lamps[i].c)]));
     }
 
@@ -1874,7 +1971,10 @@ export class CardRenderer {
         gl.uniform3f(this.uniforms.uOrbitCenter, ...back.c);
         gl.uniform3f(this.uniforms.uOrbitRight, ...back.right);
         gl.uniform3f(this.uniforms.uOrbitUp, ...back.up);
-        gl.uniform3fv(this.uniforms.uOrbitColor, scale(toneOf('key'), 22 * this.orbit * this.orbit));
+        const warmth = lab ? lab.warmth : 0;
+        gl.uniform3fv(this.uniforms.uOrbitColor, scale(tinted3(toneOf('key'), coolTint(warmth)), 22 * this.orbit * this.orbit));
+        gl.uniform3fv(this.uniforms.uFillTint, coolTint(warmth));
+        gl.uniform3fv(this.uniforms.uStrip, scale(tinted3(toneOf('key'), warmTint(warmth)), STRIP_POWER * (lab ? lab.strip : 0)));
         gl.uniform2f(this.uniforms.uKeySize, ...scale(keyShape.size, lampSize));
         gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius * lampSize);
         gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
@@ -1900,6 +2000,8 @@ export class CardRenderer {
         gl.uniform4f(this.uniforms.uTintAmount, ...(lab ? ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - lab[`${key}Sheer`]) : [1, 1, 1, 1]));
         gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));
         gl.uniform1f(this.uniforms.uFinish, lab ? lab.plateFinish : 0);
+        gl.uniform1f(this.uniforms.uSurface, lab ? lab.surface : 1);
+        gl.uniform1f(this.uniforms.uSparkle, lab ? lab.sparkle : 0);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 

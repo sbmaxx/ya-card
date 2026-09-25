@@ -40,6 +40,10 @@ export const lab = globalThis.__cardLab = {
     // Light orbit: 0 — the key drifts gently; 1 — it sweeps a wide arc in front
     // and a back light circles the card, catching only its edges and lettering.
     orbit: number('orbit', 0),
+    // A strip light over the plate (0 — none) and the key's warmth against a
+    // cooler fill (0 — the edition's own tones).
+    strip: number('strip', 0),
+    warmth: number('warmth', 0),
     keyShape: Object.hasOwn(KEY_SHAPES, params.get('keyShape')) ? params.get('keyShape') : 'round',
     lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
     lightSetup: Object.hasOwn(LIGHT_SETUPS, params.get('lightSetup')) ? params.get('lightSetup') : 'studio',
@@ -54,8 +58,14 @@ export const lab = globalThis.__cardLab = {
     font: Math.max(0, Math.round(number('font', 0))),
     // Role and contacts: px added to their size (12.5–13 px).
     bodySize: number('bodySize', 0),
+    // «Тонкая типографика»: 1 — small type tracked out, the name a touch tighter.
+    typography: Math.max(0, Math.min(1, Math.round(number('typography', 0)))),
     // Plate finish: 0 brushed, 1 bead-blasted, 2 polished.
     plateFinish: Math.max(0, Math.min(2, Math.round(number('plateFinish', 0)))),
+    // How strongly the finish shows (1 — as finished) and the bead-blasted
+    // finish's sparkle (0 — none).
+    surface: number('surface', 1),
+    sparkle: number('sparkle', 0),
     bodyDepth: number('bodyDepth', 1),
     bodyTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),
