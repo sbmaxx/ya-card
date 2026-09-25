@@ -33,12 +33,18 @@ const directions = {
         id: 'noir', backdrop: 'dark', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
         look: {
             plate: { f0: [.05, .051, .056], rough: .30, aniso: .22, brush: 'linear', coat: .012 },
-            chamfer: { f0: [.94, .94, .96], rough: .025 },
+            // The PVD coats the edge too: a polished black bevel that lights up
+            // only where it catches a lamp, not a bright outline all round.
+            chamfer: { f0: [.075, .075, .08], rough: .025 },
             side: { f0: [.05, .05, .055], rough: .30 },
-            logo: { process: 'ablate', f0: [.92, .92, .94], rough: .14 },
+            // Satin, not mirror: in the dark studio a polished letter mirrors the
+            // dark and vanishes; satin steel reads silver at any angle.
+            logo: { process: 'ablate', f0: [.92, .92, .94], rough: .30 },
             name: { process: 'ablate', f0: [.80, .80, .82], rough: .20 },
             text: { process: 'ablate', f0: [.70, .70, .72], rough: .42 },
-            studio: { key: [1, .98, .95], fill: [.75, .85, 1], bounce: .70, exposure: 1.2 }
+            // A dark studio, as black cards are shot: the black stays black and
+            // one soft light — the strip — runs over it.
+            studio: { key: [1, .98, .95], fill: [.75, .85, 1], bounce: .30, exposure: 1.2 }
         },
         relief: { nameSize: 22, logo: 'vcut', name: { depth: .35, bevel: .45 } },
         background: '#040506', shadow: '#000000',

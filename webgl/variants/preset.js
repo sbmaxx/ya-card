@@ -92,6 +92,9 @@ export function decodePreset(code) {
         }
         for (const key of TINTS) {
             const kind = read();
+            // «Not set» is written out too: left out, the lab's default look
+            // (the homepage's colours) would fill it in on the next load.
+            if (kind === 0) params.set(key, key === 'logoFirstTint' ? 'same' : '');
             if (kind === 1) params.set(key, 'metal');
             if (kind === 3) params.set(key, 'plate');
             if (kind === 2) params.set(key, (read() << 18 | read() << 12 | read() << 6 | read()).toString(16).padStart(6, '0'));

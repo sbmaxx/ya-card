@@ -298,9 +298,9 @@ const writeUrl = () => {
     next.set('backdrop', lab.backdrop);
     for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
-    for (const key of ['logoTint', 'nameTint', 'bodyTint']) if (lab[key]) next.set(key, lab[key]); else next.delete(key);
-    if (lab.logoFirstTint === 'same') next.delete('logoFirstTint');
-    else next.set('logoFirstTint', lab.logoFirstTint || 'metal');
+    // «Not set» stays in the link: left out, the default look would fill it on reload.
+    for (const key of ['logoTint', 'nameTint', 'bodyTint']) next.set(key, lab[key] || '');
+    next.set('logoFirstTint', lab.logoFirstTint === 'same' ? 'same' : lab.logoFirstTint || 'metal');
     next.set('panel', panel.hidden ? '0' : '1');
     next.set('keyShape', lab.keyShape);
     next.set('lamps', lab.lamps);

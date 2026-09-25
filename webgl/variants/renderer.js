@@ -894,9 +894,10 @@ function letteringCode(name, m, flat = false) {
             vec3 ${out} = mix(gloss(${v3(m.albedo)}, n, v, ${shine('.12')}),
                 metal(${v3(m.lip)}, facet, v, ${shine('max(.04, letterRough)')}), ${name}Lip * .55);`;
     if (m.process === 'ablate') return `
-            // Laser ablation: coating removed, bare frosted steel below.
+            // Laser ablation: coating removed, bare frosted steel below. The frost
+            // scatters a little of the room evenly; more read as white print.
             vec3 ${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${shine(flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`)});
-            ${out} += ${name.toUpperCase()}_F0 * room(n, 1.0) * .35;`;
+            ${out} += ${name.toUpperCase()}_F0 * room(n, 1.0) * .18;`;
     return `
             // Laser annealing: dark oxide with a faint, rough sheen.
             vec3 ${out} = ${v3(m.albedo)} * room(n, 1.0) * 2.0 + .008 * room(reflect(-v, n), .55);`;
