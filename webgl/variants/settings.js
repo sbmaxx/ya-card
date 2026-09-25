@@ -3,6 +3,7 @@
 // from `globalThis.__cardLab`; the lab panel edits them live.
 import { direction } from './directions.js';
 import { BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
+import { applyPageColours } from './backdrops.js';
 
 // An exported file carries its settings as a preset and shows no panel.
 export const exported = typeof globalThis.__cardPreset === 'string';
@@ -89,8 +90,8 @@ export const lab = globalThis.__cardLab = {
     pitch: number('pitch', 0)
 };
 
-// A baked preset: settings only. The page colour follows the backdrop.
+// A baked preset: settings only. The page colours follow the backdrop.
 if (exported) {
     const backdrop = BACKDROPS[lab.backdrop];
-    if (backdrop) document.documentElement.style.backgroundColor = backdrop.css;
+    if (backdrop) applyPageColours(backdrop);
 }

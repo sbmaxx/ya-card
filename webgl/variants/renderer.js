@@ -6,6 +6,7 @@ const cardFont = () => fontOf(globalThis.__cardLab?.font ?? 0).family;
 export const loadCardFont = () => Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "${cardFont()}"`)));
 import { createReliefMap } from './relief.js';
 import { direction } from './directions.js';
+import { BACKDROPS } from './backdrops.js';
 
 // Studio renderer for the material editions. WebGL 2, linear HDR shading,
 // an analytic studio environment (no textures, no requests), Khronos PBR
@@ -245,25 +246,8 @@ vec3 toSRGB(vec3 c) {
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
 }`;
 
-// Backdrops: a graphite cyclorama rendered with the card, lit by the same key
-// light and receiving the card's real, blurred shadow. Colours are linear.
-export const BACKDROPS = {
-    studio: { title: 'Графит', wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
-        grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', edge: '#0e1014' },
-    dark: { title: 'Тёмный графит', wall: [.016, .017, .020], floor: [.006, .0065, .008], pool: [.075, .077, .082],
-        grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f', edge: '#07080a' },
-    // A dark room with one warm spotlight behind the card, as jewellery is shown:
-    // a black card stands out against the pool, its silver and edge lit.
-    velvet: { title: 'Бархат', wall: [.008, .0074, .0068], floor: [.0025, .0023, .0021], pool: [.13, .112, .092], poolFalloff: 4.2,
-        grain: .016, shadow: .88, roomBase: .008, bounce: .9, css: '#0a0908', edge: '#050404' },
-    // Honed dark stone: the slab's soft clouds of lighter and darker stone and
-    // a fine grit, still behind the moving card like a wall.
-    stone: { title: 'Камень', wall: [.028, .0275, .027], floor: [.009, .009, .009], pool: [.085, .083, .08], stone: 1,
-        grain: .018, shadow: .82, roomBase: .016, bounce: 1.0, css: '#121212', edge: '#0a0a0a' },
-    // The studio, darker and warmer: richer against silver and red.
-    warm: { title: 'Тёплый графит', wall: [.040, .036, .033], floor: [.014, .012, .011], pool: [.14, .128, .115],
-        grain: .02, shadow: .8, roomBase: .02, bounce: 1.1, css: '#16130f', edge: '#0e0c0b' }
-};
+// Backdrops (backdrops.js): the room behind the card and the page's own colours.
+export { BACKDROPS };
 const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
 export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
 

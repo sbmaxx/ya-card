@@ -8,10 +8,15 @@ import { exported, params, textFields, lab } from './settings.js';
 import { showPoseSheet } from './poses.js';
 import { FONTS } from './fonts.js';
 import { loadCardFont } from './renderer.js';
+import { applyPageColours, pageColours } from './backdrops.js';
 
 if (!exported) {
 const style = document.createElement('style');
+// The edition's page colours are the plain card's; the scene's page follows the
+// backdrop (see the page CSS in build.mjs).
 style.textContent = direction.css + `
+:root { background-color: var(--page); }
+@media (hover: none) and (pointer: coarse) { :root, body { background-color: var(--edge); } }
 .lab { position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: calc(16px + env(safe-area-inset-right, 0px)); z-index: 30;
   width: 312px; max-height: calc(100svh - 32px); overflow: hidden auto;
   /* A thin scrollbar in its own gutter never covers the controls. */
@@ -330,8 +335,8 @@ panel.querySelectorAll('.segments[data-param]').forEach(group => group.addEventL
 const applyBackdrop = id => {
     lab.backdrop = id;
     const backdrop = BACKDROPS[id];
-    // Page colour before the first frame; the renderer then matches the edges.
-    document.documentElement.style.backgroundColor = backdrop ? backdrop.css : '';
+    // Page colours before the first frame; the renderer then matches the edges.
+    if (backdrop) applyPageColours(backdrop);
     panel.querySelectorAll('[data-live="backdrop"] button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.value === id)));
 };
 panel.querySelector('[data-live="backdrop"]').addEventListener('click', event => {
@@ -580,6 +585,12 @@ async function exportHtml() {
     const preset = new URLSearchParams(location.search);
     preset.delete('panel');
     doc.querySelector('meta[name="robots"]')?.remove();
+    // The file's own backdrop from the first paint: page, bars and loader.
+    const backdrop = BACKDROPS[lab.backdrop];
+    if (backdrop) {
+        doc.querySelector('meta[name="theme-color"]')?.setAttribute('content', backdrop.edge);
+        doc.head.insertAdjacentHTML('beforeend', `<style>:root{${Object.entries(pageColours(backdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}</style>`);
+    }
     const boot = [...doc.head.querySelectorAll('script')].find(script => script.textContent.includes('cardBootTimeout'));
     if (boot) {
         boot.textContent = boot.textContent

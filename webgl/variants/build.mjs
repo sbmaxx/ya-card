@@ -9,10 +9,11 @@ import { cards } from '../data.js';
 import { directions } from './directions.js';
 import { decodePreset } from './preset.js';
 import { FONTS, fontOf } from './fonts.js';
+import { BACKDROPS, pageColours } from './backdrops.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
-const HOME_LOOK = 'ABACCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAUAFAZB4A8AAAC_D8dAeAUAUAQAAAAAAAAAMAAACABABAOAoAGAIABAAAUAA';
+const HOME_LOOK = 'ABCCCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAUAFAZB4A8AAAC_D8dAeAUAUAQAAAAAAAAAMAAACABABAOAoAGAIABAAAUAA';
 const page = async (id, html, out = variantsOut) => {
     const bytes = Buffer.from(html), directory = resolve(out, id);
     await mkdir(directory, { recursive: true });
@@ -39,21 +40,33 @@ const fontLicenses = async fonts => (await Promise.all(fonts.map(async f =>
 const pageCss = async (fonts, card, extra = '') => (await fontFaces(fonts, card)) + '\n'
     + baseCss.replace(/^@font-face[^\n]*\n/, '').replaceAll("'Card Onest'", `'${fonts[0].family}'`) + '\n' + extra;
 const homeFont = fontOf(Number(decodePreset(HOME_LOOK).get('font') ?? 0));
+// The homepage's backdrop (the lab opens on it too): its colours are baked into
+// the page, so the first paint, Safari's bars and the loader already match the
+// scene that follows.
+const homeBackdrop = (look => BACKDROPS[look.get('backdrop')] || BACKDROPS[directions[look.get('edition')]?.backdrop] || BACKDROPS.studio)(decodePreset(HOME_LOOK));
+const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // Minimal loader: a hairline with a travelling glint, a real element so it can
 // fade out while the card fades in. Transform and opacity animate on the
 // compositor, so it keeps moving while warm-up keeps the main thread busy.
-// On touch screens the scene fades into the bar colours inside the visible
-// viewport, so the transition completes before Safari's header and footer.
-const loaderCss = `.card-loader{position:fixed;left:50%;top:50%;width:140px;height:1px;margin-left:-70px;z-index:20;pointer-events:none;
-opacity:0;transition:opacity .8s ease;mix-blend-mode:difference;background:#ffffff2e}
+// It is drawn in the backdrop's own light (`--loader`): a warm line and a
+// softly glowing glint that read on the dark room and on its pool of light.
+// The page is the backdrop's colour from the first paint; on touch screens it
+// is the flat edge colour Safari tints its bars with (the scene fades into it
+// inside the visible viewport, so the transition completes before the bars).
+const loaderCss = `:root{${Object.entries(pageColours(homeBackdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}
+:root{background-color:var(--page)}
+@media (hover:none) and (pointer:coarse){:root,body{background-color:var(--edge)}}
+.card-loader{position:fixed;left:50%;top:50%;width:160px;height:1px;margin-left:-80px;z-index:20;pointer-events:none;
+opacity:0;transition:opacity .8s ease;background:linear-gradient(90deg,transparent,rgb(var(--loader)/.34) 22%,rgb(var(--loader)/.34) 78%,transparent)}
 .webgl-loading .card-loader{opacity:1;transition-duration:.35s}
-.card-loader::after{content:'';position:absolute;left:0;top:0;width:48px;height:1px;background:linear-gradient(90deg,transparent,#fff,transparent);
+.card-loader::after{content:'';position:absolute;left:0;top:-5px;width:56px;height:11px;
+background:linear-gradient(90deg,transparent,rgb(var(--loader)),transparent) center/100% 1px no-repeat,radial-gradient(closest-side,rgb(var(--loader)/.3),transparent);
 will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite alternate}
-@keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(92px);opacity:0}}
-@media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(46px)}}
+@keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(104px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(52px)}}
 .webgl-loading.webgl-stage #card-canvas{visibility:visible;animation:card-stage .6s ease both}
 @keyframes card-stage{from{opacity:0}}
-.safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none}
+.safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none;background:var(--edge)}
 .safe-edge-top{top:0;height:max(6px,env(safe-area-inset-top,0px))}
 .safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
 @media (pointer:fine){.safe-edge{display:none}}
@@ -84,6 +97,9 @@ async function studioPage({ entry, define, direction, fallback, head, source = t
     let html = source
         // The backdrop is rendered in WebGL: no CSS ambient layer or SVG shadow.
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '<div class="card-loader" aria-hidden="true"></div>')
+        // Touch screens: the strips Safari tints its bars from are there at the
+        // first paint, already in the edge colour (the renderer keeps them).
+        .replace('<body>', '<body><div class="safe-edge safe-edge-top" aria-hidden="true"></div><div class="safe-edge safe-edge-bottom" aria-hidden="true"></div>')
         // Without WebGL 2, or if the scene never starts, open the plain card instead.
         // Only time on screen counts: a background tab or a locked phone pauses
         // the frames the warm-up waits for, and that is not a missing WebGL.
@@ -116,7 +132,7 @@ await page('lab', await studioPage({
     // The lab opens on the homepage's look (see preset.js).
     define: { __CARD_VARIANT__: JSON.stringify('lab'), __LAB_DEFAULT__: JSON.stringify(HOME_LOOK) },
     fallback: '../plain/',
-    head: '<meta name="theme-color" content="#0b0d11"><meta name="robots" content="noindex">'
+    head: themeColor + '<meta name="robots" content="noindex">'
 }));
 
 // The homepage: one look from the lab, without the panel and other editions.
@@ -182,8 +198,8 @@ function homeSource(lang) {
             define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
             direction,
             fallback: '/plain/',
-            // Indexed, unlike the lab. The scene sets the exact page colour at start.
-            head: '<meta name="theme-color" content="#0b0c0f">',
+            // Indexed, unlike the lab.
+            head: themeColor,
             source: homeSource(lang),
             fonts: [homeFont], card: true
         }), homeOut);
