@@ -2079,7 +2079,14 @@ export class CardRenderer {
         gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));
         gl.uniform1f(this.uniforms.uFinish, lab ? lab.plateFinish : 0);
         gl.uniform1f(this.uniforms.uSurface, lab ? lab.surface : 1);
-        gl.uniform1f(this.uniforms.uSparkle, lab ? lab.sparkle : 0);
+        // A glint is a point of light far smaller than a pixel, drawn as about
+        // one. On a Retina screen that pixel is at the edge of sight and the
+        // glints read as fine glitter; a standard-density pixel is two to three
+        // times larger, and the same glints read as dust on the plate. The
+        // glint's light is the same on any screen: over a larger pixel it is
+        // dimmer, by the pixel's area against a Retina one.
+        const density = Math.min(1, (this.canvas.width / this.viewportWidth / 2) ** 2);
+        gl.uniform1f(this.uniforms.uSparkle, (lab ? lab.sparkle : 0) * density);
         gl.uniform1i(this.uniforms.uTexture, 0);
         gl.uniform1i(this.uniforms.uEngraving, 1);
 
