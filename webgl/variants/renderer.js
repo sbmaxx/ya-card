@@ -420,6 +420,10 @@ float panel(vec3 d, vec3 c, vec3 r, vec3 u, vec2 size, float blur, float roundne
 // above, that its reflection can only fall to, never through a dark gap, and
 // it does not see the lamps placed far out for the chamfer, which would blow
 // a turned plate out to white. The rest pose sees the same room either way.
+// How much of the orbiting back light the surface being shaded takes: all of
+// it on the chamfer; on the lettering only once its bevels are resolved (main).
+float orbitSeen = 1.0;
+
 vec3 roomFor(vec3 world, float rough, float face) {
     vec3 d = uRoom * world;
     float blur = .004 + rough * rough * 1.5;
@@ -478,7 +482,7 @@ vec3 roomFor(vec3 world, float rough, float face) {
     }
     // The orbiting back light sits square to the view, where the chamfer and
     // the letters' bevels look: a glint that runs around the edge of the card.
-    if (face < .5 && uOrbitColor.r > 0.0) col += uOrbitColor * panel(d, uOrbitCenter, uOrbitRight, uOrbitUp, vec2(.20), blur, 1.0);
+    if (face < .5 && uOrbitColor.r > 0.0) col += uOrbitColor * orbitSeen * panel(d, uOrbitCenter, uOrbitRight, uOrbitUp, vec2(.20), blur, 1.0);
     return col;
 }
 
@@ -679,6 +683,11 @@ void main() {
         vec3 wall = metal(SIDE_F0, n, v, ${f(look.side.rough)});
         color = mix(wall, cut, chamfer);
     } else {
+        // The orbiting light swept every letter's bevels at once — edges a pixel
+        // or two wide — and lit them in a travelling shimmer, a fine ripple over
+        // the lettering every few seconds. The letters take it only once the
+        // plate is magnified and their bevels span pixels; the chamfer keeps it.
+        orbitSeen = 1.0 - smoothstep(.12, .25, footprint);
         // Brushing direction and fine groove texture, filtered by pixel footprint.
         ${brushCircular ? `
         vec2 radial = surfacePx - uBrushCenter * uLayoutSize;
