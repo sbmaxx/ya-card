@@ -451,6 +451,8 @@ vec3 fresnel(vec3 f0, float nv) {
 // Brushed metal: micro-grooves tilt the normal across the brush direction,
 // which stretches every reflection into a streak perpendicular to the grain.
 vec3 brushed(vec3 n, vec3 v, vec3 across, float rough, float aniso, float face) {
+    // No grain (bead-blasted, polished): all seven would look the same way.
+    if (aniso <= 0.0) return roomFor(reflect(-v, n), rough, face);
     vec3 sum = vec3(0.0);
     for (int i = 0; i < 7; i++) {
         float s = (float(i) - 3.0) / 3.0;
@@ -651,23 +653,27 @@ void main() {
         // depth, broken along their run, in three sizes, and now and then a
         // deeper one. Each layer fades out once its rows are finer than a pixel.
         float fine = fwidth(groove);
-        float layer1 = (scratches(groove * 2.3, along, 38.0, 11) - .5) * (1.0 - smoothstep(.25, .6, fine * 2.3));
-        float layer2 = (scratches(groove * .9, along, 95.0, 23) - .5) * (1.0 - smoothstep(.25, .6, fine * .9));
-        // Single scratches are finer than a pixel, on screen as in the hand; what
-        // the eye sees are bundles of them, 0.3–1 mm wide, a little brighter or
-        // duller, running for a few centimetres. Those carry the texture.
-        float bundles = (scratches(groove * .28, along, 160.0, 41) - .5) * (1.0 - smoothstep(.25, .6, fine * .28));
-        float bands = (scratches(groove * .11, along, 330.0, 53) - .5);
-        float deep = smoothstep(.92, .985, scratches(groove * .4, along, 240.0, 37)) * (1.0 - smoothstep(.25, .6, fine * .4));
-        float grooves = layer1 * .8 + layer2 * .6 + bundles * .9 + bands * .6 + deep * .7;
-        // The sheet's sheen is a touch uneven over a fifth of the card.
-        float sheen = cloud(surfacePx / 170.0) - .5;
-        // Finish. Brushed: the grain above. Bead-blasted: an even frost with no
-        // direction, rougher. Polished: nearly a mirror, the grain gone.
+        // Finish. Brushed: the grain below. Bead-blasted: an even frost with no
+        // direction, rougher. Polished: nearly a mirror, the grain gone. Only the
+        // finish in use is worked out: a uniform, so every pixel takes one branch.
         float blasted = 1.0 - step(.5, abs(uFinish - 1.0));
         float polished = step(1.5, uFinish);
         float brushing = 1.0 - blasted - polished;
-        grooves *= brushing;
+        float grooves = 0.0, grainTilt = 0.0;
+        if (brushing > 0.0) {
+            float layer1 = (scratches(groove * 2.3, along, 38.0, 11) - .5) * (1.0 - smoothstep(.25, .6, fine * 2.3));
+            float layer2 = (scratches(groove * .9, along, 95.0, 23) - .5) * (1.0 - smoothstep(.25, .6, fine * .9));
+            // Single scratches are finer than a pixel, on screen as in the hand; what
+            // the eye sees are bundles of them, 0.3–1 mm wide, a little brighter or
+            // duller, running for a few centimetres. Those carry the texture.
+            float bundles = (scratches(groove * .28, along, 160.0, 41) - .5) * (1.0 - smoothstep(.25, .6, fine * .28));
+            float bands = (scratches(groove * .11, along, 330.0, 53) - .5);
+            float deep = smoothstep(.92, .985, scratches(groove * .4, along, 240.0, 37)) * (1.0 - smoothstep(.25, .6, fine * .4));
+            grooves = (layer1 * .8 + layer2 * .6 + bundles * .9 + bands * .6 + deep * .7) * brushing;
+            grainTilt = layer2 * .3 + bundles + bands * .6;
+        }
+        // The sheet's sheen is a touch uneven over a fifth of the card.
+        float sheen = cloud(surfacePx / 170.0) - .5;
         float plateRough = ${f(plate.rough)} * (1.0 + grooves * .12 + sheen * .16);
         plateRough = mix(mix(plateRough, .44 * (1.0 + sheen * .12), blasted), .055 * (1.0 + sheen * .3), polished);
         float plateAniso = ${f(plate.aniso)} * brushing;
@@ -676,9 +682,10 @@ void main() {
         // Bundles lie at slightly different angles across the grain (~1–2°): a
         // passing highlight breaks into streaks over them, as on real brushed
         // steel, while away from the highlights the metal stays calm.
-        vec3 plateN = normalize(n + across * (layer2 * .3 + bundles + bands * .6) * .035 * brushing);
+        vec3 plateN = normalize(n + across * grainTilt * .035 * brushing);
         // Blasting leaves tiny dents tilted every way: a fine, even frost.
-        vec2 frost = vec2(cloud(surfacePx * 1.1) - .5, cloud(surfacePx * 1.1 + 91.0) - .5) * (1.0 - smoothstep(.25, .6, fine * 1.1))
+        vec2 frost = vec2(0.0);
+        if (blasted > 0.0) frost = vec2(cloud(surfacePx * 1.1) - .5, cloud(surfacePx * 1.1 + 91.0) - .5) * (1.0 - smoothstep(.25, .6, fine * 1.1))
                    + vec2(cloud(surfacePx * .45 + 13.0) - .5, cloud(surfacePx * .45 + 57.0) - .5) * .35;
         plateN = normalize(plateN + (T * frost.x + B * frost.y) * .04 * blasted);
         color = fresnel(plateF0, nv) * brushed(plateN, v, across, plateRough, plateAniso, 1.0);
@@ -745,7 +752,10 @@ void main() {
         // With the light square on, the cast shadow above is all but hidden
         // under the letter; this is what still sets it on the plate.
         float contact = textureLod(uEngraving, texUV, softLod + .6).a;
-        color *= 1.0 - (occluder * .6 + contact * .22) * (1.0 - ink.a) * step(.001, raisedHeight) * resolved;` : ''}
+        // Role and contacts cast one only where they rise (smallRelief): under a
+        // pixel, a shadow smeared each stroke into a bold, blurred double.
+        float shadowShown = resolved * mix(1.0, smallRelief, nearText);
+        color *= 1.0 - (occluder * .6 + contact * .22) * (1.0 - ink.a) * step(.001, raisedHeight) * shadowShown;` : ''}
         float coverage = max(ink.a, max(underline, focusStroke));
         if (coverage > .001) {
             ${letteringCode('logo', look.logo)}
@@ -1382,6 +1392,9 @@ export class CardRenderer {
         this.velocityX = 0;
         this.velocityY = 0;
         this.velocityZ = 0;
+        // Render resolution: the screen's own up to 3× (see settle); `?dpr=2`
+        // caps it, to compare.
+        this.pixelRatioCap = Number(new URLSearchParams(location.search).get('dpr')) || 3;
         this.time = 0;
         this.keyLight = [-3, 4, 6];
         this.idleWeight = 0;
@@ -1467,11 +1480,32 @@ export class CardRenderer {
             const best = Math.min(...intervals.slice(3));
             if (median(recent) <= best * 1.2 + 1 && Math.max(...recent) <= median(recent) * 1.5 + 2) break;
         }
+        // Phones get their screen's own resolution, 3×: role and contacts are two
+        // or three pixels a stroke, and at 2× they could neither show their relief
+        // nor stay sharp on a turned card. A GPU that cannot draw such a frame well
+        // inside a 60 fps budget falls back to 2×. Timed by a burst ended with a
+        // read-back, not by frame intervals: iOS in Low Power Mode holds those at
+        // 30 fps whatever the GPU could do.
+        const burst = () => {
+            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+            const from = performance.now();
+            for (let i = 0; i < 6; i++) this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped: false, animate: false, reduced: true, delta: 1 / 60 });
+            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+            return (performance.now() - from) / 6;
+        };
+        const ratio = () => Math.min(devicePixelRatio || 1, this.pixelRatioCap);
+        let cost = burst();
+        if (ratio() > 2 && cost > 12) {
+            this.pixelRatioCap = 2;
+            this.resize();
+            cost = burst();
+        }
         this.flipAngle = this.flipFrom = this.flipTarget = 0;
         this.spin = null;
         this.flipProgress = 1;
         const recent = intervals.slice(-12);
-        this.settleStats = { frames, total: performance.now() - start, interval: median(recent), first: intervals[1] || 0, last: median(recent) };
+        this.settleStats = { frames, total: performance.now() - start, interval: median(recent), first: intervals[1] || 0, last: median(recent),
+            ratio: ratio(), cost };
     }
 
     resize() {
@@ -1479,7 +1513,7 @@ export class CardRenderer {
         // Layout size, not the transformed screen rect: a CSS transform on the
         // scene (the lab's mobile sheet) must not change the render resolution.
         const rect = { width: this.canvas.clientWidth, height: this.canvas.clientHeight };
-        const dpr = Math.min(devicePixelRatio || 1, 2);
+        const dpr = Math.min(devicePixelRatio || 1, this.pixelRatioCap);
         const width = Math.max(1, Math.round(rect.width * dpr));
         const height = Math.max(1, Math.round(rect.height * dpr));
         if (this.canvas.width !== width || this.canvas.height !== height) {

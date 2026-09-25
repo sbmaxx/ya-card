@@ -593,7 +593,8 @@ let frames = 0, since = performance.now();
         fps.textContent = rate;
         toggle.textContent = `Стенд · ${rate}`;
         const warm = globalThis.__cardRenderer?.settleStats;
-        if (warm) fps.title = `Прогрев до показа: ${warm.frames} кадров, ${Math.round(warm.total)} мс; интервал ${warm.last.toFixed(1)} мс`;
+        if (warm) fps.title = `Прогрев до показа: ${warm.frames} кадров, ${Math.round(warm.total)} мс; интервал ${warm.last.toFixed(1)} мс`
+            + (warm.ratio ? `; разрешение ${warm.ratio}×, кадр ${warm.cost.toFixed(1)} мс` : '');
         frames = 0; since = now;
     }
     requestAnimationFrame(count);
