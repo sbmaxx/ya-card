@@ -292,6 +292,8 @@ uniform float uEdge;
 uniform mat3 uRoom;
 uniform float uExposure;
 uniform float uOpacity;
+// How lit the plate is in the intro (1 after it): it is solid before it is lit.
+uniform float uReveal;
 uniform float uBloomPass;
 uniform vec2 uLayoutSize;
 uniform vec4 uLogoRect;
@@ -903,11 +905,11 @@ void main() {
         // same amount from every channel left gold glowing orange-red.
         float peak = max(hdr.r, max(hdr.g, hdr.b));
         vec3 glow = hdr * max(peak - 1.6, 0.0) / max(peak, 1e-4);
-        outColor = vec4(glow * .25 * uOpacity * mix(1.0, uLetterGlow, letterMask), 1.0);
+        outColor = vec4(glow * .25 * uOpacity * uReveal * mix(1.0, uLetterGlow, letterMask), 1.0);
         return;
     }
     vec3 display = toSRGB(neutralTonemap(hdr));
-    outColor = vec4(display * uOpacity, uOpacity);
+    outColor = vec4(display * uReveal * uOpacity, uOpacity);
 }`;
 
 // GLSL for one lettering process. Produces `<name>Color`.
@@ -1496,7 +1498,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uReveal', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1604,6 +1606,11 @@ export class CardRenderer {
             // The first frames wait for the GPU so deferred work cannot hide.
             if (frames < 3) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
             frames++;
+            // The first finished frame is the studio the intro opens on, the plate
+            // still at zero opacity: the loader can stand on it instead of on a
+            // flat colour that the lit backdrop then replaced. (Without the intro
+            // the plate is already opaque here, and these frames flip it.)
+            if (frames === 1 && this.intro < 1) document.documentElement.classList.add('webgl-stage');
             if (now - start < minimum || intervals.length < 16) continue;
             // Steady: the last frames arrive at the best cadence seen so far.
             const recent = intervals.slice(-12);
@@ -2002,7 +2009,11 @@ export class CardRenderer {
         gl.uniformMatrix3fv(this.uniforms.uRoom, false, this.room);
         gl.uniform1f(this.uniforms.uExposure, look.studio.exposure * (lab ? lab.exposure : 1));
         gl.uniform3f(this.uniforms.uKeyDirection, ...this.keyDirection);
-        gl.uniform1f(this.uniforms.uOpacity, introFade);
+        // The plate is solid within a third of a second and lit over the
+        // intro's fade: it comes out of the dark as a black shape the light
+        // finds, not a translucent ghost of itself over the studio.
+        gl.uniform1f(this.uniforms.uOpacity, this.intro >= 1 ? 1 : ease(clamp01(this.introTime / .3)));
+        gl.uniform1f(this.uniforms.uReveal, introFade);
         const backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
         this.backdrop = backdrop;
         gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
@@ -2136,7 +2147,14 @@ export class CardRenderer {
         }
         gl.enable(gl.DEPTH_TEST);
         gl.useProgram(this.program);
+        // Over the backdrop, premultiplied: the plate's opacity (the intro's
+        // fade) blends it into the studio. Written unblended, a fading plate
+        // punched a hole in the scene down to the page colour — a dark
+        // silhouette that the card then filled. Opaque, the result is the same.
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         this.drawCard(0, focusLink);
+        gl.disable(gl.BLEND);
         // 4. Glow over the card and the page, screen-blended.
         gl.disable(gl.DEPTH_TEST);
         gl.enable(gl.BLEND);

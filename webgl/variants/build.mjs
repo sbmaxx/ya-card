@@ -51,6 +51,8 @@ opacity:0;transition:opacity .8s ease;mix-blend-mode:difference;background:#ffff
 will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite alternate}
 @keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(92px);opacity:0}}
 @media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(46px)}}
+.webgl-loading.webgl-stage #card-canvas{visibility:visible;animation:card-stage .6s ease both}
+@keyframes card-stage{from{opacity:0}}
 .safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none}
 .safe-edge-top{top:0;height:max(6px,env(safe-area-inset-top,0px))}
 .safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
