@@ -1589,6 +1589,9 @@ export class CardRenderer {
         };
         const ratio = () => Math.min(devicePixelRatio || 1, this.pixelRatioCap);
         let cost = burst();
+        // A burst can catch the GPU still busy with the page's own start-up work:
+        // only a device that is slow every time falls back.
+        for (let retry = 0; retry < 2 && ratio() > 2 && cost > 12; retry++) cost = Math.min(cost, burst());
         if (ratio() > 2 && cost > 12) {
             this.pixelRatioCap = 2;
             this.resize();
