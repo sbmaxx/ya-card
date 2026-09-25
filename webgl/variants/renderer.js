@@ -304,6 +304,8 @@ uniform vec4 uBodyTint;
 // Finish per object: x first letter, y wordmark, z name, w role and contacts (1 = anodised).
 uniform vec4 uTintFinish;
 uniform float uTextMute;
+// The wordmark (x) and the name (y) can sit back the same way.
+uniform vec2 uMute;
 uniform float uLetterGlow;
 // Lettering gloss: x logo, y name, z role and contacts (1 — as finished, 0 — matte).
 uniform vec3 uGloss;
@@ -855,6 +857,9 @@ void main() {
                 .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
             float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * ink.a;
             lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
+            // The wordmark and the name sit back towards the plate as a whole,
+            // bevels included: muted letters with bright edges read as outlines.
+            lettering = mix(lettering, color, uMute.x * logoRegion + uMute.y * titleRegion);
             // Links are always drawn with the body-text process.
             float linkMark = max(underline, focusStroke);
             lettering = mix(lettering, textColor, linkMark);
@@ -1463,7 +1468,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -2002,6 +2007,7 @@ export class CardRenderer {
         const finishes = lab ? lab.finish : (direction.finish || {});
         gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
         gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
+        gl.uniform2f(this.uniforms.uMute, lab ? lab.logoMute : 0, lab ? lab.nameMute : 0);
         gl.uniform1f(this.uniforms.uLetterGlow, lab ? lab.letterGlow : (direction.letterGlow ?? 1));
         gl.uniform4f(this.uniforms.uTintAmount, ...(lab ? ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - lab[`${key}Sheer`]) : [1, 1, 1, 1]));
         gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));

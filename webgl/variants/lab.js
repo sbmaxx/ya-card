@@ -179,7 +179,8 @@ panel.innerHTML = `
     ${depthRow('logoDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="logoGloss"></output><input type="range" name="logoGloss" min="0" max="1" step=".05" value="${lab.logoGloss}"></label>
     ${tintRow('logo', 'Цвет')}
-    ${tintRow('logoFirst', 'Первая буква')}`)}
+    ${tintRow('logoFirst', 'Первая буква')}
+    <label class="range">Приглушение <output data-for="logoMute"></output><input type="range" name="logoMute" min="0" max=".8" step=".02" value="${lab.logoMute}"></label>`)}
   ${group('Имя', `
     ${shapeRow('name', reliefLabels, currentNameShape)}
     <label class="range">Размер имени <output data-for="nameScale"></output><input type="range" name="nameScale" min=".8" max="1.8" step=".05" value="${lab.nameScale}"></label>
@@ -189,7 +190,8 @@ panel.innerHTML = `
     </div>
     ${depthRow('nameDepth', 'Глубина')}
     <label class="range">Блеск <output data-for="nameGloss"></output><input type="range" name="nameGloss" min="0" max="1" step=".05" value="${lab.nameGloss}"></label>
-    ${tintRow('name', 'Цвет')}`)}
+    ${tintRow('name', 'Цвет')}
+    <label class="range">Приглушение <output data-for="nameMute"></output><input type="range" name="nameMute" min="0" max=".8" step=".02" value="${lab.nameMute}"></label>`)}
   ${group('Должность и контакты', `
     ${shapeRow('body', reliefLabels, currentBodyShape)}
     <div class="caption">Начертание</div>
@@ -300,7 +302,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     // «Not set» stays in the link: left out, the default look would fill it on reload.
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) next.set(key, lab[key] || '');
@@ -527,9 +529,9 @@ function describeSettings() {
         `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]}, фактура ${n(lab.surface)}, искра ${n(lab.sparkle)} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${{ accent: 'акцент на имени', grid: 'сетка' }[currentLayout] || 'классика'}, типографика ${lab.typography ? 'тонкая' : 'обычная'} · размер карточки: ${n(lab.cardSize)}`,
         `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)} · дорожка ${n(lab.strip)} · температура ${n(lab.warmth)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
-        `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')}`,
+        `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')} · приглушение ${n(lab.logoMute)}`,
         `Первая буква: ${colour('logoFirst')}`,
-        `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.nameWeight]} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')}`,
+        `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.nameWeight]} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')} · приглушение ${n(lab.nameMute)}`,
         `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.bodyWeight]} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
         `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)}`
     ];

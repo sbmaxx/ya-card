@@ -71,6 +71,9 @@ export const lab = globalThis.__cardLab = {
     bodyDepth: number('bodyDepth', 1),
     bodyTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('bodyTint') || '') ? params.get('bodyTint') : '',
     textMute: number('textMute', .3),
+    // The wordmark and the name can sit back the same way (0 — as coloured).
+    logoMute: number('logoMute', 0),
+    nameMute: number('nameMute', 0),
     logoTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('logoTint') || '') ? params.get('logoTint') : '',
     nameTint: /^([0-9a-f]{6}|plate)$/i.test(params.get('nameTint') || '') ? params.get('nameTint') : '',
     logoFirstTint: /^([0-9a-f]{6}|metal|plate)$/i.test(params.get('logoFirstTint') || '') ? params.get('logoFirstTint').replace('metal', '') : 'same',
