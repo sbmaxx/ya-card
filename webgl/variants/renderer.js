@@ -251,7 +251,18 @@ export const BACKDROPS = {
     studio: { title: 'Графит', wall: [.052, .055, .062], floor: [.020, .021, .024], pool: [.15, .152, .158],
         grain: .022, shadow: .78, roomBase: .025, bounce: 1.15, css: '#15181d', edge: '#0e1014' },
     dark: { title: 'Тёмный графит', wall: [.016, .017, .020], floor: [.006, .0065, .008], pool: [.075, .077, .082],
-        grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f', edge: '#07080a' }
+        grain: .02, shadow: .8, roomBase: .012, bounce: 1.0, css: '#0b0c0f', edge: '#07080a' },
+    // A dark room with one warm spotlight behind the card, as jewellery is shown:
+    // a black card stands out against the pool, its silver and edge lit.
+    velvet: { title: 'Бархат', wall: [.008, .0074, .0068], floor: [.0025, .0023, .0021], pool: [.13, .112, .092], poolFalloff: 4.2,
+        grain: .016, shadow: .88, roomBase: .008, bounce: .9, css: '#0a0908', edge: '#050404' },
+    // Honed dark stone: the slab's soft clouds of lighter and darker stone and
+    // a fine grit, still behind the moving card like a wall.
+    stone: { title: 'Камень', wall: [.028, .0275, .027], floor: [.009, .009, .009], pool: [.085, .083, .08], stone: 1,
+        grain: .018, shadow: .82, roomBase: .016, bounce: 1.0, css: '#121212', edge: '#0a0a0a' },
+    // The studio, darker and warmer: richer against silver and red.
+    warm: { title: 'Тёплый графит', wall: [.040, .036, .033], floor: [.014, .012, .011], pool: [.14, .128, .115],
+        grain: .02, shadow: .8, roomBase: .02, bounce: 1.1, css: '#16130f', edge: '#0e0c0b' }
 };
 const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
 export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
@@ -1009,6 +1020,10 @@ uniform vec3 uPoolColor;
 uniform float uGrain;
 uniform float uShadowStrength;
 uniform float uShadowFade;
+// How tight the key's pool of light on the wall is (2.6 — broad), and how much
+// of the honed stone the wall shows (0 — a plain wall).
+uniform float uPoolFalloff;
+uniform float uStone;
 // Touch screens: the scene melts into flat edge colours that Safari extends
 // under its status bar and toolbar (fractions of height; 0 disables).
 uniform vec4 uEdgeFade;
@@ -1041,7 +1056,20 @@ vec3 wallColor(vec2 uv) {
     vec2 pool = mix(uPool, vec2(uPool.x, .5), tallness());
     vec2 d = (screenUnits(uv) - screenUnits(pool + drift)) * vec2(.85, mix(1.1, .62, tallness()));
     float breath = 1.0 + .08 * sin(uTime * .33) + .04 * sin(uTime * .57 + 2.0);
-    return uWall + uPoolColor * breath * exp(-dot(d, d) * 2.6);
+    return uWall + uPoolColor * breath * exp(-dot(d, d) * uPoolFalloff);
+}
+
+// Value noise and its sum over octaves, for the stone.
+float vnoise(vec2 p) {
+    vec2 i = floor(p), f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float stoneFbm(vec2 p) {
+    float sum = 0.0, amplitude = .5;
+    mat2 turn = mat2(.8, .6, -.6, .8);
+    for (int i = 0; i < 5; i++) { sum += amplitude * vnoise(p); p = turn * p * 2.03 + 17.0; amplitude *= .5; }
+    return sum;
 }
 
 void main() {
@@ -1049,6 +1077,12 @@ void main() {
     float tall = tallness();
     // Cyclorama: the wall curves softly into a darker floor below the card.
     vec3 wall = wallColor(vUV);
+    if (uStone > 0.0) {
+        vec2 q = screenUnits(vUV);
+        float cloud = stoneFbm(q * 2.2 + 3.1) - .47;
+        float grit = vnoise(q * 90.0) - .5;
+        wall *= 1.0 + uStone * (cloud * .5 + grit * .07);
+    }
     // No floor on an upright phone: the dark frame is the same above and below.
     vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y) * (1.0 - tall));
     color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, mix(1.0, .62, tall))));
@@ -1494,7 +1528,7 @@ export class CardRenderer {
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime']);
+            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime', 'uPoolFalloff', 'uStone']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
@@ -2131,6 +2165,8 @@ export class CardRenderer {
             gl.uniform3f(u.uWall, ...backdrop.wall);
             gl.uniform3f(u.uFloor, ...backdrop.floor);
             gl.uniform3f(u.uPoolColor, ...backdrop.pool);
+            gl.uniform1f(u.uPoolFalloff, backdrop.poolFalloff ?? 2.6);
+            gl.uniform1f(u.uStone, backdrop.stone ?? 0);
             gl.uniform1f(u.uGrain, backdrop.grain);
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
             gl.uniform1f(u.uTime, reduced ? 0 : this.time);

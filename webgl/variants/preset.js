@@ -11,7 +11,7 @@ const SHAPES = ['edition', 'vcut', 'deboss', 'raised'];
 // [key, options] — one digit each.
 const CHOICES = [
     ['edition', ['steel', 'noir', 'gold', 'aurora']],
-    ['backdrop', ['studio', 'dark']],
+    ['backdrop', ['studio', 'dark', 'velvet', 'stone', 'warm']],
     ['layout', ['classic', 'accent', 'grid']],
     ['relief', ['vcut', 'deboss', 'raised']],
     ['name', SHAPES],
