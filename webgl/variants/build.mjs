@@ -48,22 +48,24 @@ const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // Minimal loader: a hairline with a travelling glint, a real element so it can
 // fade out while the card fades in. Transform and opacity animate on the
 // compositor, so it keeps moving while warm-up keeps the main thread busy.
-// It is drawn in the backdrop's own light (`--loader`): a warm line and a
-// softly glowing glint that read on the dark room and on its pool of light.
+// It is drawn in the backdrop's own light (`--loader`): a bright line and a
+// glint that is a streak of light with a white core, clearly seen on the dark
+// page and on the pool of light it stands on while the scene warms up.
 // The page is the backdrop's colour from the first paint; on touch screens it
 // is the flat edge colour Safari tints its bars with (the scene fades into it
 // inside the visible viewport, so the transition completes before the bars).
 const loaderCss = `:root{${Object.entries(pageColours(homeBackdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}
 :root{background-color:var(--page)}
 @media (hover:none) and (pointer:coarse){:root,body{background-color:var(--edge)}}
-.card-loader{position:fixed;left:50%;top:50%;width:160px;height:1px;margin-left:-80px;z-index:20;pointer-events:none;
-opacity:0;transition:opacity .8s ease;background:linear-gradient(90deg,transparent,rgb(var(--loader)/.34) 22%,rgb(var(--loader)/.34) 78%,transparent)}
+.card-loader{position:fixed;left:50%;top:50%;width:176px;height:1px;margin-left:-88px;z-index:20;pointer-events:none;
+opacity:0;transition:opacity .8s ease;background:linear-gradient(90deg,transparent,rgb(var(--loader)/.6) 22%,rgb(var(--loader)/.6) 78%,transparent)}
 .webgl-loading .card-loader{opacity:1;transition-duration:.35s}
-.card-loader::after{content:'';position:absolute;left:0;top:-5px;width:56px;height:11px;
-background:linear-gradient(90deg,transparent,rgb(var(--loader)),transparent) center/100% 1px no-repeat,radial-gradient(closest-side,rgb(var(--loader)/.3),transparent);
+.card-loader::after{content:'';position:absolute;left:0;top:-6px;width:80px;height:13px;
+background:linear-gradient(90deg,transparent,rgb(var(--loader)) 25%,#fff 50%,rgb(var(--loader)) 75%,transparent) center/100% 1px no-repeat,
+radial-gradient(closest-side,rgb(var(--loader)/.55),transparent);
 will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite alternate}
-@keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(104px);opacity:0}}
-@media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(52px)}}
+@keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(96px);opacity:0}}
+@media(prefers-reduced-motion:reduce){.card-loader::after{animation:none;opacity:.6;transform:translateX(48px)}}
 .webgl-loading.webgl-stage #card-canvas{visibility:visible;animation:card-stage .6s ease both}
 @keyframes card-stage{from{opacity:0}}
 .safe-edge{position:fixed;left:0;right:0;z-index:4;pointer-events:none;background:var(--edge)}
