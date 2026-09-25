@@ -6,7 +6,7 @@
 // Shapes (heights in layout px):
 // - `vcut`   — linear walls up to the stroke's centre line: a chiselled V groove.
 // - `deboss` — narrow chamfer down to a flat floor.
-// - `raised` — narrow chamfer up to a flat, polished top.
+// - `raised` — a rounded shoulder up to a flat, polished top.
 
 const FAR = 1e20;
 
@@ -107,7 +107,11 @@ export function createReliefMap(surface, profiles) {
         const heights = new Float32Array(w * h);
         for (let i = 0; i < heights.length; i++) {
             const t = Math.max(0, Math.min(1, distance[i] / bevel));
-            heights[i] = sign * depth * t;
+            // Raised letters get a quarter-round shoulder, steep at the plate and
+            // flat on top, as on a struck coin: some part of it always faces a
+            // light, so every letter carries a bright edge and a dark one. A
+            // straight chamfer is one tilt, and glints only at one angle.
+            heights[i] = sign * depth * (sign > 0 ? Math.sin(t * Math.PI / 2) : t);
         }
         // Two passes round the V crease and the chamfer shoulders just enough
         // to remove texel steps; one pass is enough for a narrow chamfer.

@@ -19,7 +19,7 @@ const look = direction.look;
 const LOGO_SHAPES = {
     vcut: { shape: 'vcut', depth: 2.2, bevel: 3.4 },
     deboss: { shape: 'deboss', depth: 1.5, bevel: 1.1 },
-    raised: { shape: 'raised', depth: 1.5, bevel: 1.1 }
+    raised: { shape: 'raised', depth: 2.2, bevel: 1.1 }
 };
 const requestedShape = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('relief');
 const logoShape = Object.hasOwn(LOGO_SHAPES, requestedShape) ? requestedShape : direction.relief.logo;
@@ -30,7 +30,7 @@ const NAME_SHAPES = {
     edition: null,
     vcut: { shape: 'vcut', depth: .9, bevel: 2.0 },
     deboss: { shape: 'deboss', depth: .7, bevel: .55 },
-    raised: { shape: 'raised', depth: .7, bevel: .55 }
+    raised: { shape: 'raised', depth: 1.3, bevel: .7 }
 };
 const requestedName = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('name');
 const nameShape = Object.hasOwn(NAME_SHAPES, requestedName) ? requestedName : 'edition';
@@ -42,7 +42,7 @@ const BODY_SHAPES = {
     edition: null,
     vcut: { shape: 'vcut', depth: .5, bevel: 1.1 },
     deboss: { shape: 'deboss', depth: .4, bevel: .4 },
-    raised: { shape: 'raised', depth: .4, bevel: .3 }
+    raised: { shape: 'raised', depth: .5, bevel: .35 }
 };
 const requestedBody = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('body');
 const bodyShape = Object.hasOwn(BODY_SHAPES, requestedBody) ? requestedBody : 'edition';
@@ -731,10 +731,21 @@ void main() {
         float nearText = inRect(uTextRect + pad) * (1.0 - nearLogo) * (1.0 - nearName);
         float raisedHeight = nearLogo * uRaisedHeight.y * uLogoScale + nearName * uRaisedHeight.x + nearText * uRaisedHeight.z;
         vec2 castStep = lightSlope * raisedHeight * 1.6 / uLayoutSize;
-        float occluder = texture(uEngraving, texUV + castStep * .5).a * .45
-                       + texture(uEngraving, texUV + castStep).a * .35
-                       + texture(uEngraving, texUV + castStep * 1.8).a * .20;
-        color *= 1.0 - occluder * (1.0 - ink.a) * .6 * step(.001, raisedHeight) * resolved;` : ''}
+        // Soft, not sharp: the relief's mip levels are its coverage blurred, so
+        // one fetch at the level of a letter's height is a penumbra that wide
+        // (never finer than a pixel, which would shimmer).
+        vec2 texels = vec2(textureSize(uEngraving, 0));
+        float pixelLod = log2(max(max(fwidth(vUV.x) * texels.x, fwidth(vUV.y) * texels.y), 1.0));
+        float softLod = max(pixelLod, log2(max(raisedHeight * texels.x / uLayoutSize.x, 1.0)));
+        float occluder = textureLod(uEngraving, texUV + castStep * .5, softLod).a * .45
+                       + textureLod(uEngraving, texUV + castStep, softLod).a * .35
+                       + textureLod(uEngraving, texUV + castStep * 1.8, softLod + .5).a * .20;
+        // Contact shadow: at a letter's foot the plate sees less of the room,
+        // whatever the light — a soft darkening about the letter's height wide.
+        // With the light square on, the cast shadow above is all but hidden
+        // under the letter; this is what still sets it on the plate.
+        float contact = textureLod(uEngraving, texUV, softLod + .6).a;
+        color *= 1.0 - (occluder * .6 + contact * .22) * (1.0 - ink.a) * step(.001, raisedHeight) * resolved;` : ''}
         float coverage = max(ink.a, max(underline, focusStroke));
         if (coverage > .001) {
             ${letteringCode('logo', look.logo)}
@@ -767,6 +778,18 @@ void main() {
             // Role and contacts sit back: a shallower mark, closer to the plate.
             textColor = mix(textColor, color, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
+            ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
+            // Raised letters have diamond-turned shoulders: the cut goes through
+            // the colour to bare, polished steel, as on a machined badge. The
+            // rounded shoulder mirrors the room over a range of angles, so each
+            // letter shows a thin bright edge towards the light, a dark one away
+            // from it — the cue that reads as height, even with the card square on.
+            // Only the steep outer part is cut, so the letter keeps its colour;
+            // role and contacts are too small for a cut and keep theirs whole.
+            float cutRegion = ${[[logoShape, 'logoRegion'], [nameShape, 'titleRegion']]
+                .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
+            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * ink.a;
+            lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
             // Links are always drawn with the body-text process.
             float linkMark = max(underline, focusStroke);
             lettering = mix(lettering, textColor, linkMark);
