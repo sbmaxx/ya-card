@@ -12,7 +12,7 @@ import { FONTS, fontOf } from './fonts.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
-const HOME_LOOK = 'AAABCDDBAABBBBAAA8AtAUATAJAJAUAUAUAUAUAHAAB4A8DCERIUCXWFoC_D8dAeAKAKAKAMANAHAEAMABAEABAB';
+const HOME_LOOK = 'ABACCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAUAFAZB4A8AAAC_D8dAeAUAUAQAAAAAAAAAMAAACABABAOAoAGAIABAAAUAA';
 const page = async (id, html, out = variantsOut) => {
     const bytes = Buffer.from(html), directory = resolve(out, id);
     await mkdir(directory, { recursive: true });
