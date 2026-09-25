@@ -64,7 +64,14 @@ const variation = {
     poseX: between(-.035, .035), poseY: between(-.045, .045), poseZ: between(-.012, .012),
     phaseX: between(0, Math.PI * 2), phaseY: between(0, Math.PI * 2), phaseZ: between(0, Math.PI * 2),
     floatPhase: between(0, Math.PI * 2), idleSpeed: between(.85, 1.15), idleAmplitude: between(.8, 1.15),
-    lightPhase: between(0, Math.PI * 2), lightPeriod: between(16, 22), lightTravel: between(.85, 1.15)
+    lightPhase: between(0, Math.PI * 2), lightPeriod: between(16, 22), lightTravel: between(.85, 1.15),
+    // The intro's entrance, new on every load: the plate turns in from either
+    // side, tipped up or (less often) down, with a little roll, and the light
+    // sweeps in from the side it turns towards. Drawn last, so the values
+    // above stay the same for a given seed.
+    introSide: Math.random() < .5 ? -1 : 1, introTurn: between(.42, .62),
+    introTip: between(.10, .26) * (Math.random() < .7 ? 1 : -1), introRoll: between(-.05, .05),
+    introDepth: between(.28, .40), introSweep: between(.95, 1.25)
 };
 
 const clamp01 = value => Math.max(0, Math.min(1, value));
@@ -1877,7 +1884,7 @@ export class CardRenderer {
         let settledPitch = Math.sin(lightPhase * .8 + .7) * (.08 + .22 * orbit);
         if (lab && lab.manualLight) { settledYaw = lab.yaw; settledPitch = lab.pitch; }
         // The intro sweeps the key in from the side.
-        const lightYaw = settledYaw + (lab && lab.manualLight ? 0 : introLight * 1.15);
+        const lightYaw = settledYaw + (lab && lab.manualLight ? 0 : introLight * 1.15 * variation.introSweep * variation.introSide);
         const lightPitch = settledPitch - (lab && lab.manualLight ? 0 : introLight * .12);
         // The room turns with the light path and against the phone, so reflections
         // slide across the plate just like a physical card turned under lamps.
@@ -1894,7 +1901,7 @@ export class CardRenderer {
         const keyWorld = toWorld(r);
         this.keyDirection = keyWorld;
         // The card's shadow falls from where the key settles, not from the
-        // intro's sweep: from 66° off to the side it lay beside the card and
+        // intro's sweep: from far off to the side it lay beside the card and
         // drove in under it as the light came round. Now it is under the card
         // from the first frame and turns with it; the sweep still shows in the
         // reflections and the backdrop's pool of light.
@@ -1965,8 +1972,8 @@ export class CardRenderer {
         else [this.zoom, this.zoomVelocity] = follow(this.zoom, this.zoomVelocity, zoom, 10, dt);
         const lift = this.lift + (this.touchLandscape ? 24 / pixelsPerUnit : 0) - introPose * .18;
         // The plate turns in from slightly in front, never behind the backdrop.
-        const tilt = modelMatrix(this.rotationX + introPose * .22, this.rotationY - introPose * .55,
-            this.zoom * plateScale * (1 - introPose * .06), lift, this.rotationZ + introPose * .04, flipDepth + introPose * .35);
+        const tilt = modelMatrix(this.rotationX + introPose * variation.introTip, this.rotationY - introPose * variation.introTurn * variation.introSide,
+            this.zoom * plateScale * (1 - introPose * .06), lift, this.rotationZ + introPose * variation.introRoll, flipDepth + introPose * variation.introDepth);
         const flip = modelMatrix(this.vertical ? 0 : this.flipAngle, this.vertical ? this.flipAngle : 0, 1, 0);
         this.model = multiplyMatrices(tilt, flip);
         this.hoveredLink = this.hoverPointer && !dragging && !freezeHover
@@ -1975,7 +1982,7 @@ export class CardRenderer {
         this.shadowGradient[4] *= introFade;
         this.shadowGradient[5] *= introFade;
         this.ambientOpacity = .62 * (1 + Math.sin(lightPhase + .4) * .04) * (.55 + .45 * introFade);
-        this.ambientShift = [Math.sin(lightPhase) * 3 - introLight * 6, -Math.sin(lightPhase + .7) * 2];
+        this.ambientShift = [Math.sin(lightPhase) * 3 - introLight * 6 * variation.introSide, -Math.sin(lightPhase + .7) * 2];
 
         gl.useProgram(this.program);
         gl.uniformMatrix4fv(this.uniforms.uModel, false, this.model);
