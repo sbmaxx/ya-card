@@ -463,6 +463,19 @@ vec3 metal(vec3 f0, vec3 n, vec3 v, float rough) {
 // Gloss dielectric (enamel, lacquer): coloured diffuse under a sharp 4% coat.
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
 
+// A dyed or coated metal's reflectance from the chosen colour. The colour sets
+// the hue and how deep it is, but no real metal finish reflects as little as a
+// dark sRGB swatch: #111214 taken literally reflects 0.6% and reads as matte
+// paint. The darkest real coatings (DLC, black PVD) keep ~7% and stay mirror-like, so the
+// luminance is lifted onto that floor — black becomes black PVD, dark grey
+// gunmetal — keeping the order of light and dark and the hue.
+vec3 metalTint(vec3 c) {
+    float l = dot(c, vec3(.2126, .7152, .0722));
+    float lifted = mix(.07, 1.0, l);
+    vec3 hue = l > 1e-4 ? c / l : vec3(1.0);
+    return min(hue * lifted, vec3(1.0));
+}
+
 // A clear dielectric coat (lacquer, oxide): an uncoloured Fresnel reflection.
 vec3 clearCoat(float f0, vec3 n, vec3 v, float rough) {
     float nv = max(dot(n, v), 1e-3);
@@ -475,16 +488,19 @@ vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, floa
     // The plate's own material: letters pressed out of (or into) the same steel.
     if (tint.a > 1.5) return plateLetter;
     if (tint.a < .5) return base;
-    // Anodising: the dye colours the metal under a clear oxide (n ≈ 1.65), which
+    // Anodising: the dye colours the metal (metalTint) under a clear oxide (n ≈ 1.65), which
     // reflects ~6% of the room uncoloured. On dark dyes that coat is all the
     // shine there is — without it a black letter showed no gloss at any «Блеск».
     // «Блеск» sets how sharp both reflections are.
     float anodRough = mix(.55, max(.06, rough), shine);
-    vec3 anod = metal(tint.rgb, facet, v, anodRough) + clearCoat(.06, facet, v, anodRough);
+    vec3 anod = metal(metalTint(tint.rgb), facet, v, anodRough) + clearCoat(.06, facet, v, anodRough);
     vec3 full = mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .06, shine)), anod, finish), mix(base, anod, finish), edge);
     // A translucent colour: the plate's brushed steel shows through, tinted.
     if (amount > .999) return full;
-    vec3 dyed = plateLetter * mix(vec3(1.0), tint.rgb / max(max(tint.r, max(tint.g, tint.b)), .02), amount);
+    // A dye over steel is smoked steel: the grain and the highlights stay, the
+    // metal darkens to the colour's own depth (a dark dye no longer turns
+    // translucent letters into bare plate).
+    vec3 dyed = plateLetter * mix(vec3(1.0), min(metalTint(tint.rgb) / .6, vec3(1.0)), amount);
     return mix(dyed, full, amount * amount);
 }
 
