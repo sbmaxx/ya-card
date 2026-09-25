@@ -1843,9 +1843,9 @@ export class CardRenderer {
         const introPose = 1 - easeOutCubic(clamp01(this.introTime / 2.4));
         const introLight = 1 - easeInOutCubic(this.intro);
         const introFade = this.intro >= 1 ? 1 : ease(clamp01(this.introTime / .9));
-        // The shadow arrives once the plate has nearly settled, as if the light
-        // found it; during the turn-in its projection would only distract.
-        const shadowFade = this.intro >= 1 ? 1 : ease(clamp01((this.introTime - .9) / 1.3));
+        // The shadow comes with the plate: arriving seconds later, it slid in
+        // under a card that had hung ungrounded (see the shadow's light below).
+        const shadowFade = introFade;
 
         // Phone orientation, relative to a slowly re-centering baseline.
         const g = this.gyro;
@@ -1873,9 +1873,12 @@ export class CardRenderer {
         // the card, across and up and down, and brings in the back light.
         const orbit = lab ? lab.orbit : (direction.orbit ?? 0);
         this.orbit = orbit;
-        let lightYaw = Math.sin(lightPhase) * (.20 + .45 * orbit) * variation.lightTravel + introLight * 1.15;
-        let lightPitch = Math.sin(lightPhase * .8 + .7) * (.08 + .22 * orbit) - introLight * .12;
-        if (lab && lab.manualLight) { lightYaw = lab.yaw; lightPitch = lab.pitch; }
+        let settledYaw = Math.sin(lightPhase) * (.20 + .45 * orbit) * variation.lightTravel;
+        let settledPitch = Math.sin(lightPhase * .8 + .7) * (.08 + .22 * orbit);
+        if (lab && lab.manualLight) { settledYaw = lab.yaw; settledPitch = lab.pitch; }
+        // The intro sweeps the key in from the side.
+        const lightYaw = settledYaw + (lab && lab.manualLight ? 0 : introLight * 1.15);
+        const lightPitch = settledPitch - (lab && lab.manualLight ? 0 : introLight * .12);
         // The room turns with the light path and against the phone, so reflections
         // slide across the plate just like a physical card turned under lamps.
         // Phone top away → the screen faces the ceiling; right side down → faces right.
@@ -1887,9 +1890,15 @@ export class CardRenderer {
         const setup = LIGHT_SETUPS[lab ? lab.lightSetup : direction.lightSetup] || LIGHT_SETUPS.studio;
         this.lightSetup = setup;
         const r = this.room, k = setup.shadowDirection;
-        const keyWorld = [r[0] * k[0] + r[1] * k[1] + r[2] * k[2], r[3] * k[0] + r[4] * k[1] + r[5] * k[2], r[6] * k[0] + r[7] * k[1] + r[8] * k[2]];
-        this.keyLight = keyWorld.map(value => value * 8);
+        const toWorld = m => [m[0] * k[0] + m[1] * k[1] + m[2] * k[2], m[3] * k[0] + m[4] * k[1] + m[5] * k[2], m[6] * k[0] + m[7] * k[1] + m[8] * k[2]];
+        const keyWorld = toWorld(r);
         this.keyDirection = keyWorld;
+        // The card's shadow falls from where the key settles, not from the
+        // intro's sweep: from 66° off to the side it lay beside the card and
+        // drove in under it as the light came round. Now it is under the card
+        // from the first frame and turns with it; the sweep still shows in the
+        // reflections and the backdrop's pool of light.
+        this.keyLight = toWorld(roomMatrix(settledYaw + gyroY * 1.5, settledPitch - gyroX * 1.5)).map(value => value * 8);
 
         const idleTarget = animate && idle && !dragging ? 1 : 0;
         if (reduced) this.idleWeight = 0;
