@@ -1,64 +1,58 @@
 // Relief maps for the studio editions. Built once per layout from the glyph
-// coverage: an exact Euclidean distance field (Felzenszwalb & Huttenlocher),
-// corrected by the antialiased edge, shaped into a profile and smoothed before
-// normals are taken. RG = tangent-space normal, B = |height| / depth, A = coverage.
+// coverage: the distance to the outline, found to a fraction of a texel from
+// the antialiased edge, shaped into a profile and smoothed before normals are
+// taken. RG = tangent-space normal, B = |height| / depth, A = coverage.
 //
 // Shapes (heights in layout px):
 // - `vcut`   — linear walls up to the stroke's centre line: a chiselled V groove.
 // - `deboss` — narrow chamfer down to a flat floor.
 // - `raised` — a rounded shoulder up to a flat, polished top.
 
-const FAR = 1e20;
-
-// 1-D squared distance transform over samples spaced `step` apart.
-function transform1d(f, n, step, out, v, z) {
-    let k = 0;
-    v[0] = 0; z[0] = -FAR; z[1] = FAR;
-    for (let q = 1; q < n; q++) {
-        const xq = q * step;
-        let s;
-        for (;;) {
-            const xv = v[k] * step;
-            s = ((f[q] + xq * xq) - (f[v[k]] + xv * xv)) / (2 * (xq - xv));
-            if (s > z[k] || k === 0) break;
-            k--;
-        }
-        if (s <= z[k]) { v[0] = q; z[0] = -FAR; z[1] = FAR; k = 0; continue; }
-        k++; v[k] = q; z[k] = s; z[k + 1] = FAR;
-    }
-    k = 0;
-    for (let q = 0; q < n; q++) {
-        const xq = q * step;
-        while (z[k + 1] < xq) k++;
-        const dx = xq - v[k] * step;
-        out[q] = dx * dx + f[v[k]];
-    }
-}
-
-// Distance (layout px) from every covered texel to the nearest uncovered one.
-function insideDistance(alpha, w, h, stepX, stepY) {
-    const grid = new Float64Array(w * h);
-    for (let i = 0; i < grid.length; i++) grid[i] = alpha[i] >= 128 ? FAR : 0;
-    const n = Math.max(w, h);
-    const f = new Float64Array(n), out = new Float64Array(n), v = new Int32Array(n), z = new Float64Array(n + 1);
-    for (let x = 0; x < w; x++) {
-        for (let y = 0; y < h; y++) f[y] = grid[y * w + x];
-        transform1d(f, h, stepY, out, v, z);
-        for (let y = 0; y < h; y++) grid[y * w + x] = out[y];
-    }
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) f[x] = grid[y * w + x];
-        transform1d(f, w, stepX, out, v, z);
-        for (let x = 0; x < w; x++) grid[y * w + x] = out[x];
-    }
-    const texel = (stepX + stepY) / 2;
+// Distance (layout px) from every covered texel to the glyph outline. The
+// outline is the coverage's 50% contour, by marching squares: the antialiased
+// edge places it between texels, along a diagonal or a curve as well as along
+// a straight edge. Measured to the texel grid's staircase instead, a diagonal
+// or curved stroke rippled its bevel, and a lit shoulder showed the ripple as
+// a row of glints. Exact up to `reach`, the width of the profile: deeper in
+// it is flat, and `reach` stands in for the distance.
+function outlineDistance(alpha, w, h, stepX, stepY, reach) {
+    // Squared while searching, one square root at the end.
     const distance = new Float32Array(w * h);
-    for (let i = 0; i < distance.length; i++) {
-        // The true contour lies inside the edge texels: shift by the coverage.
-        distance[i] = alpha[i] >= 128
-            ? Math.sqrt(grid[i]) - texel * (1.5 - alpha[i] / 255)
-            : (alpha[i] / 255 - .5) * texel;
+    for (let i = 0; i < distance.length; i++) distance[i] = alpha[i] >= 128 ? reach * reach : -1;
+    const spanX = Math.ceil(reach / stepX) + 1, spanY = Math.ceil(reach / stepY) + 1;
+    // Texel centres at integer coordinates; segment ends in texels.
+    const segment = (ax, ay, bx, by) => {
+        const px = ax * stepX, py = ay * stepY, dx = (bx - ax) * stepX, dy = (by - ay) * stepY;
+        const length2 = dx * dx + dy * dy;
+        const x0 = Math.max(0, Math.floor(Math.min(ax, bx)) - spanX), x1 = Math.min(w - 1, Math.ceil(Math.max(ax, bx)) + spanX);
+        const y0 = Math.max(0, Math.floor(Math.min(ay, by)) - spanY), y1 = Math.min(h - 1, Math.ceil(Math.max(ay, by)) + spanY);
+        for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+            const i = y * w + x;
+            if (alpha[i] < 128) continue;
+            const cx = x * stepX - px, cy = y * stepY - py;
+            const t = length2 > 0 ? Math.max(0, Math.min(1, (cx * dx + cy * dy) / length2)) : 0;
+            const ex = cx - dx * t, ey = cy - dy * t, d2 = ex * ex + ey * ey;
+            if (d2 < distance[i]) distance[i] = d2;
+        }
+    };
+    const level = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? -.5 : alpha[y * w + x] / 255 - .5);
+    const at = (a, b) => a / (a - b);
+    for (let y = -1; y < h; y++) for (let x = -1; x < w; x++) {
+        // Corners clockwise from the top left; crossings on the edges between them.
+        const a = level(x, y), b = level(x + 1, y), c = level(x + 1, y + 1), d = level(x, y + 1);
+        const p = [];
+        if ((a >= 0) !== (b >= 0)) p.push(x + at(a, b), y);
+        if ((b >= 0) !== (c >= 0)) p.push(x + 1, y + at(b, c));
+        if ((c >= 0) !== (d >= 0)) p.push(x + 1 - at(c, d), y + 1);
+        if ((d >= 0) !== (a >= 0)) p.push(x, y + 1 - at(d, a));
+        if (p.length === 4) segment(p[0], p[1], p[2], p[3]);
+        else if (p.length === 8) {
+            // A saddle: the cell's mean decides which pair of corners is joined.
+            if ((a + b + c + d >= 0) === (a >= 0)) { segment(p[0], p[1], p[2], p[3]); segment(p[4], p[5], p[6], p[7]); }
+            else { segment(p[6], p[7], p[0], p[1]); segment(p[2], p[3], p[4], p[5]); }
+        }
     }
+    for (let i = 0; i < distance.length; i++) if (distance[i] > 0) distance[i] = Math.sqrt(distance[i]);
     return distance;
 }
 
@@ -103,7 +97,7 @@ export function createReliefMap(surface, profiles) {
         const ink = context.getImageData(x0, y0, w, h).data;
         const alpha = new Uint8Array(w * h);
         for (let i = 0; i < alpha.length; i++) alpha[i] = ink[i * 4 + 3];
-        const distance = insideDistance(alpha, w, h, stepX, stepY);
+        const distance = outlineDistance(alpha, w, h, stepX, stepY, bevel);
         const heights = new Float32Array(w * h);
         for (let i = 0; i < heights.length; i++) {
             const t = Math.max(0, Math.min(1, distance[i] / bevel));
