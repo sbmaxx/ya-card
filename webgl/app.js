@@ -479,9 +479,11 @@ import { CardRenderer } from './renderer.js';
     // Where the phone's tilt needs a permission (iOS), a small button in the
     // corner asks for it; a tap on the card only ever turns the card. It comes
     // in after the card's entrance, gives the phone a little rock as a hint,
-    // and leaves once the visitor has answered.
+    // and leaves once the visitor has answered. Not on the demo stand: its own
+    // controls take that corner, and the tilt does not matter there.
     function offerMotion() {
-        if (motionButton || renderer?.motionAccess !== 'ask' || !renderer.requestMotion || reducedMotion.matches
+        const stand = globalThis.__cardLab && !globalThis.__cardLab.exported;
+        if (motionButton || stand || renderer?.motionAccess !== 'ask' || !renderer.requestMotion || reducedMotion.matches
             || (globalThis.__cardLab?.gyro ?? 1) <= 0) return;
         motionButton = Object.assign(document.createElement('button'), { type: 'button', className: 'motion-access' });
         motionButton.setAttribute('aria-label', motionLabels[lang]);

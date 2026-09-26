@@ -52,7 +52,9 @@ const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // glint that is a streak of light with a white core, clearly seen on the dark
 // page and on the pool of light it stands on while the scene warms up.
 // The motion button (app.js) shares the loader's light: a quiet ring with a
-// phone that rocks twice when it appears.
+// phone that rocks twice when it appears. In the thumb's reach at the bottom
+// right, clear of Safari's toolbar: on iOS 26 it floats over the page's lowest
+// ~125 pt, which the safe-area inset (the home indicator's 34) leaves out.
 // The page is the backdrop's colour from the first paint; on touch screens it
 // is the flat edge colour Safari tints its bars with (the scene fades into it
 // inside the visible viewport, so the transition completes before the bars).
@@ -75,7 +77,7 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 .safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
 @media (pointer:fine){.safe-edge{display:none}}
 @media (hover:none) and (pointer:coarse){.ambient{display:none}}
-.motion-access{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:12;
+.motion-access{position:fixed;right:calc(12px + env(safe-area-inset-right,0px));bottom:calc(100px + env(safe-area-inset-bottom,0px));z-index:12;
 width:44px;height:44px;padding:0;display:grid;place-items:center;appearance:none;-webkit-appearance:none;border:0;background:none;
 color:rgb(var(--loader)/.8);-webkit-tap-highlight-color:transparent;cursor:pointer;
 opacity:0;transform:scale(.9);transition:opacity .7s ease,transform .7s ease;pointer-events:none}
