@@ -1565,6 +1565,9 @@ export class CardRenderer {
     // real metal card in the hand. The baseline slowly follows the hold angle.
     setupMotion() {
         this.gyro = { active: false, beta: 0, gamma: 0, baseBeta: null, baseGamma: 0, x: 0, y: 0, last: 0, lastMove: 0 };
+        // `ask`: the sensors need the visitor's permission (the page offers a
+        // button for it, app.js); `granted`: listening; `none`: no sensors.
+        this.motionAccess = 'none';
         if (typeof DeviceOrientationEvent === 'undefined' || !matchMedia('(pointer: coarse)').matches) return;
         this.onOrientation = event => {
             if (event.beta == null || event.gamma == null) return;
@@ -1580,15 +1583,25 @@ export class CardRenderer {
             if (g.baseBeta === null) { g.baseBeta = beta; g.baseGamma = gamma; }
             g.active = true;
         };
-        const listen = () => window.addEventListener('deviceorientation', this.onOrientation);
-        if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            // iOS asks once, from inside a user gesture.
-            this.requestMotion = () => {
-                window.removeEventListener('touchend', this.requestMotion);
-                DeviceOrientationEvent.requestPermission().then(state => { if (state === 'granted') listen(); }).catch(() => {});
-            };
-            window.addEventListener('touchend', this.requestMotion);
-        } else listen();
+        const listen = () => {
+            if (this.motionAccess === 'granted') return;
+            this.motionAccess = 'granted';
+            window.addEventListener('deviceorientation', this.onOrientation);
+        };
+        if (typeof DeviceOrientationEvent.requestPermission !== 'function') { listen(); return; }
+        // iOS grants the sensors only from a tap. It used to be asked at the
+        // first touch anywhere — a tap meant for the card brought up a system
+        // dialog instead. Now only the page's own button asks (requestMotion,
+        // from its click). A permission already given this session comes back
+        // without a tap or a dialog: then there is nothing to ask.
+        this.motionAccess = 'ask';
+        const settle = state => {
+            if (state === 'granted') listen();
+            else if (state === 'denied') this.motionAccess = 'denied';
+            return state === 'granted';
+        };
+        this.requestMotion = () => DeviceOrientationEvent.requestPermission().then(settle, () => false);
+        DeviceOrientationEvent.requestPermission().then(settle, () => {});
     }
 
     // Drivers finish shader and pipeline work lazily, on first use. Draw the full
@@ -2371,7 +2384,6 @@ export class CardRenderer {
     destroy() {
         const gl = this.gl;
         if (this.onOrientation) window.removeEventListener('deviceorientation', this.onOrientation);
-        if (this.requestMotion) window.removeEventListener('touchend', this.requestMotion);
         this.buffers.forEach(buffer => gl.deleteBuffer(buffer));
         this.arrays.forEach(array => gl.deleteVertexArray(array));
         this.textures.forEach(texture => gl.deleteTexture(texture));

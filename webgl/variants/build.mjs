@@ -51,6 +51,8 @@ const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // It is drawn in the backdrop's own light (`--loader`): a bright line and a
 // glint that is a streak of light with a white core, clearly seen on the dark
 // page and on the pool of light it stands on while the scene warms up.
+// The motion button (app.js) shares the loader's light: a quiet ring with a
+// phone that rocks twice when it appears.
 // The page is the backdrop's colour from the first paint; on touch screens it
 // is the flat edge colour Safari tints its bars with (the scene fades into it
 // inside the visible viewport, so the transition completes before the bars).
@@ -72,7 +74,21 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 .safe-edge-top{top:0;height:max(6px,env(safe-area-inset-top,0px))}
 .safe-edge-bottom{bottom:0;height:max(6px,env(safe-area-inset-bottom,0px))}
 @media (pointer:fine){.safe-edge{display:none}}
-@media (hover:none) and (pointer:coarse){.ambient{display:none}}`;
+@media (hover:none) and (pointer:coarse){.ambient{display:none}}
+.motion-access{position:fixed;left:calc(12px + env(safe-area-inset-left,0px));top:calc(12px + env(safe-area-inset-top,0px));z-index:12;
+width:44px;height:44px;padding:0;display:grid;place-items:center;appearance:none;-webkit-appearance:none;border:0;background:none;
+color:rgb(var(--loader)/.8);-webkit-tap-highlight-color:transparent;cursor:pointer;
+opacity:0;transform:scale(.9);transition:opacity .7s ease,transform .7s ease;pointer-events:none}
+.motion-access::before{content:'';position:absolute;inset:5px;border-radius:50%;border:1px solid rgb(var(--loader)/.2);background:rgb(0 0 0/.24)}
+.motion-access.is-shown{opacity:1;transform:none;pointer-events:auto}
+.motion-access:active::before{background:rgb(0 0 0/.4)}
+.motion-access:focus-visible{outline:none}
+.motion-access:focus-visible::before{border-color:rgb(var(--loader)/.8)}
+.motion-access svg{position:relative;width:22px;height:22px}
+.motion-phone{transform-origin:12px 12px}
+.motion-access.is-shown .motion-phone{animation:motion-rock 1.5s ease-in-out .6s 2}
+@keyframes motion-rock{25%{transform:rotate(-13deg)}75%{transform:rotate(11deg)}}
+@media(prefers-reduced-motion:reduce){.motion-access.is-shown .motion-phone{animation:none}}`;
 // Corners stay clean on the WebGL card: language flips with the card itself.
 // The HTML fallback keeps both controls.
 const cornersCss = '.webgl-ready .languages,.webgl-ready .links-overlay,.webgl-loading .languages,.webgl-loading .links-overlay{display:none}';
