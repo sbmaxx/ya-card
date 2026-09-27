@@ -569,9 +569,12 @@ fn inRect(r: vec4f, uv: vec2f) -> f32 {
             let slope = length(slopeS);
             let facetS = normalize(T * slopeS.x + B * slopeS.y + n * sqrt(max(.01, 1.0 - dot(slopeS, slopeS))));
             // The letter's edge from its distance field, a pixel wide at any zoom.
+            // From one bevel width a pixel on, the mask takes over (renderer.js).
             let pixelWidth = footprint * sampleScale;
-            let fieldEdge = clamp((reliefS.b * 2.0 - 1.0) * dot(reliefRegion, f.uReliefWidth) / max(pixelWidth, 1e-4) + .5, 0.0, 1.0);
-            let letterCover = mix(inkS.a, fieldEdge, dot(reliefRegion, f.uReliefHas));
+            let fieldWidth = dot(reliefRegion, f.uReliefWidth);
+            let fieldEdge = clamp((reliefS.b * 2.0 - 1.0) * fieldWidth / max(pixelWidth, 1e-4) + .5, 0.0, 1.0);
+            let fieldTrust = 1.0 - smoothstep(fieldWidth, 2.0 * fieldWidth, pixelWidth);
+            let letterCover = mix(inkS.a, fieldEdge, dot(reliefRegion, f.uReliefHas) * fieldTrust);
             var letterRough = sqrt(normalSpread / f32(samples));
 
             let coverage = max(letterCover, max(underline, focusStroke));

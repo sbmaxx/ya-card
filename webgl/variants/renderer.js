@@ -978,8 +978,15 @@ void main() {
             // soft and stepped when the card was magnified. Regions without a
             // relief keep the mask.
             float pixelWidth = footprint * sampleScale;
-            float fieldEdge = clamp((reliefS.b * 2.0 - 1.0) * dot(reliefRegion, uReliefWidth) / max(pixelWidth, 1e-4) + .5, 0.0, 1.0);
-            float letterCover = mix(inkS.a, fieldEdge, dot(reliefRegion, uReliefHas));
+            float fieldWidth = dot(reliefRegion, uReliefWidth);
+            float fieldEdge = clamp((reliefS.b * 2.0 - 1.0) * fieldWidth / max(pixelWidth, 1e-4) + .5, 0.0, 1.0);
+            // The field holds distances only out to one bevel width beyond the
+            // outline. A pixel wider than two (a card turned far, seen almost
+            // edge-on) read that clamped «one width outside» as partly inside,
+            // and the whole block of text lit up as a faint slab. From one width
+            // on the mask, filtered to the pixel, takes over.
+            float fieldTrust = 1.0 - smoothstep(fieldWidth, 2.0 * fieldWidth, pixelWidth);
+            float letterCover = mix(inkS.a, fieldEdge, dot(reliefRegion, uReliefHas) * fieldTrust);
             float letterRough = sqrt(normalSpread / float(samples));
 
             float coverage = max(letterCover, max(underline, focusStroke));
