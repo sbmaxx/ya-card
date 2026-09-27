@@ -1554,6 +1554,16 @@ function textureCanvas(lang, vertical, logo, maxSize) {
     return { canvas, links, width, height, titleRelief, logoRelief, textRelief, logoScale: logoWidth / 145 };
 }
 
+// A hand spin: the plate on an axle. It takes `gain` of the finger's speed,
+// eased into `max` (rad/s, about 2.7 turns a second); air drag grows with the
+// speed (`drag`, 1/s) and the bearing's friction is constant (`bearing`,
+// rad/s²), so a fast spin sheds speed quickly, a slow one runs down evenly and
+// stops in finite time rather than creeping. `spring` (rad/s) and `damping`
+// bring a weak push back to its side.
+const SPIN = { gain: .75, max: 17, drag: 1.1, bearing: 3, spring: 7, damping: .75 };
+// How far a spin at `speed` coasts before drag and friction stop it.
+const coastDistance = speed => (speed - SPIN.bearing / SPIN.drag * Math.log(1 + SPIN.drag * speed / SPIN.bearing)) / SPIN.drag;
+
 const ease = t => t * t * (3 - 2 * t);
 const easeOutCubic = t => 1 - (1 - t) ** 3;
 const easeInOutCubic = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -2422,47 +2432,71 @@ export class CardRenderer {
     }
 
     // Turning the plate over by hand: the angle follows the finger, and on
-    // release it coasts with the finger's speed, slows down and settles on the
-    // nearest side. `onSpinSettle(side)` reports where it came to rest.
+    // release it coasts on its axle and comes to rest on a side (see SPIN).
+    // `onSpinSettle(side)` reports where it came to rest.
     spinStart() {
-        this.spin = { angle: this.flipAngle, velocity: 0, dragging: true };
+        this.spin = { angle: this.flipAngle, velocity: 0, dragging: true, plan: null };
         this.flipFrom = this.flipTarget = this.flipAngle;
         this.flipProgress = 1;
     }
     spinDrag(angle, velocity) {
         if (!this.spin) return;
         this.spin.angle = angle;
-        // Even a hard fling ends in about two full turns.
-        this.spin.velocity = Math.max(-26, Math.min(26, velocity));
+        this.spin.velocity = velocity;
     }
     spinRelease() {
-        if (this.spin) this.spin.dragging = false;
+        const spin = this.spin;
+        if (!spin || !spin.dragging) return;
+        spin.dragging = false;
+        // The plate takes a share of the finger's speed, eased into a ceiling:
+        // a harder fling always adds a little, never a sudden cap.
+        spin.velocity = SPIN.max * Math.tanh(SPIN.gain * spin.velocity / SPIN.max);
+        spin.plan = null;
     }
     get spinning() {
         return Boolean(this.spin);
     }
+    // Where a released spin comes to rest. Left alone it would stop where drag
+    // and friction take it (coastDistance); the side nearest that point is the
+    // one it lands on, and the friction is scaled a little, all the way down,
+    // so it glides onto that side and stops there — no spring snapping it into
+    // place at the end. A weak push that would not carry it past edge-on lets
+    // the plate fall back to its side instead, on a damped spring.
+    planSpin(spin) {
+        const direction = Math.sign(spin.velocity) || 1, speed = Math.abs(spin.velocity);
+        const target = Math.round((spin.angle + direction * coastDistance(speed)) / Math.PI) * Math.PI;
+        const ahead = (target - spin.angle) * direction;
+        return { target, direction, glide: speed > 1 && ahead > .05 && coastDistance(speed) / ahead < 3 };
+    }
     stepSpin(dt, reduced) {
         const spin = this.spin;
         if (!spin.dragging) {
-            const rest = k => k * Math.PI;
             if (reduced) {
-                spin.angle = rest(Math.round(spin.angle / Math.PI));
+                spin.angle = Math.round(spin.angle / Math.PI) * Math.PI;
                 spin.velocity = 0;
-            } else if (Math.abs(spin.velocity) > 4) {
-                // Coasting: air and bearing friction bleed the speed off.
-                spin.angle += spin.velocity * dt;
-                spin.velocity *= Math.exp(-dt * 2.2);
             } else {
-                // Settling: a damped spring to the side the motion is heading for.
-                const target = rest(Math.round((spin.angle + spin.velocity * .18) / Math.PI));
+                spin.plan ??= this.planSpin(spin);
+                const { target, direction } = spin.plan;
                 const steps = Math.max(1, Math.ceil(dt / (1 / 240)));
                 for (let i = 0; i < steps; i++) {
                     const h = dt / steps;
-                    spin.velocity += (-70 * (spin.angle - target) - 13 * spin.velocity) * h;
-                    spin.angle += spin.velocity * h;
+                    const ahead = (target - spin.angle) * direction, speed = spin.velocity * direction;
+                    if (spin.plan.glide && ahead > 0 && speed > 0) {
+                        // Drag and bearing friction, scaled to stop on the target.
+                        const scale = Math.min(4, coastDistance(speed) / ahead);
+                        const next = Math.max(0, speed - scale * (SPIN.bearing + SPIN.drag * speed) * h);
+                        spin.angle += direction * (speed + next) / 2 * h;
+                        spin.velocity = direction * next;
+                    } else {
+                        // Past the side, stalled short of it, or a weak push: a
+                        // damped spring finishes the last of the way.
+                        spin.plan.glide = false;
+                        spin.velocity -= (SPIN.spring ** 2 * (spin.angle - target) + 2 * SPIN.damping * SPIN.spring * spin.velocity) * h;
+                        spin.angle += spin.velocity * h;
+                    }
                 }
             }
-            const target = rest(Math.round(spin.angle / Math.PI));
+            const target = Math.round(spin.angle / Math.PI) * Math.PI;
             if (reduced || (Math.abs(spin.angle - target) < .002 && Math.abs(spin.velocity) < .03)) {
                 this.spin = null;
                 this.flipAngle = this.flipFrom = this.flipTarget = target;
