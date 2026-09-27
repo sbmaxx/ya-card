@@ -4,7 +4,7 @@ import { fontOf } from './fonts.js';
 // The card's typeface (lab setting or the baked look), and its three weights loaded.
 const cardFont = () => fontOf(globalThis.__cardLab?.font ?? 0).family;
 export const loadCardFont = () => Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "${cardFont()}"`)));
-import { createReliefMap } from './relief.js';
+import { createReliefMaps } from './relief.js';
 import { direction } from './directions.js';
 import { BACKDROPS, DEFAULT_BACKDROP } from './backdrops.js';
 import { LIGHT_SETUPS } from './lights.js';
@@ -1595,6 +1595,7 @@ export class CardRenderer {
     // Shared by both backends once the renderer exists: warm up, settle, hold.
     async start() {
         this.resize();
+        await this.layoutReady;
         await this.warmUp();
         await this.settle();
         // A deliberate pause: the loader holds for a moment even on fast devices,
@@ -1620,7 +1621,12 @@ export class CardRenderer {
         this.textures = [];
         this.engravingTextures = [];
         this.targets = [];
+        // The layout drawn (vertical) and the one asked for (layoutVertical),
+        // which may still be working out its relief (see rebuild).
         this.vertical = null;
+        this.layoutVertical = null;
+        this.layoutGeneration = 0;
+        this.reliefGeneration = 0;
         this.rotationX = 0;
         this.rotationY = 0;
         this.rotationZ = 0;
@@ -1778,14 +1784,19 @@ export class CardRenderer {
         }
         const insets = getComputedStyle(probe);
         this.safeInsets = { top: parseFloat(insets.paddingTop) || 0, bottom: parseFloat(insets.paddingBottom) || 0 };
-        if (vertical !== this.vertical) this.rebuild(vertical);
-        // Desktop draws the plate at a fixed pixel size: the original card's
-        // 545 px wide (320 px in a narrow window) at the default card size .8.
-        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : (vertical ? 320 : 545) / .8;
+        if (vertical !== this.layoutVertical) this.rebuild(vertical);
+        this.updateProjection();
+        this.resizeTargets(Math.max(1, Math.round(width / 4)), Math.max(1, Math.round(height / 4)));
+    }
+
+    // Desktop draws the plate at a fixed pixel size: the original card's
+    // 545 px wide (320 px in a narrow window) at the default card size .8.
+    updateProjection() {
+        if (!this.width) return;
+        this.fixedCardWidth = matchMedia('(pointer: coarse)').matches ? 0 : (this.vertical ? 320 : 545) / .8;
         const focalLength = this.fixedCardWidth
             ? 14 * this.fixedCardWidth / (this.width * this.viewportHeight) : undefined;
         this.projection = projectionMatrix(this.aspect, focalLength);
-        this.resizeTargets(Math.max(1, Math.round(width / 4)), Math.max(1, Math.round(height / 4)));
     }
 
     // The drawing buffer for the lab's «Широкий цвет» and «Блики ярче белого»:
@@ -1929,18 +1940,33 @@ export class CardRenderer {
         this.targets = [];
     }
 
+    // The upright or landscape plate: meshes, text and relief. The relief is
+    // worked out in workers (relief.js); until it is ready the layout before
+    // keeps drawing, then all of it changes at once. A newer request wins.
     rebuild(vertical) {
-        this.deleteTextures(this.textures);
-        this.vertical = vertical;
-        this.width = vertical ? 4.235 * 300 / portraitHeight : 4.235;
-        this.height = vertical ? 4.235 : 2.333;
-        this.outline = roundedOutline(this.width, this.height, vertical);
-        const meshes = geometry(this.width, this.height, vertical);
-        this.counts = meshes.map(mesh => mesh.length / 8);
-        this.uploadMeshes(meshes);
-        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], this.maxTextureSize));
-        this.textures = this.surfaces.map(({ canvas }) => this.uploadTexture(canvas));
-        this.buildRelief();
+        const generation = ++this.layoutGeneration, reliefGeneration = ++this.reliefGeneration;
+        this.layoutVertical = vertical;
+        const width = vertical ? 4.235 * 300 / portraitHeight : 4.235;
+        const height = vertical ? 4.235 : 2.333;
+        const surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], this.maxTextureSize));
+        this.layoutReady = this.makeRelief(surfaces).then(relief => {
+            if (generation !== this.layoutGeneration) return;
+            this.vertical = vertical;
+            this.width = width;
+            this.height = height;
+            this.outline = roundedOutline(width, height, vertical);
+            const meshes = geometry(width, height, vertical);
+            this.counts = meshes.map(mesh => mesh.length / 8);
+            this.uploadMeshes(meshes);
+            this.deleteTextures(this.textures);
+            this.surfaces = surfaces;
+            this.textures = surfaces.map(({ canvas }) => this.uploadTexture(canvas));
+            this.applyRelief(relief);
+            // A depth changed on the stand meanwhile: its relief was for the old text.
+            if (reliefGeneration !== this.reliefGeneration) this.buildRelief();
+            this.updateProjection();
+        });
+        return this.layoutReady;
     }
 
     // Face, back and rim: position, normal and UV, 32 bytes a vertex.
@@ -1988,13 +2014,25 @@ export class CardRenderer {
 
     // Card text changed on the demo stand: redraw textures, relief and links.
     refreshText() {
-        this.rebuild(this.vertical);
+        return this.rebuild(this.layoutVertical);
     }
 
     // Relief maps only; the demo stand calls this when a depth slider moves.
     buildRelief() {
-        this.deleteTextures(this.engravingTextures);
+        const generation = ++this.reliefGeneration, surfaces = this.surfaces;
+        return this.makeRelief(surfaces).then(relief => {
+            if (generation === this.reliefGeneration && surfaces === this.surfaces) this.applyRelief(relief);
+        });
+    }
+
+    // The surfaces' relief maps with the profiles as they are now.
+    async makeRelief(surfaces) {
         const profiles = reliefProfiles();
+        return { profiles, maps: await createReliefMaps(surfaces, profiles) };
+    }
+
+    applyRelief({ profiles, maps }) {
+        this.deleteTextures(this.engravingTextures);
         this.raisedHeight = [profiles.name.shape === 'raised' ? profiles.name.depth : 0,
             profiles.logo.shape === 'raised' ? profiles.logo.depth : 0,
             profiles.text && profiles.text.shape === 'raised' ? profiles.text.depth : 0];
@@ -2005,10 +2043,7 @@ export class CardRenderer {
         this.reliefHas = regions.map(profile => profile ? 1 : 0);
         this.reliefSign = regions.map(profile => profile && profile.shape === 'raised' ? 1 : -1);
         this.bevelCurve = regions.find(profile => profile && profile.shape === 'raised')?.curve ?? 0;
-        this.engravingTextures = this.surfaces.map(surface => {
-            const relief = createReliefMap(surface, profiles);
-            return this.uploadTexture(relief.data, relief.width, relief.height);
-        });
+        this.engravingTextures = maps.map(relief => this.uploadTexture(relief.data, relief.width, relief.height));
     }
 
     draw({ rx, ry, rz = 0, zoom, dragging = false, flipped, animate, idle = true, freezeTilt = false, freezeHover = false, focusLink = null, reduced, delta }) {

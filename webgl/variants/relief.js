@@ -103,16 +103,34 @@ function blurInside(values, alpha, w, h) {
     pass(temp, values, 0, 1);
 }
 
-export function createReliefMap(surface, profiles) {
+// One region's map from its glyph coverage: RGBA as described above, and a
+// mask of the texels it sets (the rest keep the map's default). Pure: it runs
+// in a worker (reliefWorkerSource) as well as here.
+function reliefRegion({ alpha, w, h, stepX, stepY, bevel }) {
+    const { distance, dirX, dirY } = outlineDistance(alpha, w, h, stepX, stepY, bevel);
+    const data = new Uint8Array(w * h * 4), mask = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+        if (distance[i] <= -bevel) continue;
+        const out = i * 4;
+        data[out] = Math.round(128 + dirX[i] * 127);
+        data[out + 1] = Math.round(128 + dirY[i] * 127);
+        data[out + 2] = Math.round(Math.max(0, Math.min(1, (distance[i] / bevel + 1) / 2)) * 255);
+        data[out + 3] = alpha[i];
+        mask[i] = 1;
+    }
+    return { data, mask };
+}
+
+// The regions of a surface to work out: name, wordmark and (when shaped) role
+// and contacts, each with its coverage cut out of the text canvas.
+function reliefJobs(surface, profiles) {
     const { canvas, width, height, titleRelief, logoRelief, textRelief } = surface;
-    const map = new Uint8Array(canvas.width * canvas.height * 4);
-    for (let i = 0; i < map.length; i += 4) { map[i] = 128; map[i + 1] = 128; }
     const stepX = width / canvas.width, stepY = height / canvas.height;
     const context = canvas.getContext('2d');
     const regions = [[titleRelief, profiles.name, false], [logoRelief, profiles.logo, true]];
     // Role and contacts only get a relief when a shape was chosen for them.
     if (profiles.text && textRelief) regions.push([textRelief, profiles.text, false]);
-    for (const [rect, profile, scaled] of regions) {
+    return regions.map(([rect, profile, scaled]) => {
         const bevel = profile.bevel * (scaled ? (surface.logoScale ?? 1) : 1);
         // A little margin keeps the bilinear and mip filtering away from the crop edge.
         const pad = 6;
@@ -123,16 +141,78 @@ export function createReliefMap(surface, profiles) {
         const ink = context.getImageData(x0, y0, w, h).data;
         const alpha = new Uint8Array(w * h);
         for (let i = 0; i < alpha.length; i++) alpha[i] = ink[i * 4 + 3];
-        const { distance, dirX, dirY } = outlineDistance(alpha, w, h, stepX, stepY, bevel);
+        return { x0, y0, w, h, alpha, stepX, stepY, bevel };
+    });
+}
+
+// The surface's map from its regions' results, in order: a later region
+// overwrites an earlier one only where it sets texels.
+function composeRelief(canvas, jobs, results) {
+    const map = new Uint8Array(canvas.width * canvas.height * 4);
+    for (let i = 0; i < map.length; i += 4) { map[i] = 128; map[i + 1] = 128; }
+    jobs.forEach(({ x0, y0, w, h }, index) => {
+        const { data, mask } = results[index];
         for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
             const i = y * w + x;
-            if (distance[i] <= -bevel) continue;
+            if (!mask[i]) continue;
             const out = ((y0 + y) * canvas.width + x0 + x) * 4;
-            map[out] = Math.round(128 + dirX[i] * 127);
-            map[out + 1] = Math.round(128 + dirY[i] * 127);
-            map[out + 2] = Math.round(Math.max(0, Math.min(1, (distance[i] / bevel + 1) / 2)) * 255);
-            map[out + 3] = alpha[i];
+            map[out] = data[i * 4]; map[out + 1] = data[i * 4 + 1]; map[out + 2] = data[i * 4 + 2]; map[out + 3] = data[i * 4 + 3];
         }
-    }
+    });
     return { data: map, width: canvas.width, height: canvas.height };
+}
+
+// The distance fields take half a second or more for a layout; worked out on
+// the page they held up the start and froze the card for as long on a phone
+// turned to landscape. They run in workers instead, a few regions at once.
+// The workers' code is these functions' own source (self-contained: they use
+// only each other and built-ins, so it survives minification).
+const reliefWorkerSource = () => `${outlineDistance}\n${blurInside}\n${reliefRegion}\n`
+    + `onmessage = event => { const result = ${reliefRegion.name}(event.data.job);`
+    + ` postMessage({ id: event.data.id, result }, [result.data.buffer, result.mask.buffer]); };`;
+let pool = null, nextJob = 0;
+const waiting = new Map();
+function workers() {
+    if (pool) return pool;
+    pool = [];
+    try {
+        const url = URL.createObjectURL(new Blob([reliefWorkerSource()], { type: 'text/javascript' }));
+        const count = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+        for (let i = 0; i < count; i++) {
+            const worker = new Worker(url);
+            worker.onmessage = ({ data }) => { waiting.get(data.id)?.resolve(data.result); waiting.delete(data.id); };
+            worker.onerror = event => {
+                event.preventDefault();
+                // A worker that fails hands its regions back to the page.
+                for (const [id, job] of waiting) if (job.worker === worker) { job.reject(event); waiting.delete(id); }
+            };
+            pool.push(worker);
+        }
+    } catch {
+        pool = [];
+    }
+    return pool;
+}
+function inWorker(job, worker) {
+    return new Promise((resolve, reject) => {
+        const id = ++nextJob;
+        waiting.set(id, { resolve, reject, worker });
+        // The coverage is copied, not moved: the page still has it if the worker fails.
+        worker.postMessage({ id, job: { ...job, alpha: job.alpha.slice() } });
+    });
+}
+
+// Relief maps for the surfaces (front and back), one { data, width, height }
+// each. The largest regions go out first, each to the least busy worker.
+export async function createReliefMaps(surfaces, profiles) {
+    const jobs = surfaces.map(surface => reliefJobs(surface, profiles));
+    const all = jobs.flat().sort((a, b) => b.w * b.h - a.w * a.h);
+    const team = workers(), load = team.map(() => 0);
+    const results = new Map(await Promise.all(all.map(job => {
+        if (!team.length) return [job, reliefRegion(job)];
+        const index = load.indexOf(Math.min(...load));
+        load[index] += job.w * job.h;
+        return inWorker(job, team[index]).then(result => [job, result], () => [job, reliefRegion(job)]);
+    })));
+    return surfaces.map((surface, i) => composeRelief(surface.canvas, jobs[i], jobs[i].map(job => results.get(job))));
 }
