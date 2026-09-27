@@ -105,7 +105,10 @@ export function createReliefMap(surface, profiles) {
             // flat on top, as on a struck coin: some part of it always faces a
             // light, so every letter carries a bright edge and a dark one. A
             // straight chamfer is one tilt, and glints only at one angle.
-            heights[i] = sign * depth * (sign > 0 ? Math.sin(t * Math.PI / 2) : t);
+            // The soft profile starts and ends level (smootherstep): no crease at
+            // the plate or the top. The 45° edge is straight.
+            const raised = profile.curve === 1 ? t * t * t * (t * (t * 6 - 15) + 10) : profile.curve === 2 ? t : Math.sin(t * Math.PI / 2);
+            heights[i] = sign * depth * (sign > 0 ? raised : t);
         }
         // Two passes round the V crease and the chamfer shoulders just enough
         // to remove texel steps; one pass is enough for a narrow chamfer.

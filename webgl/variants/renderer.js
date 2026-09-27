@@ -52,9 +52,20 @@ const bodyLook = bodyShape === 'edition' ? look.text : look.logo;
 const baseProfiles = { logo: LOGO_SHAPES[logoShape], name: NAME_SHAPES[nameShape] || { shape: 'deboss', ...direction.relief.name },
     text: BODY_SHAPES[bodyShape] };
 // Depth multipliers from the demo stand; relief maps are rebuilt live.
+// Raised letters take the chosen bevel profile (see relief.js): the coin's
+// quarter round as it was; a soft one, half as steep over a wider band, with
+// no crease at the plate; a flat 45° edge. A steep shoulder mirrors the whole
+// room within a pixel or two — floor, horizon, lamps — as parallel lines.
+const BEVELS = [{ depth: 1, bevel: 1 }, { depth: .6, bevel: 1.6 }, { depth: 0, bevel: 1 }];
 const reliefProfiles = () => {
     const lab = globalThis.__cardLab;
-    const scale = (profile, k) => ({ ...profile, depth: profile.depth * k });
+    const curve = lab ? lab.bevel ?? 0 : 0, bevel = BEVELS[curve];
+    const scale = (profile, k) => {
+        if (profile.shape !== 'raised') return { ...profile, depth: profile.depth * k };
+        const width = profile.bevel * bevel.bevel;
+        // The 45° edge rises as high as it is wide.
+        return { ...profile, curve, bevel: width, depth: (bevel.depth ? profile.depth * bevel.depth : Math.min(profile.depth, width)) * k };
+    };
     return { logo: scale(baseProfiles.logo, lab ? lab.logoDepth : 1), name: scale(baseProfiles.name, lab ? lab.nameDepth : 1),
         text: baseProfiles.text && scale(baseProfiles.text, lab ? lab.bodyDepth : 1) };
 };

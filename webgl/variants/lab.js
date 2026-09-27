@@ -178,7 +178,12 @@ panel.innerHTML = `
     <button type="button" data-value="0" aria-pressed="${lab.typography === 0}">Обычная</button>
     <button type="button" data-value="1" aria-pressed="${lab.typography === 1}">Тонкая</button>
   </div>
-  <p class="hint">Тонкая: мелкий текст чуть разрежен (+2,5%), имя чуть плотнее (−1%), как набирают для печати.</p></fieldset>
+  <p class="hint">Тонкая: мелкий текст чуть разрежен (+2,5%), имя чуть плотнее (−1%), как набирают для печати.</p>
+  <div class="caption">Фаска выпуклых букв</div>
+  <div class="segments" data-live="bevel">
+    ${['Монета', 'Мягкая', 'Кромка 45°'].map((title, i) => `<button type="button" data-value="${i}" aria-pressed="${lab.bevel === i}">${title}</button>`).join('')}
+  </div>
+  <p class="hint">Монета — скруглённое плечо, крутое у пластины. Мягкая — вдвое положе и шире, без излома: один широкий блик. Кромка 45° — ровная грань и плоский верх: одна узкая линия света.</p></fieldset>
   ${group('Логотип', `
     ${shapeRow('relief', labels, currentLogoShape)}
     ${depthRow('logoDepth', 'Глубина')}
@@ -307,7 +312,7 @@ const writeUrl = () => {
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
     next.set('backdrop', lab.backdrop);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute', 'bevel']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     // «Not set» stays in the link: left out, the default look would fill it on reload.
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) next.set(key, lab[key] || '');
@@ -464,6 +469,14 @@ panel.querySelector('[data-live="nameWeight"]').addEventListener('click', event 
     globalThis.__cardRenderer?.refreshText();
     writeUrl();
 });
+panel.querySelector('[data-live="bevel"]').addEventListener('click', event => {
+    const button = event.target.closest('button');
+    if (!button) return;
+    lab.bevel = Number(button.dataset.value);
+    panel.querySelectorAll('[data-live="bevel"] button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
+    globalThis.__cardRenderer?.buildRelief();
+    writeUrl();
+});
 panel.querySelector('[data-live="typography"]').addEventListener('click', event => {
     const button = event.target.closest('button');
     if (!button) return;
@@ -531,7 +544,7 @@ function describeSettings() {
     const lines = [
         'Визитка — настройки стенда',
         `Шрифт: ${FONTS[lab.font]?.title ?? FONTS[0].title}`,
-        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]}, фактура ${n(lab.surface)}, искра ${n(lab.sparkle)} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${{ accent: 'акцент на имени', grid: 'сетка' }[currentLayout] || 'классика'}, типографика ${lab.typography ? 'тонкая' : 'обычная'} · размер карточки: ${n(lab.cardSize)}`,
+        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]}, фактура ${n(lab.surface)}, искра ${n(lab.sparkle)} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${{ accent: 'акцент на имени', grid: 'сетка' }[currentLayout] || 'классика'}, типографика ${lab.typography ? 'тонкая' : 'обычная'}, фаска ${['монета', 'мягкая', 'кромка 45°'][lab.bevel]} · размер карточки: ${n(lab.cardSize)}`,
         `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)} · дорожка ${n(lab.strip)} · температура ${n(lab.warmth)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')} · приглушение ${n(lab.logoMute)}`,
