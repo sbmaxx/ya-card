@@ -14,6 +14,11 @@ saves it as a standalone production file. The production homepage
   the page, so the first paint already matches.
 - The old gallery (`/variants/`) and edition pages (`/variants/steel/` …) are HTML
   redirects to the lab.
+- `/variants/gpu/` (trial): the homepage's look drawn with WebGPU (`gpu.js`) into a
+  half-float Display P3 canvas; on an HDR screen highlights run up to 3× the page's
+  white (`?headroom=1` for SDR). Its WGSL is the Noir look's GLSL; other editions
+  and browsers without WebGPU draw with WebGL. `/variants/hdr/` is the probe page
+  (`hdr-probe.html`, published by hand).
 
 ## Rendering
 

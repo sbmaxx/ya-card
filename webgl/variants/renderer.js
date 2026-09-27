@@ -1405,7 +1405,7 @@ function geometry(width, height, vertical) {
     return faces.map(face => new Float32Array(face));
 }
 
-function logoImage(lang) {
+export function logoImage(lang) {
     const logo = logos[lang];
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${logo.viewBox}" width="${logo.viewBox.split(' ')[2]}" height="${logo.viewBox.split(' ')[3]}"><path d="${logo.text}" fill="#fff"/><path d="${logo.ya}" fill="#f00"/></svg>`;
     return new Promise((resolve, reject) => {

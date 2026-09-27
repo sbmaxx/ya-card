@@ -98,13 +98,15 @@ const labCss = cornersCss + loaderCss;
 
 // A studio page: the WebGL card with the loader, a watchdog that opens the
 // plain card if the scene never starts, and everything inlined.
-async function studioPage({ entry, define, direction, fallback, head, source = template, fonts = FONTS, card = false }) {
+// `gpu`: app.js draws with the WebGPU backend (gpu.js), WebGL where there is none.
+async function studioPage({ entry, define, direction, fallback, head, source = template, fonts = FONTS, card = false, gpu = false }) {
     const js = await build({
         stdin: { contents: entry, resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
         format: 'iife', platform: 'browser', target: 'es2020', legalComments: 'none', charset: 'utf8', define,
         plugins: [{ name: 'studio-renderer', setup(bundler) {
-            bundler.onResolve({ filter: /(^|\/)renderer\.js$/ }, () => ({ path: resolve(here, 'renderer.js') }));
+            bundler.onResolve({ filter: /(^|\/)renderer\.js$/ }, args => ({
+                path: resolve(here, gpu && args.importer === resolve(root, 'app.js') ? 'gpu.js' : 'renderer.js') }));
             // A single-edition page carries only its own direction.
             if (direction) {
                 const { css: _css, ...runtime } = direction;
@@ -224,6 +226,16 @@ function homeSource(lang) {
             fonts: [homeFont], card: true
         }), homeOut);
     }
+    // /variants/gpu/: the same card drawn with WebGPU, highlights past white on
+    // HDR screens. A trial, next to the homepage; not indexed.
+    await page('gpu', await studioPage({
+        entry: "import './home.js';\nimport './settings.js';\nimport '../app.js';",
+        define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
+        direction,
+        fallback: '../plain/',
+        head: themeColor + '<meta name="robots" content="noindex">',
+        fonts: [homeFont], card: true, gpu: true
+    }));
     // Share images: generated covers (see og/PROMPT.md), 1200×630.
     for (const lang of ['ru', 'en']) await copyFile(resolve(here, `og/og-${lang}.jpg`), resolve(homeOut, `og-${lang}.jpg`)).catch(() => console.warn(`og-${lang}.jpg missing`));
     await writeFile(resolve(homeOut, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /variants/\nDisallow: /plain/\n\nSitemap: ${SITE}/sitemap.xml\n`);
