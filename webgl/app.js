@@ -406,14 +406,20 @@ import { CardRenderer } from './renderer.js';
         };
         if (actions[event.key]) { event.preventDefault(); lastPointerMove = performance.now(); userControlled = true; actions[event.key](); applyHover(); schedule(); }
     });
-    window.addEventListener('resize', () => {
+    const onResize = () => {
         bounds = null;
         if (renderer && !contextLost) {
             renderer.resize();
             refreshFocusedAnchor();
             schedule();
         }
-    });
+    };
+    window.addEventListener('resize', onResize);
+    // iOS sends `resize` while a rotation is still settling, and Safari's
+    // toolbars can change the page's height with no event at all: the canvas
+    // kept a buffer for the old size and the card was drawn squashed. The
+    // canvas's own box, observed after layout, is the size that counts.
+    if ('ResizeObserver' in window) new ResizeObserver(onResize).observe(canvas);
     window.addEventListener('blur', () => {
         renderer?.spinRelease();
         pendingClick = null;
