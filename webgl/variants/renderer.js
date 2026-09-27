@@ -1647,7 +1647,6 @@ export class CardRenderer {
         // Intro choreography: the plate turns in from the dark while a light sweeps across.
         this.intro = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0;
         this.introTime = 0;
-        this.setupMotion();
         this.setupGraphics(programs);
     }
 
@@ -1675,49 +1674,6 @@ export class CardRenderer {
     // Wait until the GPU has drawn what was sent.
     finish() {
         this.gl.readPixels(0, 0, 1, 1, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array(4));
-    }
-
-    // Phone orientation: the room stays put while the phone turns, exactly as a
-    // real metal card in the hand. The baseline slowly follows the hold angle.
-    setupMotion() {
-        this.gyro = { active: false, beta: 0, gamma: 0, baseBeta: null, baseGamma: 0, x: 0, y: 0, last: 0, lastMove: 0 };
-        // `ask`: the sensors need the visitor's permission (the page offers a
-        // button for it, app.js); `granted`: listening; `none`: no sensors.
-        this.motionAccess = 'none';
-        if (typeof DeviceOrientationEvent === 'undefined' || !matchMedia('(pointer: coarse)').matches) return;
-        this.onOrientation = event => {
-            if (event.beta == null || event.gamma == null) return;
-            const angle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
-            let beta = event.beta, gamma = event.gamma;
-            if (angle === 90) [beta, gamma] = [-gamma, beta];
-            else if (angle === -90 || angle === 270) [beta, gamma] = [gamma, -beta];
-            else if (angle === 180) [beta, gamma] = [-beta, -gamma];
-            const g = this.gyro;
-            // Sensors report continuously; only real movement asks for 60 fps.
-            if (Math.abs(beta - g.beta) + Math.abs(gamma - g.gamma) > .08) g.lastMove = performance.now();
-            g.beta = beta; g.gamma = gamma; g.last = performance.now();
-            if (g.baseBeta === null) { g.baseBeta = beta; g.baseGamma = gamma; }
-            g.active = true;
-        };
-        const listen = () => {
-            if (this.motionAccess === 'granted') return;
-            this.motionAccess = 'granted';
-            window.addEventListener('deviceorientation', this.onOrientation);
-        };
-        if (typeof DeviceOrientationEvent.requestPermission !== 'function') { listen(); return; }
-        // iOS grants the sensors only from a tap. It used to be asked at the
-        // first touch anywhere — a tap meant for the card brought up a system
-        // dialog instead. Now only the page's own button asks (requestMotion,
-        // from its click). A permission already given this session comes back
-        // without a tap or a dialog: then there is nothing to ask.
-        this.motionAccess = 'ask';
-        const settle = state => {
-            if (state === 'granted') listen();
-            else if (state === 'denied') this.motionAccess = 'denied';
-            return state === 'granted';
-        };
-        this.requestMotion = () => DeviceOrientationEvent.requestPermission().then(settle, () => false);
-        DeviceOrientationEvent.requestPermission().then(settle, () => {});
     }
 
     // Drivers finish shader and pipeline work lazily, on first use. Draw the full
@@ -2069,26 +2025,9 @@ export class CardRenderer {
         // under a card that had hung ungrounded (see the shadow's light below).
         const shadowFade = introFade;
 
-        // Phone orientation, relative to a slowly re-centering baseline.
-        const g = this.gyro;
-        let gyroX = 0, gyroY = 0;
-        if (g.active && !reduced) {
-            // Slow re-centring: a deliberate tilt stays visible, a new hold angle
-            // becomes neutral over ~10 s.
-            const recenter = 1 - Math.exp(-dt / 10);
-            g.baseBeta += (g.beta - g.baseBeta) * recenter;
-            g.baseGamma += (g.gamma - g.baseGamma) * recenter;
-            const target = [Math.max(-25, Math.min(25, g.beta - g.baseBeta)), Math.max(-25, Math.min(25, g.gamma - g.baseGamma))];
-            const smooth = 1 - Math.exp(-dt * 12);
-            g.x += (target[0] * Math.PI / 180 - g.x) * smooth;
-            g.y += (target[1] * Math.PI / 180 - g.y) * smooth;
-            gyroX = g.x; gyroY = g.y;
-        }
         // Demo stand overrides (only present on /variants/lab/).
         const lab = globalThis.__cardLab;
-        const gyroGain = lab ? lab.gyro : 1;
-        gyroX *= gyroGain; gyroY *= gyroGain;
-        this.wantsHighFrameRate = Boolean(lab && !lab.exported) || (this.intro < 1 && !reduced) || (g.active && performance.now() - g.lastMove < 600);
+        this.wantsHighFrameRate = Boolean(lab && !lab.exported) || (this.intro < 1 && !reduced);
 
         const lightPhase = this.time * Math.PI * 2 / variation.lightPeriod + variation.lightPhase;
         // The light orbit widens the key's path into a broad figure in front of
@@ -2101,13 +2040,9 @@ export class CardRenderer {
         // The intro sweeps the key in from the side.
         const lightYaw = settledYaw + (lab && lab.manualLight ? 0 : introLight * 1.15 * variation.introSweep * variation.introSide);
         const lightPitch = settledPitch - (lab && lab.manualLight ? 0 : introLight * .12);
-        // The room turns with the light path and against the phone, so reflections
-        // slide across the plate just like a physical card turned under lamps.
-        // Phone top away → the screen faces the ceiling; right side down → faces right.
-        // A real card turned by θ moves its reflections by 2θ; the card on screen
-        // also leans a little the same way, which adds to the effect.
-        const roomYaw = lightYaw + gyroY * 1.5, roomPitch = lightPitch - gyroX * 1.5;
-        this.room = roomMatrix(roomYaw, roomPitch);
+        // The room turns with the light path, so reflections slide across the
+        // plate as on a physical card turned under lamps.
+        this.room = roomMatrix(lightYaw, lightPitch);
         // Shadow and background follow the key: world key = roomᵀ · key.
         const setup = LIGHT_SETUPS[lab ? lab.lightSetup : direction.lightSetup] || Object.values(LIGHT_SETUPS)[0];
         this.lightSetup = setup;
@@ -2120,14 +2055,14 @@ export class CardRenderer {
         // drove in under it as the light came round. Now it is under the card
         // from the first frame and turns with it; the sweep still shows in the
         // reflections and the backdrop's pool of light.
-        this.keyLight = toWorld(roomMatrix(settledYaw + gyroY * 1.5, settledPitch - gyroX * 1.5)).map(value => value * 8);
+        this.keyLight = toWorld(roomMatrix(settledYaw, settledPitch)).map(value => value * 8);
 
         const idleTarget = animate && idle && !dragging ? 1 : 0;
         if (reduced) this.idleWeight = 0;
         else if (!freezeTilt) this.idleWeight += (idleTarget - this.idleWeight) * (1 - Math.exp(-dt * (idleTarget ? 1.6 : 10)));
         const idleTime = this.time * variation.idleSpeed;
         const idleStrength = variation.idleAmplitude * this.idleWeight * (this.touchLandscape ? .60 : this.vertical ? .85 : 1)
-            * (g.active ? .45 : 1) * (lab ? lab.idle : 1);
+            * (lab ? lab.idle : 1);
         const breathX = (Math.sin(idleTime * .56 + variation.phaseX) * .10
             + Math.sin(idleTime * .89 + variation.phaseY) * .022) * idleStrength;
         const breathY = (Math.cos(idleTime * .43 + variation.phaseY) * .145
@@ -2150,8 +2085,8 @@ export class CardRenderer {
             // The plate comes toward the viewer while it turns over.
             flipDepth = progress >= 1 ? 0 : Math.sin(Math.PI * Math.min(1, progress / .85)) * .45;
         }
-        const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX + gyroX * .2);
-        const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY + gyroY * .2);
+        const targetX = variation.poseX + (reduced ? 0 : rx * Math.PI / 180 + breathX);
+        const targetY = variation.poseY + (reduced ? 0 : ry * Math.PI / 180 + breathY);
         // A tall portrait plate shows any roll as a slanted left edge of the text:
         // it keeps its tilt and sway but no resting or idle roll.
         const roll = this.vertical ? 0 : 1;
@@ -2552,7 +2487,6 @@ export class CardRenderer {
 
     destroy() {
         const gl = this.gl;
-        if (this.onOrientation) window.removeEventListener('deviceorientation', this.onOrientation);
         this.buffers.forEach(buffer => gl.deleteBuffer(buffer));
         this.arrays.forEach(array => gl.deleteVertexArray(array));
         this.textures.forEach(texture => gl.deleteTexture(texture));

@@ -252,7 +252,6 @@ panel.innerHTML = `
     <label class="range">Свечение всего <output data-for="bloom"></output><input type="range" name="bloom" min="0" max="1.5" step=".01" value="${lab.bloom}"></label>
     <label class="range">Свечение букв <output data-for="letterGlow"></output><input type="range" name="letterGlow" min="0" max="2" step=".05" value="${lab.letterGlow}"></label>
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
-    <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
     <label class="range">Широкий цвет (P3) <output data-for="wide"></output><input type="range" name="wide" min="0" max="1" step=".05" value="${lab.wide}" ${output.p3 ? '' : 'disabled'}></label>
     <p class="hint output-hint">${output.p3 ? `0 — обычный sRGB. Больше — насыщенные цвета (красная «Я») выходят за sRGB; серые, сталь и фон не меняются. ${output.p3Screen ? 'Экран P3 — разница видна.' : 'Этот экран не P3 — разницы не будет.'}` : 'Недоступно: браузер не умеет Display P3 в WebGL.'}</p>
     <label class="range">Блики ярче белого <output data-for="hdr"></output><input type="range" name="hdr" min="0" max="1" step=".05" value="${lab.hdr}" ${output.hdr ? '' : 'disabled'}></label>
@@ -322,7 +321,7 @@ const writeUrl = () => {
     next.set('layout', currentLayout);
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute', 'bevel', 'wide', 'hdr']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute', 'bevel', 'wide', 'hdr']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     // «Not set» stays in the link: left out, the default look would fill it on reload.
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) next.set(key, lab[key] || '');
@@ -551,7 +550,7 @@ function describeSettings() {
         `Первая буква: ${colour('logoFirst')}`,
         `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.nameWeight]} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')} · приглушение ${n(lab.nameMute)}`,
         `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.bodyWeight]} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
-        `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)} · широкий цвет ${n(lab.wide)} · блики ярче белого ${n(lab.hdr)}`
+        `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · широкий цвет ${n(lab.wide)} · блики ярче белого ${n(lab.hdr)}`
     ];
     const text = textFields.filter(([key]) => lab.text[key]).map(([key, label]) => `${label}: ${lab.text[key]}`);
     if (text.length) lines.push(`Текст: ${text.join(' · ')}`);

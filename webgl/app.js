@@ -43,8 +43,6 @@ import { CardRenderer } from './renderer.js';
         ru: 'Визитная карточка. Enter — переворот, стрелки — наклон, плюс и минус — масштаб, Escape — сброс.',
         en: 'Business card. Enter to flip, arrows to tilt, plus and minus to zoom, Escape to reset.'
     };
-    const motionLabels = { ru: 'Включить наклон телефоном', en: 'Tilt the card with your phone' };
-    let motionButton = null;
 
     function setLanguage(next, announce = true) {
         const nextLang = next === 'en' ? 'en' : 'ru';
@@ -81,7 +79,6 @@ import { CardRenderer } from './renderer.js';
         favicon.href = favicon.dataset[lang];
         document.title = active.querySelector('h1').textContent;
         scene.setAttribute('aria-label', sceneLabels[lang]);
-        motionButton?.setAttribute('aria-label', motionLabels[lang]);
         if (announce) document.querySelector('#announcement').textContent = lang === 'ru' ? 'Русская сторона' : 'English side';
         schedule();
     }
@@ -467,7 +464,6 @@ import { CardRenderer } from './renderer.js';
             contextLost = false;
             previousTime = performance.now();
             schedule();
-            offerMotion();
         } catch (error) {
             console.warn('WebGL card unavailable; showing HTML contacts.', error);
             // Pages may name a separate plain version instead of the inline fallback.
@@ -481,35 +477,6 @@ import { CardRenderer } from './renderer.js';
             }
             showFallback();
         }
-    }
-    // Where the phone's tilt needs a permission (iOS), a small button in the
-    // corner asks for it; a tap on the card only ever turns the card. It comes
-    // in after the card's entrance, gives the phone a little rock as a hint,
-    // and leaves once the visitor has answered. Not on the demo stand: its own
-    // controls take that corner, and the tilt does not matter there.
-    function offerMotion() {
-        const stand = globalThis.__cardLab && !globalThis.__cardLab.exported;
-        if (motionButton || stand || renderer?.motionAccess !== 'ask' || !renderer.requestMotion || reducedMotion.matches
-            || (globalThis.__cardLab?.gyro ?? 1) <= 0) return;
-        motionButton = Object.assign(document.createElement('button'), { type: 'button', className: 'motion-access' });
-        motionButton.setAttribute('aria-label', motionLabels[lang]);
-        motionButton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">'
-            + '<g class="motion-phone"><rect x="8.75" y="5" width="6.5" height="14" rx="1.75" transform="rotate(-15 12 12)"/></g>'
-            + '<path d="M5.1 8.6c-1.1 2.2-1.1 4.6 0 6.8M18.9 8.6c1.1 2.2 1.1 4.6 0 6.8"/></svg>';
-        motionButton.addEventListener('click', async () => {
-            motionButton.disabled = true;
-            await renderer?.requestMotion?.();
-            if (renderer?.motionAccess === 'ask') { motionButton.disabled = false; return; }
-            motionButton.classList.remove('is-shown');
-            setTimeout(() => { motionButton?.remove(); motionButton = null; }, 700);
-            schedule();
-        });
-        document.body.append(motionButton);
-        setTimeout(() => {
-            // Permission already given this session: nothing to ask.
-            if (renderer?.motionAccess !== 'ask') { motionButton?.remove(); motionButton = null; return; }
-            motionButton?.classList.add('is-shown');
-        }, 2400);
     }
     function showFallback() {
         root.classList.remove('webgl-ready', 'webgl-loading');

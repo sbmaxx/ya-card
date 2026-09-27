@@ -17,8 +17,6 @@ export const POSES = [
     { name: 'наклон −12°', rx: -12 }, { name: 'наклон +12°', rx: 12 },
     { name: 'наклон −25°', rx: -25 }, { name: 'наклон +25°', rx: 25 },
     { name: 'диагональ ↗', rx: -18, ry: 30 }, { name: 'диагональ ↙', rx: 18, ry: -30 },
-    { name: 'телефон от себя', gyro: [-22, 0] }, { name: 'телефон на себя', gyro: [22, 0] },
-    { name: 'телефон влево', gyro: [0, -22] }, { name: 'телефон вправо', gyro: [0, 22] },
     // Mid hand spin: the plate held part way through a turn over.
     { name: 'вращение 45°', spin: 45 }, { name: 'вращение 70°', spin: 70 }
 ];
@@ -112,7 +110,7 @@ export function measurePoses(renderer, poses = POSES, { cell = 300 } = {}) {
     const saved = {
         rotation: [renderer.rotationX, renderer.rotationY, renderer.rotationZ],
         spin: renderer.spin, flip: [renderer.flipAngle, renderer.flipFrom, renderer.flipTarget, renderer.flipProgress],
-        gyro: { ...renderer.gyro }, hover: renderer.hoverPointer,
+        hover: renderer.hoverPointer,
         light: lab && [lab.manualLight, lab.yaw, lab.pitch]
     };
     // The travelling light at the middle of its path, unless set by hand.
@@ -124,18 +122,12 @@ export function measurePoses(renderer, poses = POSES, { cell = 300 } = {}) {
     const copy = Object.assign(document.createElement('canvas'), { width: canvas.width, height: canvas.height });
     const context = copy.getContext('2d', { willReadFrequently: true });
     const [restX, restY, restZ] = renderer.restPose;
-    const gain = lab ? lab.gyro : 1;
     const results = [];
     let crop = null, sheet = null, sheetContext = null, cellHeight = 0;
     try {
         for (const pose of poses) {
-            const [beta, gamma] = pose.gyro || [0, 0];
-            const g = renderer.gyro;
-            Object.assign(g, { active: Boolean(pose.gyro), beta, gamma, baseBeta: 0, baseGamma: 0, lastMove: 0,
-                x: Math.max(-25, Math.min(25, beta)) * Math.PI / 180, y: Math.max(-25, Math.min(25, gamma)) * Math.PI / 180 });
-            // The card itself, and the lean it takes from the phone's tilt.
-            renderer.rotationX = restX + (pose.rx || 0) * Math.PI / 180 + g.x * gain * .2 * (pose.gyro ? 1 : 0);
-            renderer.rotationY = restY + (pose.ry || 0) * Math.PI / 180 + g.y * gain * .2 * (pose.gyro ? 1 : 0);
+            renderer.rotationX = restX + (pose.rx || 0) * Math.PI / 180;
+            renderer.rotationY = restY + (pose.ry || 0) * Math.PI / 180;
             renderer.rotationZ = renderer.vertical ? 0 : restZ;
             // A spin held by the finger: the angle is taken as given.
             renderer.spin = pose.spin ? { dragging: true, angle: saved.flip[2] + pose.spin * Math.PI / 180, velocity: 0 } : null;
@@ -170,7 +162,6 @@ export function measurePoses(renderer, poses = POSES, { cell = 300 } = {}) {
         [renderer.rotationX, renderer.rotationY, renderer.rotationZ] = saved.rotation;
         renderer.spin = saved.spin;
         [renderer.flipAngle, renderer.flipFrom, renderer.flipTarget, renderer.flipProgress] = saved.flip;
-        Object.assign(renderer.gyro, saved.gyro);
         renderer.hoverPointer = saved.hover;
         if (lab) [lab.manualLight, lab.yaw, lab.pitch] = saved.light;
     }

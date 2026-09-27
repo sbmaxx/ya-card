@@ -49,7 +49,6 @@ export const lab = globalThis.__cardLab = {
     lamps: params.get('lamps') === 'capsule' ? 'capsule' : 'round',
     lightSetup: Object.hasOwn(LIGHT_SETUPS, params.get('lightSetup')) ? params.get('lightSetup') : 'studio',
     idle: number('idle', 1),
-    gyro: number('gyro', 1),
     logoDepth: number('logoDepth', 1),
     nameDepth: number('nameDepth', 1),
     nameScale: number('nameScale', 1.2),

@@ -31,6 +31,8 @@ const CHOICES = [
 const NUMBERS = [
     ['exposure', .4, .01, 1], ['bloom', 0, .01, .3], ['letterGlow', 0, .05, 1],
     ['keyGain', 0, .05, .7], ['keySoft', 0, .01, .05], ['lampSize', .3, .05, 1],
+    // 'gyro' is gone (the phone's tilt was removed); its two digits stay, so
+    // older codes still decode.
     ['idle', 0, .05, 1], ['gyro', 0, .05, 1],
     ['logoDepth', 0, .05, 1], ['nameDepth', 0, .05, 1], ['bodyDepth', 0, .05, 1],
     ['nameScale', .8, .05, 1.2], ['textMute', 0, .02, .3],
