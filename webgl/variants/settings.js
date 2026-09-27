@@ -3,7 +3,7 @@
 // from `globalThis.__cardLab`; the lab panel edits them live.
 import { direction } from './directions.js';
 import { BACKDROPS, KEY_SHAPES, LIGHT_SETUPS } from './renderer.js';
-import { applyPageColours } from './backdrops.js';
+import { applyPageColours, DEFAULT_BACKDROP } from './backdrops.js';
 
 // An exported file carries its settings as a preset and shows no panel.
 export const exported = typeof globalThis.__cardPreset === 'string';
@@ -86,7 +86,7 @@ export const lab = globalThis.__cardLab = {
         return [key, value === 'anod' ? 'anod' : 'enamel'];
     })),
     text: Object.fromEntries(textFields.map(([key]) => [key, params.get(key) || ''])),
-    backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : (direction.backdrop || 'studio'),
+    backdrop: Object.hasOwn(BACKDROPS, params.get('backdrop')) ? params.get('backdrop') : DEFAULT_BACKDROP,
     manualLight: params.get('light') === 'manual',
     yaw: number('yaw', 0),
     pitch: number('pitch', 0)

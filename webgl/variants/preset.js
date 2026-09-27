@@ -11,6 +11,7 @@ const SHAPES = ['edition', 'vcut', 'deboss', 'raised'];
 // [key, options] — one digit each.
 const CHOICES = [
     ['edition', ['steel', 'noir', 'gold', 'aurora']],
+    // Only velvet is left; the others stay listed so old codes keep their positions.
     ['backdrop', ['studio', 'dark', 'velvet', 'stone', 'warm']],
     ['layout', ['classic', 'accent', 'grid']],
     ['relief', ['vcut', 'deboss', 'raised']],

@@ -43,7 +43,7 @@ const homeFont = fontOf(Number(decodePreset(HOME_LOOK).get('font') ?? 0));
 // The homepage's backdrop (the lab opens on it too): its colours are baked into
 // the page, so the first paint, Safari's bars and the loader already match the
 // scene that follows.
-const homeBackdrop = (look => BACKDROPS[look.get('backdrop')] || BACKDROPS[directions[look.get('edition')]?.backdrop] || BACKDROPS.studio)(decodePreset(HOME_LOOK));
+const homeBackdrop = (look => BACKDROPS[look.get('backdrop')] || BACKDROPS[directions[look.get('edition')]?.backdrop] || BACKDROPS.velvet)(decodePreset(HOME_LOOK));
 const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // Minimal loader: a hairline with a travelling glint, a real element so it can
 // fade out while the card fades in. Transform and opacity animate on the

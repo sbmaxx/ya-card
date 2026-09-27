@@ -109,6 +109,12 @@ style.textContent = direction.css + `
   .scene, .card-shadow { transition: transform .35s cubic-bezier(.3,0,.2,1); }
   .lab-sheet-open .scene, .lab-sheet-open .card-shadow { transform: translateY(-21svh) scale(.78); }
 }
+/* Desktop: the panel sits at the right, and the card moves into the space
+   left of it (half the panel's width and margins). */
+@media (min-width: 701px) {
+  .scene, .card-shadow { transition: transform .35s cubic-bezier(.3,0,.2,1); }
+  .lab-sheet-open .scene, .lab-sheet-open .card-shadow { transform: translateX(calc(-1 * (312px + 32px + env(safe-area-inset-right, 0px)) / 2)); }
+}
 `;
 document.head.append(style);
 document.title = `Lab · ${direction.title}`;
@@ -163,9 +169,6 @@ panel.innerHTML = `
   </fieldset>
   <fieldset><legend>Шрифт</legend><div class="segments" data-live="font">
     ${FONTS.map((font, i) => `<button type="button" data-value="${i}" aria-pressed="${i === lab.font}" style="font-family:'${font.family}',sans-serif">${font.title}</button>`).join('')}
-  </div></fieldset>
-  <fieldset><legend>Фон</legend><div class="segments" data-live="backdrop">
-    ${Object.entries(BACKDROPS).map(([id, b]) => `<button type="button" data-value="${id}" aria-pressed="${id === lab.backdrop}">${b.title}</button>`).join('')}
   </div></fieldset>
   <fieldset><legend>Композиция</legend><div class="segments" data-param="layout">
     <button type="button" data-value="classic" aria-pressed="${currentLayout === 'classic'}">Классика</button>
@@ -311,7 +314,6 @@ const writeUrl = () => {
     next.set('layout', currentLayout);
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
-    next.set('backdrop', lab.backdrop);
     for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute', 'bevel']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     // «Not set» stays in the link: left out, the default look would fill it on reload.
@@ -336,19 +338,9 @@ panel.querySelectorAll('.segments[data-param]').forEach(group => group.addEventL
     const button = event.target.closest('button');
     if (button && button.getAttribute('aria-pressed') !== 'true') reloadWith(group.dataset.param, button.dataset.value);
 }));
-// Backdrops are uniforms: they switch live, together with the page colour.
-const applyBackdrop = id => {
-    lab.backdrop = id;
-    const backdrop = BACKDROPS[id];
-    // Page colours before the first frame; the renderer then matches the edges.
-    if (backdrop) applyPageColours(backdrop);
-    panel.querySelectorAll('[data-live="backdrop"] button').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.value === id)));
-};
-panel.querySelector('[data-live="backdrop"]').addEventListener('click', event => {
-    const button = event.target.closest('button');
-    if (button) { applyBackdrop(button.dataset.value); writeUrl(); }
-});
-applyBackdrop(lab.backdrop);
+// The page's colours for the backdrop, before the first frame; the renderer
+// then matches the edges.
+if (BACKDROPS[lab.backdrop]) applyPageColours(BACKDROPS[lab.backdrop]);
 // Text edits rebuild textures after a short pause in typing.
 let textTimer = 0;
 panel.querySelectorAll('.text-fields input').forEach(input => input.addEventListener('input', () => {
@@ -544,7 +536,7 @@ function describeSettings() {
     const lines = [
         'Визитка — настройки стенда',
         `Шрифт: ${FONTS[lab.font]?.title ?? FONTS[0].title}`,
-        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]}, фактура ${n(lab.surface)}, искра ${n(lab.sparkle)} · фон: ${BACKDROPS[lab.backdrop]?.title} · композиция: ${{ accent: 'акцент на имени', grid: 'сетка' }[currentLayout] || 'классика'}, типографика ${lab.typography ? 'тонкая' : 'обычная'}, фаска ${['монета', 'мягкая', 'кромка 45°'][lab.bevel]} · размер карточки: ${n(lab.cardSize)}`,
+        `Материал: ${direction.title} · отделка: ${['шлифовка', 'пескоструй', 'полировка'][lab.plateFinish]}, фактура ${n(lab.surface)}, искра ${n(lab.sparkle)} · композиция: ${{ accent: 'акцент на имени', grid: 'сетка' }[currentLayout] || 'классика'}, типографика ${lab.typography ? 'тонкая' : 'обычная'}, фаска ${['монета', 'мягкая', 'кромка 45°'][lab.bevel]} · размер карточки: ${n(lab.cardSize)}`,
         `Свет: ${LIGHT_SETUPS[lab.lightSetup].title} · блики ${lab.keyShape === 'strip' ? 'вытянутые' : 'круглые'}, размер ${n(lab.lampSize)} · мягкость ${n(lab.keySoft)} · яркость ${n(lab.keyGain)} · облёт ${n(lab.orbit)} · дорожка ${n(lab.strip)} · температура ${n(lab.warmth)}`
             + (lab.manualLight ? ` · стоп-кадр: поворот ${n(lab.yaw)}, высота ${n(lab.pitch)}` : ''),
         `Логотип: ${labels[currentLogoShape].toLowerCase()} · глубина ${n(lab.logoDepth)} · блеск ${n(lab.logoGloss)} · цвет: ${colour('logo')} · приглушение ${n(lab.logoMute)}`,

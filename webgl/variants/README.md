@@ -9,10 +9,9 @@ saves it as a standalone production file. The production homepage
 - Editions (`?edition=`): `steel` — linear brushed steel, diamond V-cut logo, black
   enamel name; `noir` — black PVD, laser ablation to bare steel; `gold` — brushed
   champagne gold; `aurora` — anodised titanium, thin-film interference.
-- Backdrops (`?backdrop=`, `backdrops.js`): `studio` (graphite), `dark` (dark graphite),
-  `velvet` (a dark room with one warm spotlight), `stone` (honed dark stone) and `warm`
-  (warm graphite). The build bakes the homepage backdrop's page colours, Safari's bar
-  colour and the loader's light into the page, so the first paint already matches.
+- Backdrop (`backdrops.js`): `velvet` only — a dark room with one warm spotlight.
+  The build bakes its page colours, Safari's bar colour and the loader's light into
+  the page, so the first paint already matches.
 - The old gallery (`/variants/`) and edition pages (`/variants/steel/` …) are HTML
   redirects to the lab.
 

@@ -6,7 +6,7 @@ const cardFont = () => fontOf(globalThis.__cardLab?.font ?? 0).family;
 export const loadCardFont = () => Promise.all([400, 500, 600].map(weight => document.fonts.load(`${weight} 16px "${cardFont()}"`)));
 import { createReliefMap } from './relief.js';
 import { direction } from './directions.js';
-import { BACKDROPS } from './backdrops.js';
+import { BACKDROPS, DEFAULT_BACKDROP } from './backdrops.js';
 
 // Studio renderer for the material editions. WebGL 2, linear HDR shading,
 // an analytic studio environment (no textures, no requests), Khronos PBR
@@ -260,7 +260,7 @@ vec3 toSRGB(vec3 c) {
 // Backdrops (backdrops.js): the room behind the card and the page's own colours.
 export { BACKDROPS };
 const requestedBackdrop = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('backdrop');
-export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : (direction.backdrop || 'studio');
+export const defaultBackdrop = Object.hasOwn(BACKDROPS, requestedBackdrop) ? requestedBackdrop : DEFAULT_BACKDROP;
 
 const vertexSource = `#version 300 es
 layout(location = 0) in vec3 aPosition;
@@ -1085,10 +1085,8 @@ uniform vec3 uPoolColor;
 uniform float uGrain;
 uniform float uShadowStrength;
 uniform float uShadowFade;
-// How tight the key's pool of light on the wall is (2.6 — broad), and how much
-// of the honed stone the wall shows (0 — a plain wall).
+// How tight the key's pool of light on the wall is (2.6 — broad).
 uniform float uPoolFalloff;
-uniform float uStone;
 // Touch screens: the scene melts into flat edge colours that Safari extends
 // under its status bar and toolbar (fractions of height; 0 disables).
 uniform vec4 uEdgeFade;
@@ -1124,30 +1122,11 @@ vec3 wallColor(vec2 uv) {
     return uWall + uPoolColor * breath * exp(-dot(d, d) * uPoolFalloff);
 }
 
-// Value noise and its sum over octaves, for the stone.
-float vnoise(vec2 p) {
-    vec2 i = floor(p), f = fract(p);
-    vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-float stoneFbm(vec2 p) {
-    float sum = 0.0, amplitude = .5;
-    mat2 turn = mat2(.8, .6, -.6, .8);
-    for (int i = 0; i < 5; i++) { sum += amplitude * vnoise(p); p = turn * p * 2.03 + 17.0; amplitude *= .5; }
-    return sum;
-}
-
 void main() {
     vec2 p = screenUnits(vUV) - screenUnits(vec2(.5));
     float tall = tallness();
     // Cyclorama: the wall curves softly into a darker floor below the card.
     vec3 wall = wallColor(vUV);
-    if (uStone > 0.0) {
-        vec2 q = screenUnits(vUV);
-        float cloud = stoneFbm(q * 2.2 + 3.1) - .47;
-        float grit = vnoise(q * 90.0) - .5;
-        wall *= 1.0 + uStone * (cloud * .5 + grit * .07);
-    }
     // No floor on an upright phone: the dark frame is the same above and below.
     vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y) * (1.0 - tall));
     color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, mix(1.0, .62, tall))));
@@ -1593,7 +1572,7 @@ export class CardRenderer {
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime', 'uPoolFalloff', 'uStone']);
+            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime', 'uPoolFalloff']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
@@ -2260,7 +2239,6 @@ export class CardRenderer {
             gl.uniform3f(u.uFloor, ...backdrop.floor);
             gl.uniform3f(u.uPoolColor, ...backdrop.pool);
             gl.uniform1f(u.uPoolFalloff, backdrop.poolFalloff ?? 2.6);
-            gl.uniform1f(u.uStone, backdrop.stone ?? 0);
             gl.uniform1f(u.uGrain, backdrop.grain);
             gl.uniform1f(u.uShadowStrength, backdrop.shadow);
             gl.uniform1f(u.uTime, reduced ? 0 : this.time);
