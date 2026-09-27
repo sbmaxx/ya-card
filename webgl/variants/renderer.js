@@ -727,16 +727,34 @@ void main() {
 
     if (uEdge > .5) {
         // Diamond-cut chamfer: a narrow mirror facet. The side wall is satin.
-        float chamfer = smoothstep(.25, .45, abs(vFacet)) * (1.0 - smoothstep(.95, .99, abs(vFacet)));
-        vec3 cut = metal(CHAMFER_F0, n, v, ${f(look.chamfer.rough)});
-        // The chamfer mirrors the ring of directions around the card (square to
-        // the view). Lamps cover only parts of it, which left dark gaps at the
-        // rounded corners; a soft, even ring keeps the edge lit all the way round.
-        vec3 around = uRoom * reflect(-v, n);
-        float ring = exp(-around.z * around.z * 6.0) * mix(.55, 1.0, smoothstep(-1.0, 1.0, around.y));
-        cut += fresnel(CHAMFER_F0, max(dot(n, v), 1e-3)) * ring * .8;
-        vec3 wall = metal(SIDE_F0, n, v, ${f(look.side.rough)});
-        color = mix(wall, cut, chamfer);
+        // The chamfer is a pixel or two wide on screen and a near-mirror: shaded
+        // once per pixel, its line of light broke into steps and flickered as
+        // the card turned. It is shaded at 8 points inside the pixel — normal and
+        // facet position carried along their screen derivatives — and averaged.
+        const vec2 EDGE_SS[8] = vec2[8](vec2(.0625, -.1875), vec2(-.0625, .1875), vec2(.3125, .0625), vec2(-.1875, -.3125),
+                                        vec2(-.3125, .3125), vec2(-.4375, -.0625), vec2(.1875, .4375), vec2(.4375, -.4375));
+        vec3 nDx = dFdx(n), nDy = dFdy(n);
+        float facetDx = dFdx(vFacet), facetDy = dFdy(vFacet);
+        // What is left of the normal's turn within a sample: roughness.
+        float edgeRough = sqrt(min((dot(nDx, nDx) + dot(nDy, nDy)) * .6 / 8.0, .2));
+        // The side wall is satin and steady: shaded once.
+        vec3 wall = metal(SIDE_F0, n, v, max(${f(look.side.rough)}, edgeRough));
+        color = vec3(0.0);
+        for (int i = 0; i < 8; i++) {
+            vec2 o = EDGE_SS[i];
+            vec3 ns = normalize(n + nDx * o.x + nDy * o.y);
+            float facet = abs(vFacet + facetDx * o.x + facetDy * o.y);
+            float chamfer = smoothstep(.25, .45, facet) * (1.0 - smoothstep(.95, .99, facet));
+            vec3 cut = metal(CHAMFER_F0, ns, v, max(${f(look.chamfer.rough)}, edgeRough));
+            // The chamfer mirrors the ring of directions around the card (square to
+            // the view). Lamps cover only parts of it, which left dark gaps at the
+            // rounded corners; a soft, even ring keeps the edge lit all the way round.
+            vec3 around = uRoom * reflect(-v, ns);
+            float ring = exp(-around.z * around.z * 6.0) * mix(.55, 1.0, smoothstep(-1.0, 1.0, around.y));
+            cut += fresnel(CHAMFER_F0, max(dot(ns, v), 1e-3)) * ring * .8;
+            color += mix(wall, cut, chamfer);
+        }
+        color /= 8.0;
     } else {
         // The orbiting light swept every letter's bevels at once — edges a pixel
         // or two wide — and lit them in a travelling shimmer, a fine ripple over
