@@ -321,6 +321,10 @@ uniform vec3 uReliefSign;
 uniform float uBevelCurve;
 // The bevel's width in layout px per region (the wordmark's already scaled).
 uniform vec3 uReliefWidth;
+// 1 where the region has a relief (its map holds a distance field).
+uniform vec3 uReliefHas;
+// The stored distance (see relief.js) as the fraction of the bevel's width.
+float reliefT(float b) { return clamp(b * 2.0 - 1.0, 0.0, 1.0); }
 // A raised profile's height (0 at the outline, 1 on top) at a fraction of its
 // width, and its slope there (d height / d fraction).
 float bevelHeight(float t) {
@@ -344,7 +348,8 @@ vec2 reliefSlopeXY(vec4 r, vec3 region, float pixel) {
     float raised = dot(region, step(0.0, uReliefSign));
     float edge = clamp(pixel / max(dot(region, uReliefWidth), 1e-4), .03, 1.0);
     // Height gained per layout px inward: the profile's shape times its full slope.
-    float g = dot(region, uReliefSlope * uReliefSign) * mix(1.0 - smoothstep(1.0 - edge, 1.0, r.b), bevelSlope(r.b, edge), raised);
+    float t = reliefT(r.b);
+    float g = dot(region, uReliefSlope * uReliefSign) * mix(1.0 - smoothstep(1.0 - edge, 1.0, t), bevelSlope(t, edge), raised);
     return -g * dir / sqrt(1.0 + g * g * dot(dir, dir));
 }
 uniform vec4 uLogoTint;
@@ -702,17 +707,17 @@ void main() {
             float stepDepth = 1.0 / layers;
             vec2 uv = vUV;
             float depth = 0.0;
-            float below = 1.0 - bevelHeight(textureLod(uEngraving, uv, 0.0).b);
+            float below = 1.0 - bevelHeight(reliefT(textureLod(uEngraving, uv, 0.0).b));
             for (int i = 0; i < 40; i++) {
                 if (float(i) >= layers || depth >= below) break;
                 uv += stepUV;
                 depth += stepDepth;
-                below = 1.0 - bevelHeight(textureLod(uEngraving, uv, 0.0).b);
+                below = 1.0 - bevelHeight(reliefT(textureLod(uEngraving, uv, 0.0).b));
             }
             // Between the last two samples, where the ray crossed the surface.
             vec2 last = uv - stepUV;
             float after = below - depth;
-            float before = (1.0 - bevelHeight(textureLod(uEngraving, last, 0.0).b)) - (depth - stepDepth);
+            float before = (1.0 - bevelHeight(reliefT(textureLod(uEngraving, last, 0.0).b))) - (depth - stepDepth);
             texUV = depth > 0.0 ? mix(uv, last, clamp(after / (after - before - 1e-5), 0.0, 1.0)) : vUV;
         }
     }` : ''}
@@ -903,13 +908,23 @@ void main() {
             vec2 slopeXY = reliefSlopeXY(reliefS, reliefRegion, footprint * sampleScale) * reliefShown;
             float slope = length(slopeXY);
             vec3 facet = normalize(T * slopeXY.x + B * slopeXY.y + n * sqrt(max(.01, 1.0 - dot(slopeXY, slopeXY))));
-            float depth = reliefS.b;
+            float depth = reliefT(reliefS.b);
+            // The letter's edge from its distance field, antialiased over one
+            // pixel at any zoom — the mask's own edge is a texel wide and went
+            // soft and stepped when the card was magnified. Regions without a
+            // relief keep the mask.
+            float pixelWidth = footprint * sampleScale;
+            float fieldEdge = clamp((reliefS.b * 2.0 - 1.0) * dot(reliefRegion, uReliefWidth) / max(pixelWidth, 1e-4) + .5, 0.0, 1.0);
+            float letterCover = mix(inkS.a, fieldEdge, dot(reliefRegion, uReliefHas));
             float letterRough = sqrt(normalSpread / float(samples));
-            letterSum += max(inkS.a, max(underline, focusStroke));
-            float coverage = max(inkS.a, max(underline, focusStroke));
+
+            float coverage = max(letterCover, max(underline, focusStroke));
+            letterSum += coverage;
             if (coverage <= .001) { shaded += plate; continue; }
-            // The first letter of the wordmark is drawn red-only in the mask.
-            vec3 inkColor = inkS.rgb / max(inkS.a, .001);
+            // The first letter of the wordmark is drawn red-only in the mask. Read
+            // a little blurred, so the colour is known out to the drawn edge.
+            vec4 inkTone = textureLod(uTexture, uvS, max(inkLod, 1.5));
+            vec3 inkColor = inkTone.rgb / max(inkTone.a, .001);
             float firstLetter = smoothstep(.6, .3, inkColor.g);
             // Letters with a colour (a tint or the plate's material), against
             // letters left in the edition's own metal.
@@ -960,7 +975,7 @@ void main() {
                 .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
             // Only through a colour: letters in bare metal are that metal through
             // and through, and a mirror rim on them drew a chrome outline.
-            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * inkS.a * coloured;
+            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * letterCover * coloured;
             lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
             // The wordmark and the name sit back towards the plate as a whole,
             // bevels included: muted letters with bright edges read as outlines.
@@ -985,6 +1000,11 @@ void main() {
         return;
     }
     vec3 display = toSRGB(neutralTonemap(hdr));
+    // Dither to the 8-bit output: the dark plate's slow gradients on velvet
+    // otherwise show as steps of one level. Triangular noise of ±1 level, fixed
+    // to the screen so it does not crawl.
+    ivec2 pixel = ivec2(gl_FragCoord.xy);
+    display += (hashI(pixel.x, pixel.y) + hashI(pixel.x + 7919, pixel.y + 104729) - 1.0) / 255.0;
     outColor = vec4(display * uReveal * uOpacity, uOpacity);
 }`;
 
@@ -1576,7 +1596,7 @@ export class CardRenderer {
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uReveal', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uReliefSlope', 'uReliefSign', 'uBevelCurve', 'uReliefWidth', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uReveal', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uReliefSlope', 'uReliefSign', 'uBevelCurve', 'uReliefWidth', 'uReliefHas', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
@@ -1947,6 +1967,7 @@ export class CardRenderer {
         const regions = [profiles.name, profiles.logo, profiles.text];
         this.reliefSlope = regions.map(profile => profile ? profile.depth / profile.bevel : 0);
         this.reliefWidth = regions.map(profile => profile ? profile.bevel : 1);
+        this.reliefHas = regions.map(profile => profile ? 1 : 0);
         this.reliefSign = regions.map(profile => profile && profile.shape === 'raised' ? 1 : -1);
         this.bevelCurve = regions.find(profile => profile && profile.shape === 'raised')?.curve ?? 0;
         this.engravingTextures = this.surfaces.map(surface => {
@@ -2307,6 +2328,7 @@ export class CardRenderer {
             gl.uniform4f(this.uniforms.uTextRect, ...surface.textRelief);
             gl.uniform1f(this.uniforms.uLogoScale, surface.logoScale);
             gl.uniform3f(this.uniforms.uReliefWidth, this.reliefWidth[0], this.reliefWidth[1] * surface.logoScale, this.reliefWidth[2]);
+            gl.uniform3f(this.uniforms.uReliefHas, ...this.reliefHas);
             // The spun centre sits in empty metal: the arrow of either layout.
             const center = (this.vertical ? plate.centerPortrait : plate.center) || [.5, .5];
             gl.uniform2f(this.uniforms.uBrushCenter, center[0], center[1]);

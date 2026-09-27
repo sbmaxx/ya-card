@@ -5,8 +5,9 @@
 // A map of finished normals put each bevel's highlight on the texel grid —
 // a line thinner than a texel came out as stair-steps; a distance, bilinearly
 // filtered, stays exact between texels, so the highlight follows the outline.
-// RG = the direction in from the outline (unit, texture x/y), B = the fraction
-// of the bevel's width (0 at the outline, 1 from its top on), A = coverage.
+// RG = the direction in from the outline (unit, texture x/y); B = the signed
+// distance in bevel widths, (d / width + 1) / 2: 0 a width outside, .5 on the
+// outline, 1 from the top on — the letter's own antialiased edge; A = coverage.
 //
 // Shapes (see reliefProfiles and the shader's reliefSlope):
 // - `vcut`   — linear walls up to the stroke's centre line: a chiselled V groove.
@@ -19,7 +20,8 @@
 // squares: the antialiased edge places it between texels, along a diagonal or
 // a curve as well as along a straight edge. Exact up to `reach`, the width of
 // the profile: deeper in it is flat, and `reach` stands in for the distance.
-// Outside the outline (the antialiased edge's outer texels) it is negative.
+// Outside the outline it is negative, as far out again: the shader draws the
+// letter's edge from it.
 function outlineDistance(alpha, w, h, stepX, stepY, reach) {
     // Squared while searching, one square root at the end.
     const best = new Float32Array(w * h).fill(reach * reach);
@@ -33,7 +35,6 @@ function outlineDistance(alpha, w, h, stepX, stepY, reach) {
         const y0 = Math.max(0, Math.floor(Math.min(ay, by)) - spanY), y1 = Math.min(h - 1, Math.ceil(Math.max(ay, by)) + spanY);
         for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
             const i = y * w + x;
-            if (!alpha[i]) continue;
             const cx = x * stepX - px, cy = y * stepY - py;
             const t = length2 > 0 ? Math.max(0, Math.min(1, (cx * dx + cy * dy) / length2)) : 0;
             // From the texel to the nearest point of the segment.
@@ -62,10 +63,9 @@ function outlineDistance(alpha, w, h, stepX, stepY, reach) {
     // outside, towards it. None where the profile is flat or at the outline itself.
     const distance = new Float32Array(w * h), dirX = new Float32Array(w * h), dirY = new Float32Array(w * h);
     for (let i = 0; i < distance.length; i++) {
-        if (!alpha[i]) continue;
         const inside = alpha[i] >= 128, d = Math.sqrt(best[i]);
         distance[i] = inside ? d : -d;
-        if (d < reach && d > 1e-6) {
+        if (alpha[i] && d < reach && d > 1e-6) {
             const k = (inside ? -1 : 1) / d;
             dirX[i] = toX[i] * k; dirY[i] = toY[i] * k;
         }
@@ -125,13 +125,13 @@ export function createReliefMap(surface, profiles) {
         for (let i = 0; i < alpha.length; i++) alpha[i] = ink[i * 4 + 3];
         const { distance, dirX, dirY } = outlineDistance(alpha, w, h, stepX, stepY, bevel);
         for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-            const i = y * w + x, a = alpha[i];
-            if (!a) continue;
+            const i = y * w + x;
+            if (distance[i] <= -bevel) continue;
             const out = ((y0 + y) * canvas.width + x0 + x) * 4;
             map[out] = Math.round(128 + dirX[i] * 127);
             map[out + 1] = Math.round(128 + dirY[i] * 127);
-            map[out + 2] = Math.round(Math.max(0, Math.min(1, distance[i] / bevel)) * 255);
-            map[out + 3] = a;
+            map[out + 2] = Math.round(Math.max(0, Math.min(1, (distance[i] / bevel + 1) / 2)) * 255);
+            map[out + 3] = alpha[i];
         }
     }
     return { data: map, width: canvas.width, height: canvas.height };
