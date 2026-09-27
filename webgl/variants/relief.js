@@ -1,24 +1,29 @@
 // Relief maps for the studio editions. Built once per layout from the glyph
-// coverage: the distance to the outline, found to a fraction of a texel from
-// the antialiased edge, shaped into a profile and smoothed before normals are
-// taken. RG = tangent-space normal, B = |height| / depth, A = coverage.
+// coverage, as a distance field: for every texel, how far in from the glyph's
+// outline it lies and in which direction the outline is. The shader turns that
+// into the bevel (the profile's slope at that distance, along that direction).
+// A map of finished normals put each bevel's highlight on the texel grid —
+// a line thinner than a texel came out as stair-steps; a distance, bilinearly
+// filtered, stays exact between texels, so the highlight follows the outline.
+// RG = the direction in from the outline (unit, texture x/y), B = the fraction
+// of the bevel's width (0 at the outline, 1 from its top on), A = coverage.
 //
-// Shapes (heights in layout px):
+// Shapes (see reliefProfiles and the shader's reliefSlope):
 // - `vcut`   — linear walls up to the stroke's centre line: a chiselled V groove.
 // - `deboss` — narrow chamfer down to a flat floor.
-// - `raised` — a rounded shoulder up to a flat, polished top.
+// - `raised` — a shoulder up to a flat top: a coin's quarter round, a soft
+//   curve or a straight 45° edge.
 
-// Distance (layout px) from every covered texel to the glyph outline. The
-// outline is the coverage's 50% contour, by marching squares: the antialiased
-// edge places it between texels, along a diagonal or a curve as well as along
-// a straight edge. Measured to the texel grid's staircase instead, a diagonal
-// or curved stroke rippled its bevel, and a lit shoulder showed the ripple as
-// a row of glints. Exact up to `reach`, the width of the profile: deeper in
-// it is flat, and `reach` stands in for the distance.
+// Distance (layout px) from every texel the glyphs touch to their outline, with
+// the direction to it. The outline is the coverage's 50% contour, by marching
+// squares: the antialiased edge places it between texels, along a diagonal or
+// a curve as well as along a straight edge. Exact up to `reach`, the width of
+// the profile: deeper in it is flat, and `reach` stands in for the distance.
+// Outside the outline (the antialiased edge's outer texels) it is negative.
 function outlineDistance(alpha, w, h, stepX, stepY, reach) {
     // Squared while searching, one square root at the end.
-    const distance = new Float32Array(w * h);
-    for (let i = 0; i < distance.length; i++) distance[i] = alpha[i] >= 128 ? reach * reach : -1;
+    const best = new Float32Array(w * h).fill(reach * reach);
+    const toX = new Float32Array(w * h), toY = new Float32Array(w * h);
     const spanX = Math.ceil(reach / stepX) + 1, spanY = Math.ceil(reach / stepY) + 1;
     // Texel centres at integer coordinates; segment ends in texels.
     const segment = (ax, ay, bx, by) => {
@@ -28,11 +33,12 @@ function outlineDistance(alpha, w, h, stepX, stepY, reach) {
         const y0 = Math.max(0, Math.floor(Math.min(ay, by)) - spanY), y1 = Math.min(h - 1, Math.ceil(Math.max(ay, by)) + spanY);
         for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
             const i = y * w + x;
-            if (alpha[i] < 128) continue;
+            if (!alpha[i]) continue;
             const cx = x * stepX - px, cy = y * stepY - py;
             const t = length2 > 0 ? Math.max(0, Math.min(1, (cx * dx + cy * dy) / length2)) : 0;
-            const ex = cx - dx * t, ey = cy - dy * t, d2 = ex * ex + ey * ey;
-            if (d2 < distance[i]) distance[i] = d2;
+            // From the texel to the nearest point of the segment.
+            const ex = px + dx * t - x * stepX, ey = py + dy * t - y * stepY, d2 = ex * ex + ey * ey;
+            if (d2 < best[i]) { best[i] = d2; toX[i] = ex; toY[i] = ey; }
         }
     };
     const level = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? -.5 : alpha[y * w + x] / 255 - .5);
@@ -52,27 +58,49 @@ function outlineDistance(alpha, w, h, stepX, stepY, reach) {
             else { segment(p[6], p[7], p[0], p[1]); segment(p[2], p[3], p[4], p[5]); }
         }
     }
-    for (let i = 0; i < distance.length; i++) if (distance[i] > 0) distance[i] = Math.sqrt(distance[i]);
-    return distance;
-}
-
-// Separable [1 4 6 4 1] / 16 blur, `passes` times.
-function smooth(values, w, h, passes) {
-    const temp = new Float32Array(values.length);
-    for (let pass = 0; pass < passes; pass++) {
-        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-            const i = y * w + x;
-            const a = values[y * w + Math.max(0, x - 2)], b = values[y * w + Math.max(0, x - 1)];
-            const c = values[y * w + Math.min(w - 1, x + 1)], d = values[y * w + Math.min(w - 1, x + 2)];
-            temp[i] = (a + 4 * b + 6 * values[i] + 4 * c + d) / 16;
-        }
-        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-            const i = y * w + x;
-            const a = temp[Math.max(0, y - 2) * w + x], b = temp[Math.max(0, y - 1) * w + x];
-            const c = temp[Math.min(h - 1, y + 1) * w + x], d = temp[Math.min(h - 1, y + 2) * w + x];
-            values[i] = (a + 4 * b + 6 * temp[i] + 4 * c + d) / 16;
+    // Direction in from the outline: inside, away from the nearest point;
+    // outside, towards it. None where the profile is flat or at the outline itself.
+    const distance = new Float32Array(w * h), dirX = new Float32Array(w * h), dirY = new Float32Array(w * h);
+    for (let i = 0; i < distance.length; i++) {
+        if (!alpha[i]) continue;
+        const inside = alpha[i] >= 128, d = Math.sqrt(best[i]);
+        distance[i] = inside ? d : -d;
+        if (d < reach && d > 1e-6) {
+            const k = (inside ? -1 : 1) / d;
+            dirX[i] = toX[i] * k; dirY[i] = toY[i] * k;
         }
     }
+    // The outline is a polyline, and the direction to its nearest point turns in
+    // steps at each vertex: on a curve the bevel showed fine radial streaks. A
+    // light blur over the glyph's own texels ([1 4 6 4 1], normalised by them)
+    // turns it smoothly; where the directions from two sides of a thin stroke
+    // meet they cancel, and the crest comes out rounded. The distance is left exact.
+    blurInside(dirX, alpha, w, h);
+    blurInside(dirY, alpha, w, h);
+    return { distance, dirX, dirY };
+}
+
+function blurInside(values, alpha, w, h) {
+    const kernel = [1, 4, 6, 4, 1];
+    const pass = (source, target, dx, dy) => {
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+            const i = y * w + x;
+            if (!alpha[i]) { target[i] = 0; continue; }
+            let sum = 0, weight = 0;
+            for (let k = -2; k <= 2; k++) {
+                const xx = x + k * dx, yy = y + k * dy;
+                if (xx < 0 || yy < 0 || xx >= w || yy >= h) continue;
+                const j = yy * w + xx;
+                if (!alpha[j]) continue;
+                sum += source[j] * kernel[k + 2];
+                weight += kernel[k + 2];
+            }
+            target[i] = sum / weight;
+        }
+    };
+    const temp = new Float32Array(values.length);
+    pass(values, temp, 1, 0);
+    pass(temp, values, 0, 1);
 }
 
 export function createReliefMap(surface, profiles) {
@@ -85,10 +113,8 @@ export function createReliefMap(surface, profiles) {
     // Role and contacts only get a relief when a shape was chosen for them.
     if (profiles.text && textRelief) regions.push([textRelief, profiles.text, false]);
     for (const [rect, profile, scaled] of regions) {
-        const scale = scaled ? (surface.logoScale ?? 1) : 1;
-        const depth = profile.depth * scale, bevel = profile.bevel * scale;
-        const sign = profile.shape === 'raised' ? 1 : -1;
-        // A little margin keeps the smoothing kernel away from the crop edge.
+        const bevel = profile.bevel * (scaled ? (surface.logoScale ?? 1) : 1);
+        // A little margin keeps the bilinear and mip filtering away from the crop edge.
         const pad = 6;
         const x0 = Math.max(0, Math.floor(rect[0] * canvas.width) - pad);
         const y0 = Math.max(0, Math.floor(rect[1] * canvas.height) - pad);
@@ -97,32 +123,14 @@ export function createReliefMap(surface, profiles) {
         const ink = context.getImageData(x0, y0, w, h).data;
         const alpha = new Uint8Array(w * h);
         for (let i = 0; i < alpha.length; i++) alpha[i] = ink[i * 4 + 3];
-        const distance = outlineDistance(alpha, w, h, stepX, stepY, bevel);
-        const heights = new Float32Array(w * h);
-        for (let i = 0; i < heights.length; i++) {
-            const t = Math.max(0, Math.min(1, distance[i] / bevel));
-            // Raised letters get a quarter-round shoulder, steep at the plate and
-            // flat on top, as on a struck coin: some part of it always faces a
-            // light, so every letter carries a bright edge and a dark one. A
-            // straight chamfer is one tilt, and glints only at one angle.
-            // The soft profile starts and ends level (smootherstep): no crease at
-            // the plate or the top. The 45° edge is straight.
-            const raised = profile.curve === 1 ? t * t * t * (t * (t * 6 - 15) + 10) : profile.curve === 2 ? t : Math.sin(t * Math.PI / 2);
-            heights[i] = sign * depth * (sign > 0 ? raised : t);
-        }
-        // Two passes round the V crease and the chamfer shoulders just enough
-        // to remove texel steps; one pass is enough for a narrow chamfer.
-        smooth(heights, w, h, profile.shape === 'vcut' ? 2 : 1);
-        for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const { distance, dirX, dirY } = outlineDistance(alpha, w, h, stepX, stepY, bevel);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
             const i = y * w + x, a = alpha[i];
             if (!a) continue;
-            const gx = (heights[i + 1] - heights[i - 1]) / (2 * stepX);
-            const gy = (heights[i + w] - heights[i - w]) / (2 * stepY);
-            const length = Math.hypot(gx, gy, 1);
             const out = ((y0 + y) * canvas.width + x0 + x) * 4;
-            map[out] = Math.round(128 - gx / length * 127);
-            map[out + 1] = Math.round(128 - gy / length * 127);
-            map[out + 2] = Math.round(Math.min(1, Math.abs(heights[i]) / depth) * 255);
+            map[out] = Math.round(128 + dirX[i] * 127);
+            map[out + 1] = Math.round(128 + dirY[i] * 127);
+            map[out + 2] = Math.round(Math.max(0, Math.min(1, distance[i] / bevel)) * 255);
             map[out + 3] = a;
         }
     }
