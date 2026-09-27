@@ -1137,6 +1137,28 @@ async function compilePrograms(gl, pairs) {
     return jobs.map(({ program }) => program);
 }
 
+// Sets a program's uniforms from a frame's values by name (numbers and arrays,
+// see draw), in the form its own declarations ask for. Names the compiler
+// dropped are skipped.
+function uniformSetter(gl, program) {
+    const setters = {};
+    for (let i = 0, count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i < count; i++) {
+        const { name, type } = gl.getActiveUniform(program, i);
+        const location = gl.getUniformLocation(program, name);
+        setters[name.replace(/\[0\]$/, '')] = {
+            [gl.FLOAT]: value => typeof value === 'number' ? gl.uniform1f(location, value) : gl.uniform1fv(location, value),
+            [gl.FLOAT_VEC2]: value => gl.uniform2fv(location, value),
+            [gl.FLOAT_VEC3]: value => gl.uniform3fv(location, value),
+            [gl.FLOAT_VEC4]: value => gl.uniform4fv(location, value),
+            [gl.FLOAT_MAT3]: value => gl.uniformMatrix3fv(location, false, value),
+            [gl.FLOAT_MAT4]: value => gl.uniformMatrix4fv(location, false, value),
+            [gl.INT]: value => gl.uniform1i(location, value),
+            [gl.SAMPLER_2D]: value => gl.uniform1i(location, value)
+        }[type];
+    }
+    return values => { for (const name in values) setters[name]?.(values[name]); };
+}
+
 // The card's silhouette projected from the key light onto the backdrop plane.
 const shadowVertex = `#version 300 es
 layout(location = 0) in vec3 aPosition;
@@ -1640,43 +1662,36 @@ export class CardRenderer {
                 .then(result => { performance.mark('card:compiled'); return result; }),
             loadCardFont().catch(() => {})
         ]);
-        const renderer = new CardRenderer(canvas, gl, images, programs);
-        renderer.resize();
-        renderer.warmUp();
-        await renderer.settle();
+        return new CardRenderer(canvas, gl, images, programs).start();
+    }
+
+    // Shared by both backends once the renderer exists: warm up, settle, hold.
+    async start() {
+        this.resize();
+        await this.warmUp();
+        await this.settle();
         // A deliberate pause: the loader holds for a moment even on fast devices,
         // then hands over to the intro.
         const hold = 1400 - performance.now();
         if (hold > 0) await new Promise(resolve => setTimeout(resolve, hold));
         performance.mark('card:ready');
-        return renderer;
+        return this;
     }
 
+    // `gl` and `programs` are the WebGL backend's; the WebGPU one (gpu.js)
+    // passes its own device and pipelines and draws the same frame.
     constructor(canvas, gl, images, programs) {
         this.canvas = canvas;
         this.gl = gl;
         this.halfThickness = HALF_THICKNESS;
         this.images = images;
-        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
         if (globalThis.__cardLab) globalThis.__cardRenderer = this;
-        const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
-        this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
-        this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime', 'uPoolFalloff', 'uOutput']);
-        this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
-        this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uReveal', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uReliefSlope', 'uReliefSign', 'uBevelCurve', 'uReliefWidth', 'uReliefHas', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle', 'uOutput']
-            .map(name => [name, gl.getUniformLocation(this.program, name)]));
-        this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
-        this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
-            wide: gl.getUniformLocation(this.compositeProgram, 'uWide'), strength: gl.getUniformLocation(this.compositeProgram, 'uStrength'),
-            space: gl.getUniformLocation(this.compositeProgram, 'uGlowSpace') };
+        // The frame's shader inputs by uniform name, worked out in draw() and
+        // handed to whichever backend draws it.
+        this.cardParams = {};
+        this.backdropParams = {};
         this.output = [0, 0, 1];
-        this.bufferStorage = null;
-        this.screenArray = gl.createVertexArray();
-        this.buffers = [];
-        this.arrays = [];
         this.textures = [];
         this.engravingTextures = [];
         this.targets = [];
@@ -1709,9 +1724,33 @@ export class CardRenderer {
         this.intro = matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 0;
         this.introTime = 0;
         this.setupMotion();
+        this.setupGraphics(programs);
+    }
+
+    setupGraphics(programs) {
+        const gl = this.gl;
+        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
+        this.setCardUniforms = uniformSetter(gl, this.program);
+        this.setBackdropUniforms = uniformSetter(gl, this.backdropProgram);
+        this.shadowUniforms = Object.fromEntries(['uModel', 'uProjection', 'uLight'].map(name => [name, gl.getUniformLocation(this.shadowProgram, name)]));
+        this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
+        this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
+        this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
+            wide: gl.getUniformLocation(this.compositeProgram, 'uWide'), strength: gl.getUniformLocation(this.compositeProgram, 'uStrength'),
+            space: gl.getUniformLocation(this.compositeProgram, 'uGlowSpace') };
+        this.bufferStorage = null;
+        this.screenArray = gl.createVertexArray();
+        this.buffers = [];
+        this.arrays = [];
+        this.maxTextureSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
         this.anisotropy = gl.getExtension('EXT_texture_filter_anisotropic');
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.CULL_FACE);
+    }
+
+    // Wait until the GPU has drawn what was sent (a promise on WebGPU).
+    finish() {
+        this.gl.readPixels(0, 0, 1, 1, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array(4));
     }
 
     // Phone orientation: the room stays put while the phone turns, exactly as a
@@ -1761,22 +1800,22 @@ export class CardRenderer {
     // pipeline for both faces while the canvas is still hidden, then wait for
     // the GPU, so the intro starts on warm, full-rate frames.
     warmUp() {
-        const gl = this.gl;
         for (const flipped of [false, true]) {
             this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 });
         }
         this.flipAngle = this.flipFrom = this.flipTarget = 0;
         this.spin = null;
         this.flipProgress = 1;
-        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+        const done = this.finish();
         performance.mark('card:warm');
+        return done;
     }
 
     // Keep rendering hidden frames until their cost stops falling: drivers finish
     // deferred compilation, the GPU clocks up and uploads complete. Only then is
     // the scene shown and the intro clock started. The loader covers this time.
     async settle(minimum = 1000, limit = 4000) {
-        const gl = this.gl, probe = new Uint8Array(4), intervals = [];
+        const intervals = [];
         const start = performance.now();
         let previous = start, frames = 0;
         const median = values => [...values].sort((a, b) => a - b)[values.length >> 1];
@@ -1788,7 +1827,7 @@ export class CardRenderer {
             const flipped = frames % 2 === 1 && frames < 6;
             this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 });
             // The first frames wait for the GPU so deferred work cannot hide.
-            if (frames < 3) gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+            if (frames < 3) await this.finish();
             frames++;
             // The first finished frame is the studio the intro opens on, the plate
             // still at zero opacity: the loader can stand on it instead of on a
@@ -1807,22 +1846,22 @@ export class CardRenderer {
         // inside a 60 fps budget falls back to 2×. Timed by a burst ended with a
         // read-back, not by frame intervals: iOS in Low Power Mode holds those at
         // 30 fps whatever the GPU could do.
-        const burst = () => {
-            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+        const burst = async () => {
+            await this.finish();
             const from = performance.now();
             for (let i = 0; i < 6; i++) this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped: false, animate: false, reduced: true, delta: 1 / 60 });
-            gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, probe);
+            await this.finish();
             return (performance.now() - from) / 6;
         };
         const ratio = () => Math.min(devicePixelRatio || 1, this.pixelRatioCap);
-        let cost = burst();
+        let cost = await burst();
         // A burst can catch the GPU still busy with the page's own start-up work:
         // only a device that is slow every time falls back.
-        for (let retry = 0; retry < 2 && ratio() > 2 && cost > 12; retry++) cost = Math.min(cost, burst());
+        for (let retry = 0; retry < 2 && ratio() > 2 && cost > 12; retry++) cost = Math.min(cost, await burst());
         if (ratio() > 2 && cost > 12) {
             this.pixelRatioCap = 2;
             this.resize();
-            cost = burst();
+            cost = await burst();
         }
         this.flipAngle = this.flipFrom = this.flipTarget = 0;
         this.spin = null;
@@ -1833,7 +1872,6 @@ export class CardRenderer {
     }
 
     resize() {
-        const gl = this.gl;
         // Layout size, not the transformed screen rect: a CSS transform on the
         // scene (the lab's mobile sheet) must not change the render resolution.
         const rect = { width: this.canvas.clientWidth, height: this.canvas.clientHeight };
@@ -1937,10 +1975,10 @@ export class CardRenderer {
         this.targets = [make(width, height, true), make(width, height), make(w8, h8), make(w8, h8), make(width, height), make(width, height)];
     }
 
-    // Setup lamps as uniform arrays; re-sent only when the setup or key changes.
+    // Setup lamps as uniform arrays; worked out only when the setup or key changes.
     // `size` scales every lamp; the light it emits (area × intensity) stays the same.
     uploadLights(setup, keyShape, keyGain, size) {
-        const { gl } = this, u = this.uniforms;
+        const c = this.cardParams;
         const warmth = globalThis.__cardLab?.warmth ?? 0;
         const signature = `${setup.title}|${keyShape.title}|${keyGain}|${size}|${warmth}`;
         const toned = color => color === 'fill' ? tinted3(toneOf(color), coolTint(warmth))
@@ -1948,19 +1986,19 @@ export class CardRenderer {
         if (this.lightSignature === signature) return;
         this.lightSignature = signature;
         const key = panel(setup.key.c, keyShape.roll, keyShape.size, [0, 0, 0]);
-        gl.uniform3f(u.uKeyCenter, ...key.c);
-        gl.uniform3f(u.uKeyRight, ...key.right);
-        gl.uniform3f(u.uKeyUp, ...key.up);
-        gl.uniform3fv(u.uKeyColor, scale(toned(setup.key.color), setup.key.power));
+        c.uKeyCenter = key.c;
+        c.uKeyRight = key.right;
+        c.uKeyUp = key.up;
+        c.uKeyColor = scale(toned(setup.key.color), setup.key.power);
         const count = Math.min(MAX_LIGHTS, setup.lights.length);
         const pack = read => new Float32Array(setup.lights.slice(0, count).flatMap(read));
-        gl.uniform1i(u.uLightCount, count);
-        gl.uniform3fv(u.uLightCenter, pack((_, i) => setup.lamps[i].c));
-        gl.uniform3fv(u.uLightRight, pack((_, i) => setup.lamps[i].right));
-        gl.uniform3fv(u.uLightUp, pack((_, i) => setup.lamps[i].up));
-        gl.uniform3fv(u.uLightShape, pack(light => [...scale(light.size, size), light.shape === 'rect' ? 0 : -1]));
-        gl.uniform3fv(u.uLightColor, pack(light => scale(toned(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2)));
-        gl.uniform1fv(u.uLightFace, pack((light, i) => [light.face ?? faceSees(setup.lamps[i].c)]));
+        c.uLightCount = count;
+        c.uLightCenter = pack((_, i) => setup.lamps[i].c);
+        c.uLightRight = pack((_, i) => setup.lamps[i].right);
+        c.uLightUp = pack((_, i) => setup.lamps[i].up);
+        c.uLightShape = pack(light => [...scale(light.size, size), light.shape === 'rect' ? 0 : -1]);
+        c.uLightColor = pack(light => scale(toned(light.color), light.power * (light.wrap ? keyGain : 1) / size ** 2));
+        c.uLightFace = pack((light, i) => [light.face ?? faceSees(setup.lamps[i].c)]);
     }
 
     // Touch screens: the backdrop sits in a fixed dark frame. The safe areas
@@ -2012,17 +2050,24 @@ export class CardRenderer {
     }
 
     rebuild(vertical) {
-        const gl = this.gl;
-        this.buffers.forEach(buffer => gl.deleteBuffer(buffer));
-        this.arrays.forEach(array => gl.deleteVertexArray(array));
-        this.textures.forEach(texture => gl.deleteTexture(texture));
-        this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
+        this.deleteTextures(this.textures);
         this.vertical = vertical;
         this.width = vertical ? 4.235 * 300 / portraitHeight : 4.235;
         this.height = vertical ? 4.235 : 2.333;
         this.outline = roundedOutline(this.width, this.height, vertical);
         const meshes = geometry(this.width, this.height, vertical);
         this.counts = meshes.map(mesh => mesh.length / 8);
+        this.uploadMeshes(meshes);
+        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], this.maxTextureSize));
+        this.textures = this.surfaces.map(({ canvas }) => this.uploadTexture(canvas));
+        this.buildRelief();
+    }
+
+    // Face, back and rim: position, normal and UV, 32 bytes a vertex.
+    uploadMeshes(meshes) {
+        const gl = this.gl;
+        this.buffers.forEach(buffer => gl.deleteBuffer(buffer));
+        this.arrays.forEach(array => gl.deleteVertexArray(array));
         this.buffers = [];
         this.arrays = meshes.map(mesh => {
             const array = gl.createVertexArray();
@@ -2038,25 +2083,27 @@ export class CardRenderer {
             return array;
         });
         gl.bindVertexArray(null);
-        const maxSize = gl.getParameter(gl.MAX_TEXTURE_SIZE);
-        this.surfaces = ['ru', 'en'].map((lang, i) => textureCanvas(lang, vertical, this.images[i], maxSize));
-        const upload = (source, width, height) => {
-            const texture = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texture);
-            if (width) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
-            else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-            gl.generateMipmap(gl.TEXTURE_2D);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-            if (this.anisotropy) gl.texParameterf(gl.TEXTURE_2D, this.anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
-                Math.min(8, gl.getParameter(this.anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
-            return texture;
-        };
-        this.textures = this.surfaces.map(({ canvas }) => upload(canvas));
-        this.upload = upload;
-        this.buildRelief();
+    }
+
+    // A mipmapped RGBA texture from a canvas, or from bytes of the given size.
+    uploadTexture(source, width, height) {
+        const gl = this.gl;
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        if (width) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        if (this.anisotropy) gl.texParameterf(gl.TEXTURE_2D, this.anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
+            Math.min(8, gl.getParameter(this.anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+        return texture;
+    }
+
+    deleteTextures(textures) {
+        textures.forEach(texture => this.gl.deleteTexture(texture));
     }
 
     // Card text changed on the demo stand: redraw textures, relief and links.
@@ -2066,8 +2113,7 @@ export class CardRenderer {
 
     // Relief maps only; the demo stand calls this when a depth slider moves.
     buildRelief() {
-        const gl = this.gl;
-        this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
+        this.deleteTextures(this.engravingTextures);
         const profiles = reliefProfiles();
         this.raisedHeight = [profiles.name.shape === 'raised' ? profiles.name.depth : 0,
             profiles.logo.shape === 'raised' ? profiles.logo.depth : 0,
@@ -2081,12 +2127,11 @@ export class CardRenderer {
         this.bevelCurve = regions.find(profile => profile && profile.shape === 'raised')?.curve ?? 0;
         this.engravingTextures = this.surfaces.map(surface => {
             const relief = createReliefMap(surface, profiles);
-            return this.upload(relief.data, relief.width, relief.height);
+            return this.uploadTexture(relief.data, relief.width, relief.height);
         });
     }
 
     draw({ rx, ry, rz = 0, zoom, dragging = false, flipped, animate, idle = true, freezeTilt = false, freezeHover = false, focusLink = null, reduced, delta }) {
-        const gl = this.gl;
         const dt = Math.min(delta, 0.05);
         if (animate) this.time += dt;
         if (animate && this.intro < 1) {
@@ -2230,46 +2275,47 @@ export class CardRenderer {
         this.ambientOpacity = .62 * (1 + Math.sin(lightPhase + .4) * .04) * (.55 + .45 * introFade);
         this.ambientShift = [Math.sin(lightPhase) * 3 - introLight * 6 * variation.introSide, -Math.sin(lightPhase + .7) * 2];
 
-        gl.useProgram(this.program);
-        gl.uniformMatrix4fv(this.uniforms.uModel, false, this.model);
-        gl.uniformMatrix4fv(this.uniforms.uProjection, false, this.projection);
-        gl.uniformMatrix3fv(this.uniforms.uRoom, false, this.room);
-        gl.uniform1f(this.uniforms.uExposure, look.studio.exposure * (lab ? lab.exposure : 1));
+        // The frame's shader inputs (see cardParams).
+        const c = this.cardParams;
+        c.uModel = this.model;
+        c.uProjection = this.projection;
+        c.uRoom = this.room;
+        c.uExposure = look.studio.exposure * (lab ? lab.exposure : 1);
         this.applyOutput();
-        gl.uniform3f(this.uniforms.uOutput, ...this.output);
-        gl.uniform3f(this.uniforms.uKeyDirection, ...this.keyDirection);
+        c.uOutput = this.output;
+        c.uKeyDirection = this.keyDirection;
         // The plate is solid within a third of a second and lit over the
         // intro's fade: it comes out of the dark as a black shape the light
         // finds, not a translucent ghost of itself over the studio.
-        gl.uniform1f(this.uniforms.uOpacity, this.intro >= 1 ? 1 : ease(clamp01(this.introTime / .3)));
-        gl.uniform1f(this.uniforms.uReveal, introFade);
+        c.uOpacity = this.intro >= 1 ? 1 : ease(clamp01(this.introTime / .3));
+        c.uReveal = introFade;
         const backdrop = BACKDROPS[(lab && lab.backdrop) || defaultBackdrop] || null;
         this.backdrop = backdrop;
-        gl.uniform1f(this.uniforms.uRoomBase, backdrop ? backdrop.roomBase : 0);
-        gl.uniform1f(this.uniforms.uBounce, (backdrop ? backdrop.bounce : 1) * setup.bounce);
+        c.uRoomBase = backdrop ? backdrop.roomBase : 0;
+        c.uBounce = (backdrop ? backdrop.bounce : 1) * setup.bounce;
         const keyShape = KEY_SHAPES[lab ? lab.keyShape : direction.keyShape] || KEY_SHAPES.round;
-        gl.uniform1f(this.uniforms.uRoundLights, (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1);
+        c.uRoundLights = (lab ? lab.lamps : (direction.lamps || 'round')) === 'capsule' ? 0 : 1;
         const keyGain = (lab ? lab.keyGain : (direction.keyGain ?? .7)) * keyShape.gain;
         const lampSize = lab ? lab.lampSize : (direction.lampSize ?? 1);
-        gl.uniform1f(this.uniforms.uKeyGain, keyGain / lampSize ** 2);
+        c.uKeyGain = keyGain / lampSize ** 2;
         this.uploadLights(setup, keyShape, keyGain, lampSize);
         // The back light circles the card square to the view, once in ~7 s.
         const orbitAngle = this.time * Math.PI * 2 / 7 + variation.lightPhase;
         const back = panel([Math.cos(orbitAngle), Math.sin(orbitAngle) * .8, .05], 0, [.2, .2], [0, 0, 0]);
-        gl.uniform3f(this.uniforms.uOrbitCenter, ...back.c);
-        gl.uniform3f(this.uniforms.uOrbitRight, ...back.right);
-        gl.uniform3f(this.uniforms.uOrbitUp, ...back.up);
+        c.uOrbitCenter = back.c;
+        c.uOrbitRight = back.right;
+        c.uOrbitUp = back.up;
         const warmth = lab ? lab.warmth : 0;
-        gl.uniform3fv(this.uniforms.uOrbitColor, scale(tinted3(toneOf('key'), coolTint(warmth)), 22 * this.orbit * this.orbit));
-        gl.uniform3fv(this.uniforms.uFillTint, coolTint(warmth));
-        gl.uniform3fv(this.uniforms.uStrip, scale(tinted3(toneOf('key'), warmTint(warmth)), STRIP_POWER * (lab ? lab.strip : 0)));
-        gl.uniform2f(this.uniforms.uKeySize, ...scale(keyShape.size, lampSize));
-        gl.uniform1f(this.uniforms.uKeyRadius, keyShape.radius * lampSize);
-        gl.uniform1f(this.uniforms.uKeySoft, lab ? lab.keySoft : (direction.keySoft ?? .05));
-        gl.uniform3f(this.uniforms.uRaisedHeight, ...this.raisedHeight);
-        gl.uniform3f(this.uniforms.uReliefSlope, ...this.reliefSlope);
-        gl.uniform3f(this.uniforms.uReliefSign, ...this.reliefSign);
-        gl.uniform1f(this.uniforms.uBevelCurve, this.bevelCurve);
+        c.uOrbitColor = scale(tinted3(toneOf('key'), coolTint(warmth)), 22 * this.orbit * this.orbit);
+        c.uFillTint = coolTint(warmth);
+        c.uStrip = scale(tinted3(toneOf('key'), warmTint(warmth)), STRIP_POWER * (lab ? lab.strip : 0));
+        c.uKeySize = scale(keyShape.size, lampSize);
+        c.uKeyRadius = keyShape.radius * lampSize;
+        c.uKeySoft = lab ? lab.keySoft : (direction.keySoft ?? .05);
+        c.uRaisedHeight = this.raisedHeight;
+        c.uReliefSlope = this.reliefSlope;
+        c.uReliefSign = this.reliefSign;
+        c.uBevelCurve = this.bevelCurve;
         // Alpha: 0 — the process's own metal, 1 — a colour, 2 — the plate's material.
         const tintOf = hex => {
             if (!hex) return [0, 0, 0, 0];
@@ -2279,20 +2325,20 @@ export class CardRenderer {
         };
         const logoTint = lab ? lab.logoTint : direction.logoTint;
         const firstTint = lab ? lab.logoFirstTint : (direction.logoFirstTint ?? 'same');
-        gl.uniform4f(this.uniforms.uLogoTint, ...tintOf(logoTint));
+        c.uLogoTint = tintOf(logoTint);
         // `same` follows the rest of the wordmark; '' is bare metal.
-        gl.uniform4f(this.uniforms.uLogoFirstTint, ...tintOf(firstTint === 'same' ? logoTint : firstTint));
-        gl.uniform4f(this.uniforms.uNameTint, ...tintOf(lab ? lab.nameTint : direction.nameTint));
-        gl.uniform4f(this.uniforms.uBodyTint, ...tintOf(lab ? lab.bodyTint : direction.bodyTint));
+        c.uLogoFirstTint = tintOf(firstTint === 'same' ? logoTint : firstTint);
+        c.uNameTint = tintOf(lab ? lab.nameTint : direction.nameTint);
+        c.uBodyTint = tintOf(lab ? lab.bodyTint : direction.bodyTint);
         const finishes = lab ? lab.finish : (direction.finish || {});
-        gl.uniform4f(this.uniforms.uTintFinish, ...['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0));
-        gl.uniform1f(this.uniforms.uTextMute, lab ? lab.textMute : (direction.textMute ?? .3));
-        gl.uniform2f(this.uniforms.uMute, lab ? lab.logoMute : 0, lab ? lab.nameMute : 0);
-        gl.uniform1f(this.uniforms.uLetterGlow, lab ? lab.letterGlow : (direction.letterGlow ?? 1));
-        gl.uniform4f(this.uniforms.uTintAmount, ...(lab ? ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - lab[`${key}Sheer`]) : [1, 1, 1, 1]));
-        gl.uniform3f(this.uniforms.uGloss, ...(lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1]));
-        gl.uniform1f(this.uniforms.uFinish, lab ? lab.plateFinish : 0);
-        gl.uniform1f(this.uniforms.uSurface, lab ? lab.surface : 1);
+        c.uTintFinish = ['logoFirst', 'logo', 'name', 'body'].map(key => finishes[key] === 'anod' ? 1 : 0);
+        c.uTextMute = lab ? lab.textMute : (direction.textMute ?? .3);
+        c.uMute = [lab ? lab.logoMute : 0, lab ? lab.nameMute : 0];
+        c.uLetterGlow = lab ? lab.letterGlow : (direction.letterGlow ?? 1);
+        c.uTintAmount = lab ? ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - lab[`${key}Sheer`]) : [1, 1, 1, 1];
+        c.uGloss = lab ? [lab.logoGloss, lab.nameGloss, lab.bodyGloss] : [1, 1, 1];
+        c.uFinish = lab ? lab.plateFinish : 0;
+        c.uSurface = lab ? lab.surface : 1;
         // A glint is a point of light far smaller than a pixel, drawn as about
         // one. On a Retina screen that pixel is at the edge of sight and the
         // glints read as fine glitter; a standard-density pixel is two to three
@@ -2300,9 +2346,62 @@ export class CardRenderer {
         // glint's light is the same on any screen: over a larger pixel it is
         // dimmer, by the pixel's area against a Retina one.
         const density = Math.min(1, (this.canvas.width / this.viewportWidth / 2) ** 2);
-        gl.uniform1f(this.uniforms.uSparkle, (lab ? lab.sparkle : 0) * density);
-        gl.uniform1i(this.uniforms.uTexture, 0);
-        gl.uniform1i(this.uniforms.uEngraving, 1);
+        c.uSparkle = (lab ? lab.sparkle : 0) * density;
+        c.uTexture = 0;
+        c.uEngraving = 1;
+        this.bloomStrength = lab ? lab.bloom : .3;
+        if (backdrop) {
+            this.applyEdges(backdrop);
+            const edge = this.edges || { fade: [0, 0, 0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
+            // The pool sits behind the card, offset towards the key light.
+            const k = this.keyDirection;
+            Object.assign(this.backdropParams, {
+                uShadow: 0, uResolution: [this.canvas.width, this.canvas.height],
+                uWall: backdrop.wall, uFloor: backdrop.floor, uPoolColor: backdrop.pool, uPoolFalloff: backdrop.poolFalloff ?? 2.6,
+                uGrain: backdrop.grain, uShadowStrength: backdrop.shadow, uTime: reduced ? 0 : this.time,
+                uEdgeFade: edge.fade, uEdgeTop: edge.top, uEdgeBottom: edge.bottom,
+                uPool: [.5 + k[0] * .45, .5 + k[1] * .40], uShadowFade: shadowFade, uOutput: this.output
+            });
+        }
+        this.render(backdrop, focusLink);
+
+        this.matchSafeAreas(backdrop);
+        return this.intro < 1 || this.flipProgress < 1 || Boolean(this.spin) || Math.abs(targetX - this.rotationX) + Math.abs(targetY - this.rotationY)
+            + Math.abs(zoom - this.zoom) + Math.abs(this.zoomVelocity)
+            + Math.abs(targetZ - this.rotationZ) + Math.abs(this.velocityZ)
+            + Math.abs(this.velocityX) + Math.abs(this.velocityY) > .0005;
+    }
+
+    // One face's shader inputs: 0 the front, 1 the back, 2 the rim.
+    faceParams(i, focusLink) {
+        const side = i === 1 ? 1 : 0, surface = this.surfaces[side];
+        const hover = this.hoveredLink;
+        return {
+            uEdge: i === 2 ? 1 : 0,
+            uUVBasis: [i === 1 && this.vertical ? -1 : 1, i === 1 && !this.vertical ? 1 : -1],
+            uLayoutSize: [surface.width, surface.height],
+            uLogoRect: surface.logoRelief,
+            uTitleRect: surface.titleRelief,
+            uTextRect: surface.textRelief,
+            uLogoScale: surface.logoScale,
+            uReliefWidth: [this.reliefWidth[0], this.reliefWidth[1] * surface.logoScale, this.reliefWidth[2]],
+            uReliefHas: this.reliefHas,
+            // The spun centre sits in empty metal: the arrow of either layout.
+            uBrushCenter: (this.vertical ? plate.centerPortrait : plate.center) || [.5, .5],
+            uHoverRect: hover && hover.side === i && hover.underlineY != null
+                ? [hover.x / surface.width, hover.underlineY / surface.height, (hover.x + hover.width) / surface.width, (hover.underlineY + 1) / surface.height]
+                : [-2, -2, -1, -1],
+            uFocusRect: focusLink && focusLink.side === i
+                ? [focusLink.x / surface.width, focusLink.y / surface.height, (focusLink.x + focusLink.width) / surface.width, (focusLink.y + focusLink.height) / surface.height]
+                : [-2, -2, -1, -1]
+        };
+    }
+
+    // The frame worked out in draw(), drawn with WebGL.
+    render(backdrop, focusLink) {
+        const gl = this.gl;
+        gl.useProgram(this.program);
+        this.setCardUniforms(this.cardParams);
 
         // 1. Highlights above white at quarter resolution.
         const [bright, blurA, wideA, wideB, shadowA, shadowB] = this.targets;
@@ -2360,30 +2459,11 @@ export class CardRenderer {
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         if (backdrop) {
-            const u = this.backdropUniforms;
             gl.useProgram(this.backdropProgram);
             gl.bindVertexArray(this.screenArray);
             gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, shadowA.texture);
-            gl.uniform1i(u.uShadow, 0);
-            gl.uniform2f(u.uResolution, this.canvas.width, this.canvas.height);
-            gl.uniform3f(u.uWall, ...backdrop.wall);
-            gl.uniform3f(u.uFloor, ...backdrop.floor);
-            gl.uniform3f(u.uPoolColor, ...backdrop.pool);
-            gl.uniform1f(u.uPoolFalloff, backdrop.poolFalloff ?? 2.6);
-            gl.uniform1f(u.uGrain, backdrop.grain);
-            gl.uniform1f(u.uShadowStrength, backdrop.shadow);
-            gl.uniform1f(u.uTime, reduced ? 0 : this.time);
-            // The pool sits behind the card, offset towards the key light.
-            const light = k => gl.uniform2f(u.uPool, .5 + k[0] * .45, .5 + k[1] * .40);
-            this.applyEdges(backdrop);
-            const edge = this.edges || { fade: [0, 0, 0, 0], top: [0, 0, 0], bottom: [0, 0, 0] };
-            gl.uniform4f(u.uEdgeFade, ...edge.fade);
-            gl.uniform3f(u.uEdgeTop, ...edge.top);
-            gl.uniform3f(u.uEdgeBottom, ...edge.bottom);
-            light(this.keyDirection);
-            gl.uniform1f(u.uShadowFade, shadowFade);
-            gl.uniform3f(u.uOutput, ...this.output);
+            this.setBackdropUniforms(this.backdropParams);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         gl.enable(gl.DEPTH_TEST);
@@ -2408,23 +2488,17 @@ export class CardRenderer {
         gl.bindTexture(gl.TEXTURE_2D, wideB.texture);
         gl.uniform1i(this.compositeUniforms.near, 0);
         gl.uniform1i(this.compositeUniforms.wide, 1);
-        gl.uniform1f(this.compositeUniforms.strength, lab ? lab.bloom : .3);
+        gl.uniform1f(this.compositeUniforms.strength, this.bloomStrength);
         gl.uniformMatrix3fv(this.compositeUniforms.space, false, this.output[0] ? SRGB_TO_P3 : IDENTITY3);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.disable(gl.BLEND);
         gl.bindVertexArray(null);
         gl.activeTexture(gl.TEXTURE0);
-
-        this.matchSafeAreas(backdrop);
-        return this.intro < 1 || this.flipProgress < 1 || Boolean(this.spin) || Math.abs(targetX - this.rotationX) + Math.abs(targetY - this.rotationY)
-            + Math.abs(zoom - this.zoom) + Math.abs(this.zoomVelocity)
-            + Math.abs(targetZ - this.rotationZ) + Math.abs(this.velocityZ)
-            + Math.abs(this.velocityX) + Math.abs(this.velocityY) > .0005;
     }
 
     drawCard(bloomPass, focusLink) {
         const gl = this.gl;
-        gl.uniform1f(this.uniforms.uBloomPass, bloomPass);
+        this.setCardUniforms({ uBloomPass: bloomPass });
         for (let i = 0; i < 3; i++) {
             gl.bindVertexArray(this.arrays[i]);
             const side = i === 1 ? 1 : 0;
@@ -2432,30 +2506,7 @@ export class CardRenderer {
             gl.bindTexture(gl.TEXTURE_2D, this.textures[side]);
             gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, this.engravingTextures[side]);
-            gl.uniform1f(this.uniforms.uEdge, i === 2 ? 1 : 0);
-            const surface = this.surfaces[side];
-            gl.uniform2f(this.uniforms.uUVBasis, i === 1 && this.vertical ? -1 : 1, i === 1 && !this.vertical ? 1 : -1);
-            gl.uniform2f(this.uniforms.uLayoutSize, surface.width, surface.height);
-            gl.uniform4f(this.uniforms.uLogoRect, ...surface.logoRelief);
-            gl.uniform4f(this.uniforms.uTitleRect, ...surface.titleRelief);
-            gl.uniform4f(this.uniforms.uTextRect, ...surface.textRelief);
-            gl.uniform1f(this.uniforms.uLogoScale, surface.logoScale);
-            gl.uniform3f(this.uniforms.uReliefWidth, this.reliefWidth[0], this.reliefWidth[1] * surface.logoScale, this.reliefWidth[2]);
-            gl.uniform3f(this.uniforms.uReliefHas, ...this.reliefHas);
-            // The spun centre sits in empty metal: the arrow of either layout.
-            const center = (this.vertical ? plate.centerPortrait : plate.center) || [.5, .5];
-            gl.uniform2f(this.uniforms.uBrushCenter, center[0], center[1]);
-            const hover = this.hoveredLink;
-            if (hover && hover.side === i && hover.underlineY != null) {
-                gl.uniform4f(this.uniforms.uHoverRect, hover.x / surface.width, hover.underlineY / surface.height,
-                    (hover.x + hover.width) / surface.width, (hover.underlineY + 1) / surface.height);
-            } else gl.uniform4f(this.uniforms.uHoverRect, -2, -2, -1, -1);
-            if (focusLink && focusLink.side === i) {
-                gl.uniform4f(this.uniforms.uFocusRect,
-                    focusLink.x / surface.width, focusLink.y / surface.height,
-                    (focusLink.x + focusLink.width) / surface.width,
-                    (focusLink.y + focusLink.height) / surface.height);
-            } else gl.uniform4f(this.uniforms.uFocusRect, -2, -2, -1, -1);
+            this.setCardUniforms(this.faceParams(i, focusLink));
             gl.drawArrays(gl.TRIANGLES, 0, this.counts[i]);
         }
         gl.activeTexture(gl.TEXTURE0);
