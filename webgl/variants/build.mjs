@@ -13,7 +13,7 @@ import { BACKDROPS, pageColours } from './backdrops.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
-const HOME_LOOK = 'ABCCCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAJAFAVB4A8AAAC_D8dAeAQAQAKAAAAAAAAAMAAAEABABAOAUAGAGABAAAUAA';
+const HOME_LOOK = 'ABCCCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAJAFAVB4A8AAAC_D8dAeAQAQAKAAAAAAAAAMAAAEABABAOAUAGAGABAAAUAAAC';
 const page = async (id, html, out = variantsOut) => {
     const bytes = Buffer.from(html), directory = resolve(out, id);
     await mkdir(directory, { recursive: true });
