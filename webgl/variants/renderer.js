@@ -777,14 +777,28 @@ void main() {
         float smallRelief = uBodyTint.a > 1.5 ? resolved : 1.0 - smoothstep(.35, .7, footprint);
         float reliefShown = mix(resolved, smallRelief, textRegion);
         vec2 slopeXY = (relief.rg * 255.0 - 128.0) / 127.0 * reliefShown;
-        float slope = length(slopeXY);
         vec3 facet = normalize(T * slopeXY.x + B * slopeXY.y + n * sqrt(max(.01, 1.0 - dot(slopeXY, slopeXY))));
-        float depth = relief.b;
         // Specular anti-aliasing (Kaplanyan–Hoffman): where the relief normal
         // turns faster than a pixel can show, widen the reflection instead of
-        // letting a mirror flicker between a bright panel and dark room.
+        // letting a mirror flicker between a bright panel and dark room. This is
+        // the spread over the whole pixel; each of the samples below covers part
+        // of it (see normalSpread / samples).
         vec3 dnx = dFdx(facet), dny = dFdy(facet);
-        float letterRough = sqrt(min((dot(dnx, dnx) + dot(dny, dny)) * .6, .20));
+        float normalSpread = min((dot(dnx, dnx) + dot(dny, dny)) * .6, .20);
+        // Supersampled lettering. A bevel is a pixel or two wide on screen, yet
+        // holds a bright edge, a dark band and a reflection of the room: shaded
+        // once per pixel, the pixels along it caught either a lamp or the dark
+        // and the letters showed stair-steps, grain and a busy outline. Near the
+        // letters the relief is shaded at several points inside the pixel (the
+        // standard 4× and 8× patterns) and averaged, as a camera's pixel sums
+        // the light falling on it. The more of a bevel a pixel holds, the more
+        // samples; magnified, one is enough. Away from letters: one, as before.
+        vec2 uvDx = dFdx(texUV), uvDy = dFdy(texUV);
+        vec2 inkTexels = vec2(textureSize(uTexture, 0));
+        float inkLod = log2(max(max(length(uvDx * inkTexels), length(uvDy * inkTexels)), 1.0));
+        bool nearInk = textureLod(uTexture, texUV, inkLod + 2.5).a > .002;
+        int samples = !nearInk ? 1 : footprint > .4 ? 8 : footprint > .15 ? 4 : 1;
+        float sampleScale = inversesqrt(float(samples));
 
         // Links: underline and keyboard focus are drawn with the text process.
         vec2 aa = max(fwidth(vUV) * .7, vec2(1e-5));
@@ -826,10 +840,29 @@ void main() {
         // pixel, a shadow smeared each stroke into a bold, blurred double.
         float shadowShown = resolved * mix(1.0, smallRelief, nearText);
         color *= 1.0 - (occluder * .6 + contact * .22) * (1.0 - ink.a) * step(.001, raisedHeight) * shadowShown;` : ''}
-        float coverage = max(ink.a, max(underline, focusStroke));
-        if (coverage > .001) {
+        // 4× and 8× sample positions inside the pixel, in pixels from its centre.
+        const vec2 SS4[4] = vec2[4](vec2(-.125, -.375), vec2(.375, -.125), vec2(.125, .375), vec2(-.375, .125));
+        const vec2 SS8[8] = vec2[8](vec2(.0625, -.1875), vec2(-.0625, .1875), vec2(.3125, .0625), vec2(-.1875, -.3125),
+                                    vec2(-.3125, .3125), vec2(-.4375, -.0625), vec2(.1875, .4375), vec2(.4375, -.4375));
+        vec3 plate = color, shaded = vec3(0.0);
+        float letterSum = 0.0;
+        for (int sampleIndex = 0; sampleIndex < 8; sampleIndex++) {
+            if (sampleIndex >= samples) break;
+            vec2 offset = samples == 8 ? SS8[sampleIndex] : samples == 4 ? SS4[sampleIndex] : vec2(0.0);
+            vec2 uvS = texUV + uvDx * offset.x + uvDy * offset.y;
+            // Each sample reads the relief as finely as its share of the pixel.
+            vec4 inkS = textureGrad(uTexture, uvS, uvDx * sampleScale, uvDy * sampleScale);
+            vec4 reliefS = textureGrad(uEngraving, uvS, uvDx * sampleScale, uvDy * sampleScale);
+            vec2 slopeXY = (reliefS.rg * 255.0 - 128.0) / 127.0 * reliefShown;
+            float slope = length(slopeXY);
+            vec3 facet = normalize(T * slopeXY.x + B * slopeXY.y + n * sqrt(max(.01, 1.0 - dot(slopeXY, slopeXY))));
+            float depth = reliefS.b;
+            float letterRough = sqrt(normalSpread / float(samples));
+            letterSum += max(inkS.a, max(underline, focusStroke));
+            float coverage = max(inkS.a, max(underline, focusStroke));
+            if (coverage <= .001) { shaded += plate; continue; }
             // The first letter of the wordmark is drawn red-only in the mask.
-            vec3 inkColor = ink.rgb / max(ink.a, .001);
+            vec3 inkColor = inkS.rgb / max(inkS.a, .001);
             float firstLetter = smoothstep(.6, .3, inkColor.g);
             // Letters with a colour (a tint or the plate's material), against
             // letters left in the edition's own metal.
@@ -866,7 +899,7 @@ void main() {
             nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
             textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter, uTintAmount.w);
             // Role and contacts sit back: a shallower mark, closer to the plate.
-            textColor = mix(textColor, color, uTextMute);
+            textColor = mix(textColor, plate, uTextMute);
             vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
             ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
             // Raised letters have diamond-turned shoulders: the cut goes through
@@ -880,17 +913,18 @@ void main() {
                 .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
             // Only through a colour: letters in bare metal are that metal through
             // and through, and a mirror rim on them drew a chrome outline.
-            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * ink.a * coloured;
+            float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * inkS.a * coloured;
             lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
             // The wordmark and the name sit back towards the plate as a whole,
             // bevels included: muted letters with bright edges read as outlines.
-            lettering = mix(lettering, color, uMute.x * logoRegion + uMute.y * titleRegion);
+            lettering = mix(lettering, plate, uMute.x * logoRegion + uMute.y * titleRegion);
             // Links are always drawn with the body-text process.
             float linkMark = max(underline, focusStroke);
             lettering = mix(lettering, textColor, linkMark);
-            color = mix(color, lettering, coverage);
-            letterMask = coverage;
+            shaded += mix(plate, lettering, coverage);
         }
+        color = shaded / float(samples);
+        letterMask = letterSum / float(samples);
     }
 
     vec3 hdr = color * uExposure;
