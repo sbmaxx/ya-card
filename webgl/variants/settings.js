@@ -63,6 +63,11 @@ export const lab = globalThis.__cardLab = {
     bodySize: number('bodySize', 0),
     // «Тонкая типографика»: 1 — small type tracked out, the name a touch tighter.
     typography: Math.max(0, Math.min(1, Math.round(number('typography', 0)))),
+    // «Широкий цвет»: 0 — sRGB; above it the Display P3 buffer, and how far
+    // saturated colours reach into it. «Блики ярче белого»: 0 — none; up to
+    // 4× white on an HDR buffer where the browser has one.
+    wide: Math.max(0, Math.min(1, number('wide', 0))),
+    hdr: Math.max(0, Math.min(1, number('hdr', 0))),
     // Raised letters' bevel profile (relief.js): 0 coin, 1 soft, 2 a 45° edge.
     bevel: Math.max(0, Math.min(2, Math.round(number('bevel', 0)))),
     // Plate finish: 0 brushed, 1 bead-blasted, 2 polished.

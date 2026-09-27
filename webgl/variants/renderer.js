@@ -255,7 +255,53 @@ const toneCode = `vec3 neutralTonemap(vec3 color) {
 vec3 toSRGB(vec3 c) {
     c = clamp(c, 0.0, 1.0);
     return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
+}
+
+// The drawing buffer's colours (lab: «Широкий цвет», «Блики ярче белого»).
+// x — the buffer is Display P3; y — how far saturated colours reach into it;
+// z — the headroom above white on an HDR buffer (1 — none).
+uniform vec3 uOutput;
+// Linear sRGB to linear Display P3: the same colour, in the wider primaries.
+const mat3 SRGB_TO_P3 = mat3(.8224621, .0331941, .0170827, .1775380, .9668058, .0723974, 0.0, 0.0, .9105199);
+
+vec3 fromSRGB(vec3 c) {
+    return mix(c / 12.92, pow((c + .055) / 1.055, vec3(2.4)), step(.04045, c));
+}
+
+// Linear colour after the tone curve to the buffer's encoding. On P3 the
+// colour is converted exactly, so greys, steel and the velvet stay as they
+// are; saturated colours (the red Я) are then let out towards the wider
+// primaries, as their sRGB values read as P3 — a red no sRGB screen shows.
+vec3 toDisplay(vec3 c) {
+    if (uOutput.x > .5) {
+        float peak = max(c.r, max(c.g, c.b));
+        float saturation = peak > 1e-5 ? 1.0 - min(c.r, min(c.g, c.b)) / peak : 0.0;
+        c = mix(SRGB_TO_P3 * c, c, uOutput.y * smoothstep(.25, .9, saturation));
+    }
+    // Above white only on an HDR buffer; the sRGB curve extends past 1.
+    c = clamp(c, 0.0, uOutput.z);
+    return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - .055, step(.0031308, c));
+}
+
+// An sRGB-encoded colour (the page's own) to the buffer's encoding.
+vec3 displayFromSRGB(vec3 c) {
+    return uOutput.x > .5 ? toSRGB(SRGB_TO_P3 * fromSRGB(clamp(c, 0.0, 1.0))) : c;
 }`;
+
+// What the browser can put on screen beyond 8-bit sRGB (lab: «Картинка»).
+// Display P3 in WebGL: Safari 15.2+, Chrome 104+. Brighter than white: only
+// Chrome with Experimental Web Platform features, on an HDR screen.
+export function outputSupport() {
+    const gl = globalThis.WebGL2RenderingContext?.prototype ?? {};
+    return {
+        p3: 'drawingBufferColorSpace' in gl,
+        hdr: 'drawingBufferStorage' in gl && ('drawingBufferToneMapping' in gl || 'configureHighDynamicRange' in HTMLCanvasElement.prototype),
+        p3Screen: matchMedia('(color-gamut: p3)').matches,
+        hdrScreen: matchMedia('(dynamic-range: high)').matches
+    };
+}
+const IDENTITY3 = new Float32Array([1, 0, 0, 0, 1, 0, 0, 0, 1]);
+const SRGB_TO_P3 = new Float32Array([.8224621, .0331941, .0170827, .1775380, .9668058, .0723974, 0, 0, .9105199]);
 
 // Backdrops (backdrops.js): the room behind the card and the page's own colours.
 export { BACKDROPS };
@@ -1017,7 +1063,9 @@ void main() {
         outColor = vec4(glow * .25 * uOpacity * uReveal * mix(1.0, uLetterGlow, letterMask), 1.0);
         return;
     }
-    vec3 display = toSRGB(neutralTonemap(hdr));
+    // With headroom the curve's shoulder moves up by it: highlights run on past
+    // white instead of flattening into it, the rest of the picture as before.
+    vec3 display = toDisplay(uOutput.z * neutralTonemap(hdr / uOutput.z));
     // Dither to the 8-bit output: the dark plate's slow gradients on velvet
     // otherwise show as steps of one level. Triangular noise of ±1 level, fixed
     // to the screen so it does not crawl.
@@ -1176,7 +1224,9 @@ void main() {
     // x/y: flat band at the top/bottom, z/w: length of the ramp before it.
     if (uEdgeFade.x > 0.0) display = mix(display, uEdgeTop, smoothstep(1.0 - uEdgeFade.x - uEdgeFade.z, 1.0 - uEdgeFade.x, vUV.y));
     if (uEdgeFade.y > 0.0) display = mix(display, uEdgeBottom, smoothstep(uEdgeFade.y + uEdgeFade.w, uEdgeFade.y, vUV.y));
-    outColor = vec4(display, 1.0);
+    // The page around the canvas is sRGB: on a P3 buffer the backdrop is the
+    // same colour exactly, so its edges still meet the page and Safari's bars.
+    outColor = vec4(displayFromSRGB(display), 1.0);
 }`;
 
 const screenVertex = `#version 300 es
@@ -1203,11 +1253,13 @@ precision mediump float;
 uniform sampler2D uNear;
 uniform sampler2D uWide;
 uniform float uStrength;
+// The glow's colour on a Display P3 buffer: sRGB to P3, near enough for a glow.
+uniform mat3 uGlowSpace;
 in vec2 vUV;
 out vec4 outColor;
 void main() {
     vec3 glow = (texture(uNear, vUV).rgb + texture(uWide, vUV).rgb * .55) * 4.0 * uStrength;
-    glow = 1.0 - exp(-glow);
+    glow = clamp(uGlowSpace * (1.0 - exp(-glow)), 0.0, 1.0);
     outColor = vec4(glow, max(glow.r, max(glow.g, glow.b)));
 }`;
 
@@ -1610,15 +1662,18 @@ export class CardRenderer {
         const locate = (program, names) => Object.fromEntries(names.map(name => [name, gl.getUniformLocation(program, name)]));
         this.shadowUniforms = locate(this.shadowProgram, ['uModel', 'uProjection', 'uLight']);
         this.backdropUniforms = locate(this.backdropProgram, ['uShadow', 'uResolution', 'uPool', 'uWall', 'uFloor', 'uPoolColor',
-            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime', 'uPoolFalloff']);
+            'uGrain', 'uShadowStrength', 'uShadowFade', 'uEdgeFade', 'uEdgeTop', 'uEdgeBottom', 'uTime', 'uPoolFalloff', 'uOutput']);
         this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
         this.lightSignature = null;
         this.uniforms = Object.fromEntries(['uModel', 'uProjection', 'uEdge', 'uTexture', 'uEngraving', 'uUVBasis', 'uLayoutSize',
-            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uReveal', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uReliefSlope', 'uReliefSign', 'uBevelCurve', 'uReliefWidth', 'uReliefHas', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle']
+            'uLogoRect', 'uTitleRect', 'uTextRect', 'uHoverRect', 'uFocusRect', 'uRoom', 'uExposure', 'uOpacity', 'uReveal', 'uBloomPass', 'uLogoScale', 'uBrushCenter', 'uKeyDirection', 'uKeyGain', 'uRoundLights', 'uKeyRight', 'uKeyUp', 'uKeySize', 'uKeyRadius', 'uKeySoft', 'uKeyCenter', 'uKeyColor', 'uLightCount', 'uLightCenter', 'uLightRight', 'uLightUp', 'uLightShape', 'uLightColor', 'uLightFace', 'uOrbitCenter', 'uOrbitRight', 'uOrbitUp', 'uOrbitColor', 'uRoomBase', 'uBounce', 'uRaisedHeight', 'uReliefSlope', 'uReliefSign', 'uBevelCurve', 'uReliefWidth', 'uReliefHas', 'uLogoTint', 'uLogoFirstTint', 'uBodyTint', 'uNameTint', 'uTintFinish', 'uTextMute', 'uMute', 'uLetterGlow', 'uGloss', 'uTintAmount', 'uFinish', 'uStrip', 'uFillTint', 'uSurface', 'uSparkle', 'uOutput']
             .map(name => [name, gl.getUniformLocation(this.program, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
-            wide: gl.getUniformLocation(this.compositeProgram, 'uWide'), strength: gl.getUniformLocation(this.compositeProgram, 'uStrength') };
+            wide: gl.getUniformLocation(this.compositeProgram, 'uWide'), strength: gl.getUniformLocation(this.compositeProgram, 'uStrength'),
+            space: gl.getUniformLocation(this.compositeProgram, 'uGlowSpace') };
+        this.output = [0, 0, 1];
+        this.bufferStorage = null;
         this.screenArray = gl.createVertexArray();
         this.buffers = [];
         this.arrays = [];
@@ -1813,6 +1868,42 @@ export class CardRenderer {
             ? 14 * this.fixedCardWidth / (this.width * this.viewportHeight) : undefined;
         this.projection = projectionMatrix(this.aspect, focalLength);
         this.resizeTargets(Math.max(1, Math.round(width / 4)), Math.max(1, Math.round(height / 4)));
+    }
+
+    // The drawing buffer for the lab's «Широкий цвет» and «Блики ярче белого»:
+    // Display P3, and a half-float buffer shown in extended range. At 0 both
+    // leave the browser's default 8-bit sRGB buffer untouched.
+    applyOutput() {
+        const gl = this.gl, lab = globalThis.__cardLab, support = this.support ??= outputSupport();
+        const wide = support.p3 && lab?.wide > 0;
+        const space = wide ? 'display-p3' : 'srgb';
+        if (support.p3 && gl.drawingBufferColorSpace !== space) gl.drawingBufferColorSpace = space;
+        const hdr = support.hdr && !this.hdrFailed && lab?.hdr > 0;
+        const { width, height } = this.canvas;
+        // Once set, the storage is kept at the canvas's size; resizing the
+        // canvas is not guaranteed to keep the format.
+        if (hdr || this.bufferStorage) {
+            const format = hdr ? gl.RGBA16F : gl.RGBA8, key = `${format} ${width} ${height}`;
+            if (this.bufferStorage !== key) {
+                try {
+                    // A half-float buffer needs float rendering switched on first.
+                    if (hdr && !gl.getExtension('EXT_color_buffer_float')) throw new Error('EXT_color_buffer_float');
+                    gl.drawingBufferStorage(format, width, height);
+                    if (gl.drawingBufferFormat !== format) throw new Error(`drawing buffer format ${gl.drawingBufferFormat}`);
+                    const mode = hdr ? 'extended' : 'standard';
+                    if (gl.drawingBufferToneMapping) gl.drawingBufferToneMapping({ mode });
+                    else this.canvas.configureHighDynamicRange({ mode: hdr ? 'extended' : 'default' });
+                    this.bufferStorage = key;
+                } catch (error) {
+                    // Tried once: the lab's slider then does nothing, as without the API.
+                    console.warn('HDR output unavailable', error);
+                    this.hdrFailed = hdr;
+                    this.bufferStorage = null;
+                }
+            }
+        }
+        // Headroom: up to 4× the page's white where the screen allows.
+        this.output = [wide ? 1 : 0, wide ? lab.wide : 0, hdr && this.bufferStorage ? 1 + 3 * lab.hdr : 1];
     }
 
     // Bloom chain: card highlights at 1/4, blurred there and again at 1/8.
@@ -2144,6 +2235,8 @@ export class CardRenderer {
         gl.uniformMatrix4fv(this.uniforms.uProjection, false, this.projection);
         gl.uniformMatrix3fv(this.uniforms.uRoom, false, this.room);
         gl.uniform1f(this.uniforms.uExposure, look.studio.exposure * (lab ? lab.exposure : 1));
+        this.applyOutput();
+        gl.uniform3f(this.uniforms.uOutput, ...this.output);
         gl.uniform3f(this.uniforms.uKeyDirection, ...this.keyDirection);
         // The plate is solid within a third of a second and lit over the
         // intro's fade: it comes out of the dark as a black shape the light
@@ -2290,6 +2383,7 @@ export class CardRenderer {
             gl.uniform3f(u.uEdgeBottom, ...edge.bottom);
             light(this.keyDirection);
             gl.uniform1f(u.uShadowFade, shadowFade);
+            gl.uniform3f(u.uOutput, ...this.output);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         gl.enable(gl.DEPTH_TEST);
@@ -2315,6 +2409,7 @@ export class CardRenderer {
         gl.uniform1i(this.compositeUniforms.near, 0);
         gl.uniform1i(this.compositeUniforms.wide, 1);
         gl.uniform1f(this.compositeUniforms.strength, lab ? lab.bloom : .3);
+        gl.uniformMatrix3fv(this.compositeUniforms.space, false, this.output[0] ? SRGB_TO_P3 : IDENTITY3);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
         gl.disable(gl.BLEND);
         gl.bindVertexArray(null);

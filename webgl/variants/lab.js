@@ -7,8 +7,11 @@ import { currentLogoShape, currentNameShape, currentBodyShape, currentLayout, BA
 import { exported, params, textFields, lab } from './settings.js';
 import { showPoseSheet } from './poses.js';
 import { FONTS } from './fonts.js';
-import { loadCardFont } from './renderer.js';
+import { loadCardFont, outputSupport } from './renderer.js';
 import { applyPageColours, pageColours } from './backdrops.js';
+
+// What this browser and screen can show beyond sRGB, for «Картинка».
+const output = outputSupport();
 
 if (!exported) {
 const style = document.createElement('style');
@@ -51,6 +54,7 @@ style.textContent = direction.css + `
 .lab .group label.range { margin-bottom: 8px; }
 .lab .group .caption { margin: 2px 2px 6px; color: #9aa4b2; }
 .lab .group .hint { margin: -2px 2px 12px; color: #9aa4b2; font-size: 11px; line-height: 1.4; min-height: 2.8em; }
+.lab p.hint.output-hint { display: block; margin: -2px 2px 12px; color: #9aa4b2; font-size: 11px; line-height: 1.4; }
 .lab .tint-row { margin-bottom: 9px; }
 .lab .tint-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; color: #9aa3b0; }
 .lab .mini { display: flex; gap: 1px; padding: 1px; border-radius: 6px; background: #ffffff10; }
@@ -249,6 +253,10 @@ panel.innerHTML = `
     <label class="range">Свечение букв <output data-for="letterGlow"></output><input type="range" name="letterGlow" min="0" max="2" step=".05" value="${lab.letterGlow}"></label>
     <label class="range">Покачивание <output data-for="idle"></output><input type="range" name="idle" min="0" max="2" step=".05" value="${lab.idle}"></label>
     <label class="range">Гироскоп <output data-for="gyro"></output><input type="range" name="gyro" min="0" max="3" step=".05" value="${lab.gyro}"></label>
+    <label class="range">Широкий цвет (P3) <output data-for="wide"></output><input type="range" name="wide" min="0" max="1" step=".05" value="${lab.wide}" ${output.p3 ? '' : 'disabled'}></label>
+    <p class="hint output-hint">${output.p3 ? `0 — обычный sRGB. Больше — насыщенные цвета (красная «Я») выходят за sRGB; серые, сталь и фон не меняются. ${output.p3Screen ? 'Экран P3 — разница видна.' : 'Этот экран не P3 — разницы не будет.'}` : 'Недоступно: браузер не умеет Display P3 в WebGL.'}</p>
+    <label class="range">Блики ярче белого <output data-for="hdr"></output><input type="range" name="hdr" min="0" max="1" step=".05" value="${lab.hdr}" ${output.hdr ? '' : 'disabled'}></label>
+    <p class="hint output-hint">${output.hdr ? `Самые яркие блики — до 4× ярче белого страницы. ${output.hdrScreen ? 'Экран HDR.' : 'Этот экран не HDR — разницы не будет.'}` : 'Недоступно в этом браузере: в WebGL это пока есть только в Chrome с флагом Experimental Web Platform features (chrome://flags), Safari не умеет.'}</p>
   </fieldset></div>
   <div class="actions"><button type="button" data-action="export">Скачать HTML</button><button type="button" data-action="share">Короткая ссылка</button></div>
   <div class="actions"><button type="button" data-action="copy">Скопировать настройки</button><button type="button" data-action="poses">Свет по позам</button></div>
@@ -314,7 +322,7 @@ const writeUrl = () => {
     next.set('layout', currentLayout);
     next.set('name', currentNameShape);
     next.set('body', currentBodyShape);
-    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute', 'bevel']) next.set(key, String(lab[key]));
+    for (const key of ['exposure', 'bloom', 'letterGlow', 'cardSize', 'logoGloss', 'nameGloss', 'bodyGloss', 'logoFirstSheer', 'logoSheer', 'nameSheer', 'bodySheer', 'keyGain', 'keySoft', 'lampSize', 'orbit', 'idle', 'gyro', 'logoDepth', 'nameDepth', 'nameScale', 'bodyDepth', 'textMute', 'yaw', 'pitch', 'bodyWeight', 'bodySize', 'plateFinish', 'font', 'strip', 'surface', 'sparkle', 'warmth', 'typography', 'nameWeight', 'logoMute', 'nameMute', 'bevel', 'wide', 'hdr']) next.set(key, String(lab[key]));
     if (lab.manualLight) next.set('light', 'manual'); else next.delete('light');
     // «Not set» stays in the link: left out, the default look would fill it on reload.
     for (const key of ['logoTint', 'nameTint', 'bodyTint']) next.set(key, lab[key] || '');
@@ -543,7 +551,7 @@ function describeSettings() {
         `Первая буква: ${colour('logoFirst')}`,
         `Имя: ${reliefLabels[currentNameShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.nameWeight]} · размер ${n(lab.nameScale)} · глубина ${n(lab.nameDepth)} · блеск ${n(lab.nameGloss)} · цвет: ${colour('name')} · приглушение ${n(lab.nameMute)}`,
         `Должность и контакты: ${reliefLabels[currentBodyShape].toLowerCase()} · начертание ${{ 400: 'обычное', 500: 'среднее', 600: 'полужирное' }[lab.bodyWeight]} · размер +${n(lab.bodySize)} px · глубина ${n(lab.bodyDepth)} · блеск ${n(lab.bodyGloss)} · цвет: ${colour('body')} · приглушение ${n(lab.textMute)}`,
-        `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)}`
+        `Картинка: экспозиция ${n(lab.exposure)} · свечение ${n(lab.bloom)} · свечение букв ${n(lab.letterGlow)} · покачивание ${n(lab.idle)} · гироскоп ${n(lab.gyro)} · широкий цвет ${n(lab.wide)} · блики ярче белого ${n(lab.hdr)}`
     ];
     const text = textFields.filter(([key]) => lab.text[key]).map(([key, label]) => `${label}: ${lab.text[key]}`);
     if (text.length) lines.push(`Текст: ${text.join(' · ')}`);

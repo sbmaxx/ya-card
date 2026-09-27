@@ -48,7 +48,7 @@ const LATER = [
     ['orbit', 0, .05, 0], ['bodyWeight', 400, 100, 400], ['bodySize', 0, .5, 0], ['plateFinish', 0, 1, 0], ['font', 0, 1, 0],
     ['strip', 0, .05, 0], ['surface', 0, .05, 1], ['sparkle', 0, .05, 0], ['warmth', 0, .05, 0],
     ['typography', 0, 1, 0], ['nameWeight', 400, 100, 500], ['logoMute', 0, .02, 0], ['nameMute', 0, .02, 0],
-    ['bevel', 0, 1, 0]
+    ['bevel', 0, 1, 0], ['wide', 0, .05, 0], ['hdr', 0, .05, 0]
 ];
 
 const encodeNumbers = (params, fields, digit) => fields.map(([key, min, step, fallback]) => {
