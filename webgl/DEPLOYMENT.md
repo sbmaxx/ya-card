@@ -56,6 +56,18 @@ the address with `history.pushState` (`window.cardLanguagePaths` in `app.js`); o
 `/variants/` and `/plain/` and names `sitemap.xml`. The share images are captured
 from the built pages at 1200×630 and kept in `variants/og/`.
 
+## HTTP/2 (2026-09-27)
+
+The vhost's two `listen 443` lines carry `http2`. nginx here is 1.24, where HTTP/2
+is a property of the listening socket, not of a server block (per-server
+`http2 on;` arrived in 1.25.1), so every site on this machine's `*:443` now
+negotiates h2 through ALPN; HTTP/1.1 clients are served as before. `nginx -t`
+warns `protocol options redefined for [::]:443` (sbmaxx.ru sets `ipv6only=on`);
+the protocols are merged and the warning is harmless. Checked over IPv4 and IPv6:
+all seven sites answer 200 over HTTP/2; `/`, `/en/`, `/plain/`, `/variants/` and
+the API proxy too; the identity, gzip and Brotli homepages decode to the same bytes.
+Rollback: `ssh rozhdestvenskiy.ru 'bash /home/sbmaxx/nginx-http2-20260927/rollback.sh'`.
+
 ## Rollback
 
 The previous silver HTML and compressed variants were copied outside the
