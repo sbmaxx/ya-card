@@ -126,6 +126,9 @@ const scale = (color, k) => color.map(value => value * k);
 // Lighting setups (lights.js): each lamp's centre, size and colour, made into
 // panels below. The key is the travelling softbox; the lab can change its shape.
 const MAX_LIGHTS = 12;
+// The studio shader's loop counts (uLoopCounts): lettering samples, brushing
+// taps, chamfer samples, parallax layers.
+const LOOP_COUNTS = new Int32Array([8, 7, 8, 40]);
 export { LIGHT_SETUPS };
 for (const setup of Object.values(LIGHT_SETUPS)) {
     setup.key.c = unit(setup.key.c);
@@ -357,6 +360,16 @@ uniform vec3 uKeyCenter;
 uniform vec3 uKeyColor;
 // The rest of the setup's lamps: xy half-size, z roundness (-1 = studio default).
 uniform int uLightCount;
+// How many times the shader's loops run: x the lettering's samples (8), y the
+// brushing's taps (7), z the chamfer's samples (8), w the parallax march's
+// layers (40). Always these, but passed in: Windows compiles WebGL through
+// Direct3D, whose compiler unrolls any loop whose count it can work out —
+// from a constant, or from an expression it can bound — and inlines every
+// function into each copy. The studio's shader took 30–42 s to compile on an
+// RTX 5080. A loop that runs to a uniform (these, or the setup's lamps) is
+// compiled once. Nothing inside a loop may take a derivative (texture(),
+// dFdx, fwidth): that would force the unrolling again.
+uniform ivec4 uLoopCounts;
 uniform vec3 uLightCenter[${MAX_LIGHTS}];
 uniform vec3 uLightRight[${MAX_LIGHTS}];
 uniform vec3 uLightUp[${MAX_LIGHTS}];
@@ -481,12 +494,8 @@ vec3 roomFor(vec3 world, float rough, float face) {
     // on a polished one it stays a band. It only adds light, so it cannot open
     // a darker gap between lamps.
     if (uStrip.g > 0.0) col += uStrip * stripLight(world, blur);
-    // Loops here run to a count known only at run time (the setup's lamps, the
-    // pixel's samples, the march's layers), never to a constant with a break:
-    // Windows compiles WebGL through Direct3D, whose compiler unrolls a
-    // constant loop and inlines every function into each copy. This one sits
-    // in every material's light, dozens of times over, and the studio's shader
-    // took 42 s to compile on an RTX 5080.
+    // The lamps: a loop to a uniform count (see uLoopCounts), since this light
+    // is inlined into every material, dozens of times over.
     for (int i = 0; i < uLightCount; i++) {
         vec3 shape = uLightShape[i];
         float seen = mix(1.0, uLightFace[i], face);
@@ -514,7 +523,7 @@ vec3 brushed(vec3 n, vec3 v, vec3 across, float rough, float aniso, float face) 
     // No grain (bead-blasted, polished): all seven would look the same way.
     if (aniso <= 0.0) return roomFor(reflect(-v, n), rough, face);
     vec3 sum = vec3(0.0);
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < uLoopCounts.y; i++) {
         float s = (float(i) - 3.0) / 3.0;
         vec3 ni = normalize(n + across * s * aniso);
         sum += roomFor(reflect(-v, ni), rough, face) * (1.0 - .5 * s * s);
@@ -670,8 +679,8 @@ void main() {
             vec2 uv = vUV;
             float depth = 0.0;
             float below = 1.0 - bevelHeight(reliefT(textureLod(uEngraving, uv, 0.0).b));
-            for (int i = 0; i < int(layers); i++) {
-                if (depth >= below) break;
+            for (int i = 0; i < uLoopCounts.w; i++) {
+                if (float(i) >= layers || depth >= below) break;
                 uv += stepUV;
                 depth += stepDepth;
                 below = 1.0 - bevelHeight(reliefT(textureLod(uEngraving, uv, 0.0).b));
@@ -702,7 +711,7 @@ void main() {
         // The side wall is satin and steady: shaded once.
         vec3 wall = metal(SIDE_F0, n, v, max(${f(look.side.rough)}, edgeRough));
         color = vec3(0.0);
-        for (int i = 0; i < 8; i++) {
+        for (int i = 0; i < uLoopCounts.z; i++) {
             vec2 o = EDGE_SS[i];
             vec3 ns = normalize(n + nDx * o.x + nDy * o.y);
             float facet = abs(vFacet + facetDx * o.x + facetDy * o.y);
@@ -878,7 +887,8 @@ void main() {
                                     vec2(-.3125, .3125), vec2(-.4375, -.0625), vec2(.1875, .4375), vec2(.4375, -.4375));
         vec3 plate = color, shaded = vec3(0.0);
         float letterSum = 0.0;
-        for (int sampleIndex = 0; sampleIndex < samples; sampleIndex++) {
+        for (int sampleIndex = 0; sampleIndex < uLoopCounts.x; sampleIndex++) {
+            if (sampleIndex >= samples) break;
             vec2 offset = samples == 8 ? SS8[sampleIndex] : samples == 4 ? SS4[sampleIndex] : vec2(0.0);
             vec2 uvS = texUV + uvDx * offset.x + uvDy * offset.y;
             // Each sample reads the relief as finely as its share of the pixel.
@@ -1090,6 +1100,7 @@ function uniformSetter(gl, program) {
             [gl.FLOAT_MAT3]: value => gl.uniformMatrix3fv(location, false, value),
             [gl.FLOAT_MAT4]: value => gl.uniformMatrix4fv(location, false, value),
             [gl.INT]: value => gl.uniform1i(location, value),
+            [gl.INT_VEC4]: value => gl.uniform4iv(location, value),
             [gl.SAMPLER_2D]: value => gl.uniform1i(location, value)
         }[type];
     }
@@ -2103,6 +2114,7 @@ export class CardRenderer {
         const count = Math.min(MAX_LIGHTS, setup.lights.length);
         const pack = read => new Float32Array(setup.lights.slice(0, count).flatMap(read));
         c.uLightCount = count;
+        c.uLoopCounts = LOOP_COUNTS;
         c.uLightCenter = pack((_, i) => setup.lamps[i].c);
         c.uLightRight = pack((_, i) => setup.lamps[i].right);
         c.uLightUp = pack((_, i) => setup.lamps[i].up);
