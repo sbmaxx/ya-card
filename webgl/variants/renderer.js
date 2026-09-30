@@ -50,6 +50,31 @@ const requestedBody = new URLSearchParams(globalThis.__cardPreset ?? location.se
 const bodyShape = Object.hasOwn(BODY_SHAPES, requestedBody) ? requestedBody : 'edition';
 export const currentBodyShape = bodyShape;
 const bodyLook = bodyShape === 'edition' ? look.text : look.logo;
+// Exported/home presets have no live material controls. Specialize their fixed
+// inputs so FXC can discard unused finishes and plate-letter lighting before
+// optimizing the studio. The editable lab keeps the uniform-controlled path.
+const fixedPreset = typeof globalThis.__cardPreset === 'string' ? new URLSearchParams(globalThis.__cardPreset) : null;
+const tintOf = hex => {
+    if (!hex) return [0, 0, 0, 0];
+    if (hex === 'plate') return [0, 0, 0, 2];
+    const linear = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
+    return [0, 2, 4].map(i => linear(parseInt(hex.slice(i, i + 2), 16) / 255)).concat(1);
+};
+const fixedNumber = (key, fallback) => {
+    const value = Number.parseFloat(fixedPreset?.get(key));
+    return Number.isFinite(value) ? value : fallback;
+};
+const fixedTint = key => {
+    const value = fixedPreset?.get(`${key}Tint`) || '';
+    if (key === 'logoFirst') return /^([0-9a-f]{6}|metal|plate)$/i.test(value)
+        ? tintOf(value.replace('metal', '')) : fixedTint('logo');
+    return tintOf(/^([0-9a-f]{6}|plate)$/i.test(value) ? value : '');
+};
+// Match uniform upload's float32 conversion exactly; f()'s four decimal places
+// are unsuitable for colour constants. Live lab settings remain uniforms.
+const materialInput = (type, name, values) => fixedPreset && values.every(Number.isFinite)
+    ? `const ${type} ${name} = ${type}(${values.map(value => Math.fround(value).toExponential(9)).join(', ')});`
+    : `uniform ${type} ${name};`;
 const baseProfiles = { logo: LOGO_SHAPES[logoShape], name: NAME_SHAPES[nameShape] || { shape: 'deboss', ...direction.relief.name },
     text: BODY_SHAPES[bodyShape] };
 // Depth multipliers from the demo stand; relief maps are rebuilt live.
@@ -311,12 +336,13 @@ vec2 reliefSlopeXY(vec4 r, vec3 region, float pixel) {
     float g = dot(region, uReliefSlope * uReliefSign) * mix(1.0 - smoothstep(1.0 - edge, 1.0, t), bevelSlope(t, edge), raised);
     return -g * dir / sqrt(1.0 + g * g * dot(dir, dir));
 }
-uniform vec4 uLogoTint;
-uniform vec4 uNameTint;
-uniform vec4 uLogoFirstTint;
-uniform vec4 uBodyTint;
+${materialInput('vec4', 'uLogoTint', fixedTint('logo'))}
+${materialInput('vec4', 'uNameTint', fixedTint('name'))}
+${materialInput('vec4', 'uLogoFirstTint', fixedTint('logoFirst'))}
+${materialInput('vec4', 'uBodyTint', fixedTint('body'))}
 // Finish per object: x first letter, y wordmark, z name, w role and contacts (1 = anodised).
-uniform vec4 uTintFinish;
+${materialInput('vec4', 'uTintFinish', ['logoFirst', 'logo', 'name', 'body'].map(key =>
+    (fixedPreset?.get(`${key}Finish`) || fixedPreset?.get('tintFinish')) === 'anod' ? 1 : 0))}
 uniform float uTextMute;
 // The wordmark (x) and the name (y) can sit back the same way.
 uniform vec2 uMute;
@@ -324,13 +350,13 @@ uniform float uLetterGlow;
 // Lettering gloss: x logo, y name, z role and contacts (1 — as finished, 0 — matte).
 uniform vec3 uGloss;
 // Plate finish: 0 brushed, 1 bead-blasted, 2 polished.
-uniform float uFinish;
+${materialInput('float', 'uFinish', [Math.max(0, Math.min(2, Math.round(fixedNumber('plateFinish', 0))))])}
 // How strongly the finish shows, its grain or frost (1 — as finished), and the
 // sparkle of the bead-blasted one (0 — none).
 uniform float uSurface;
 uniform float uSparkle;
 // Colour density: x first letter, y wordmark, z name, w role and contacts (1 — opaque).
-uniform vec4 uTintAmount;
+${materialInput('vec4', 'uTintAmount', ['logoFirst', 'logo', 'name', 'body'].map(key => 1 - fixedNumber(`${key}Sheer`, 0)))}
 uniform float uRoomBase;
 uniform float uBounce;
 in vec3 vPosition;
@@ -370,9 +396,7 @@ uniform int uLightCount;
 // compiled once. Nothing inside a loop may take a derivative (texture(),
 // dFdx, fwidth): that would force the unrolling again.
 uniform ivec4 uLoopCounts;
-// Body, wordmark, first letter, name: share one tint shader across the four
-// possible jobs. A uniform bound keeps FXC from cloning it at every call site.
-uniform int uTintPasses;
+uniform int uWordmarkTints;
 uniform vec3 uLightCenter[${MAX_LIGHTS}];
 uniform vec3 uLightRight[${MAX_LIGHTS}];
 uniform vec3 uLightUp[${MAX_LIGHTS}];
@@ -540,6 +564,8 @@ vec3 metal(vec3 f0, vec3 n, vec3 v, float rough) {
 }
 
 // Gloss dielectric (enamel, lacquer): coloured diffuse under a sharp 4% coat.
+// All samples share the face normal; evaluate diffuse studio light once.
+vec3 letterDiffuse;
 vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough);
 
 // A dyed or coated metal's reflectance from the chosen colour. The colour sets
@@ -588,7 +614,7 @@ vec3 gloss(vec3 albedo, vec3 n, vec3 v, float rough) {
     float nv = max(dot(n, v), 1e-3);
     float coat = .04 + .96 * pow(1.0 - nv, 5.0);
     // Lacquer over the colour: the full ~4% coat, sharp or soft with «Блеск».
-    return albedo * room(n, 1.0) * 2.2 * (1.0 - coat) + coat * room(reflect(-v, n), rough);
+    return albedo * letterDiffuse * 2.2 * (1.0 - coat) + coat * room(reflect(-v, n), rough);
 }
 
 // Integer hash: exact at any coordinate (a sine hash loses precision on
@@ -888,6 +914,7 @@ void main() {
         const vec2 SS4[4] = vec2[4](vec2(-.125, -.375), vec2(.375, -.125), vec2(.125, .375), vec2(-.375, .125));
         const vec2 SS8[8] = vec2[8](vec2(.0625, -.1875), vec2(-.0625, .1875), vec2(.3125, .0625), vec2(-.1875, -.3125),
                                     vec2(-.3125, .3125), vec2(-.4375, -.0625), vec2(.1875, .4375), vec2(.4375, -.4375));
+        letterDiffuse = room(n, 1.0);
         vec3 plate = color, shaded = vec3(0.0);
         float letterSum = 0.0;
         for (int sampleIndex = 0; sampleIndex < uLoopCounts.x; sampleIndex++) {
@@ -957,49 +984,35 @@ void main() {
             if (textRegion > .5 || linkMark > 0.0) {
                 ${letteringCode('text', bodyLook, bodyShape === 'edition', false)}
                 ${bodyShape !== 'edition' && occlusion(bodyShape) ? `textColor *= mix(1.0, ${occlusion(bodyShape)}, depth);` : ''}
+                textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter, uTintAmount.w);
+                // Role and contacts sit back: a shallower mark, closer to the plate.
+                textColor = mix(textColor, plate, uTextMute);
             }
-            vec3 logoColor = vec3(0.0), nameColor = vec3(0.0);
+            vec3 lettering = textColor;
             if (logoRegion > .5) {
-                ${letteringCode('logo', look.logo, false, false)}
+                ${letteringCode('logo', look.logo)}
                 ${occlusion(logoShape) ? `
                 // Recessed logo: the floor sees less of the room than the plate.
                 logoColor *= mix(1.0, ${occlusion(logoShape)}, depth);` : ''}
-            } else if (titleRegion > .5) {
-                ${letteringCode('name', nameLook, false, false)}
-                ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
-            }
-            // Keep the exact per-region arithmetic, but emit tinted() just once.
-            // FXC inlines the whole studio into each static call; a small dynamic
-            // job loop avoids four copies without changing samples or finishes.
-            vec3 wordmark = logoColor, first = logoColor;
-            for (int tintIndex = 0; tintIndex < uTintPasses; tintIndex++) {
-                vec3 base;
-                vec4 tint;
-                float finish, shine, amount;
-                if (tintIndex == 0) {
-                    if (!(textRegion > .5 || linkMark > 0.0)) continue;
-                    base = textColor; tint = uBodyTint; finish = uTintFinish.w;
-                    shine = uGloss.z; amount = uTintAmount.w;
-                } else if (tintIndex == 1) {
-                    if (!(logoRegion > .5 && firstLetter < 1.0)) continue;
-                    base = logoColor; tint = uLogoTint; finish = uTintFinish.y;
-                    shine = uGloss.x; amount = uTintAmount.y;
-                } else if (tintIndex == 2) {
-                    if (!(logoRegion > .5 && firstLetter > 0.0)) continue;
-                    base = logoColor; tint = uLogoFirstTint; finish = uTintFinish.x;
-                    shine = uGloss.x; amount = uTintAmount.x;
-                } else {
-                    if (!(titleRegion > .5 && logoRegion <= .5)) continue;
-                    base = nameColor; tint = uNameTint; finish = uTintFinish.z;
-                    shine = uGloss.y; amount = uTintAmount.z;
+                // The first letter's own colour only where it is, the wordmark's
+                // elsewhere; both only across the first letter's edge.
+                vec3 wordmark = logoColor, first = logoColor;
+                // Share the two wordmark tints without duplicating their room light.
+                for (int tintIndex = 0; tintIndex < uWordmarkTints; tintIndex++) {
+                    bool initial = tintIndex == 1;
+                    if (initial ? firstLetter <= 0.0 : firstLetter >= 1.0) continue;
+                    vec3 colour = tinted(logoColor, initial ? uLogoFirstTint : uLogoTint,
+                        initial ? uTintFinish.x : uTintFinish.y, n, facet, v,
+                        letterRough, letterEdge, uGloss.x, plateLetter,
+                        initial ? uTintAmount.x : uTintAmount.y);
+                    if (initial) first = colour; else wordmark = colour;
                 }
-                vec3 result = tinted(base, tint, finish, n, facet, v, letterRough, letterEdge, shine, plateLetter, amount);
-                if (tintIndex == 0) textColor = mix(result, plate, uTextMute);
-                else if (tintIndex == 1) wordmark = result;
-                else if (tintIndex == 2) first = result;
-                else nameColor = result;
+                lettering = mix(wordmark, first, firstLetter);
+            } else if (titleRegion > .5) {
+                ${letteringCode('name', nameLook)}
+                ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
+                lettering = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
             }
-            vec3 lettering = logoRegion > .5 ? mix(wordmark, first, firstLetter) : titleRegion > .5 ? nameColor : textColor;
             ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
             // Raised letters have diamond-turned shoulders: the cut goes through
             // the colour to bare, polished steel, as on a machined badge. The
@@ -1067,10 +1080,10 @@ function letteringCode(name, m, flat = false, declare = true) {
             // Laser ablation: coating removed, bare frosted steel below. The frost
             // scatters a little of the room evenly; more read as white print.
             ${type}${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${shine(flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`)});
-            ${out} += ${name.toUpperCase()}_F0 * room(n, 1.0) * .18;`;
+            ${out} += ${name.toUpperCase()}_F0 * letterDiffuse * .18;`;
     return `
             // Laser annealing: dark oxide with a faint, rough sheen.
-            ${type}${out} = ${v3(m.albedo)} * room(n, 1.0) * 2.0 + .008 * room(reflect(-v, n), .55);`;
+            ${type}${out} = ${v3(m.albedo)} * letterDiffuse * 2.0 + .008 * room(reflect(-v, n), .55);`;
 }
 
 // Compile every program at once. With KHR_parallel_shader_compile the driver
@@ -2141,7 +2154,7 @@ export class CardRenderer {
         const pack = read => new Float32Array(setup.lights.slice(0, count).flatMap(read));
         c.uLightCount = count;
         c.uLoopCounts = LOOP_COUNTS;
-        c.uTintPasses = 4;
+        c.uWordmarkTints = 2;
         c.uLightCenter = pack((_, i) => setup.lamps[i].c);
         c.uLightRight = pack((_, i) => setup.lamps[i].right);
         c.uLightUp = pack((_, i) => setup.lamps[i].up);
@@ -2470,12 +2483,6 @@ export class CardRenderer {
         c.uReliefSign = this.reliefSign;
         c.uBevelCurve = this.bevelCurve;
         // Alpha: 0 — the process's own metal, 1 — a colour, 2 — the plate's material.
-        const tintOf = hex => {
-            if (!hex) return [0, 0, 0, 0];
-            if (hex === 'plate') return [0, 0, 0, 2];
-            const linear = c => c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
-            return [0, 2, 4].map(i => linear(parseInt(hex.slice(i, i + 2), 16) / 255)).concat(1);
-        };
         const logoTint = lab ? lab.logoTint : direction.logoTint;
         const firstTint = lab ? lab.logoFirstTint : (direction.logoFirstTint ?? 'same');
         c.uLogoTint = tintOf(logoTint);

@@ -88,10 +88,13 @@ const server = http.createServer((req, res) => {
         }, { theme });
         await page.goto(origin + '/home/?render=full&stats=1', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(() => document.documentElement.classList.contains('webgl-ready'), {}, { timeout: 120000 });
+        // Match the handoff's settling interval; this is after compile timing.
+        await page.waitForTimeout(3000);
         const result = await page.evaluate(async () => {
             window.__stopFrames = true;
             const r = window.__cardRenderer, gl = r.gl, profile = window.__compileProfile;
             if (!r || r.lite) throw new Error('Expected the full renderer');
+            await r.layoutReady;
             const debug = gl.getExtension('WEBGL_debug_shaders');
             const shaders = profile.shaders.map(s => ({ id: s.id, type: s.type, source: s.source, translated: debug?.getTranslatedShaderSource(s.object), infoLog: gl.getShaderInfoLog(s.object) }));
             const programs = profile.programs.map(({ object, gl, ...p }) => p);
@@ -128,6 +131,72 @@ const server = http.createServer((req, res) => {
             }
             return { theme: document.documentElement.dataset.theme, perf: r.perf, marks, programs, shaders, faces, canvas: [gl.drawingBufferWidth, gl.drawingBufferHeight], settle: r.settleStats };
         });
+        if (process.env.WINDOWS_REFERENCE_SHADER) {
+            const referenceSource = fs.readFileSync(process.env.WINDOWS_REFERENCE_SHADER, 'utf8');
+            result.paired = await page.evaluate(async referenceSource => {
+                const r = window.__cardRenderer, gl = r.gl, ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+                if (!ext) throw new Error('GPU timer queries unavailable');
+                const candidate = r.cards.full, program = gl.createProgram();
+                const vertex = window.__compileProfile.shaders.findLast(s => s.type === gl.VERTEX_SHADER).source;
+                for (const [type, source] of [[gl.VERTEX_SHADER, vertex], [gl.FRAGMENT_SHADER, referenceSource]]) {
+                    const shader = gl.createShader(type); gl.shaderSource(shader, source); gl.compileShader(shader); gl.attachShader(program, shader);
+                }
+                gl.linkProgram(program);
+                const parallel = gl.getExtension('KHR_parallel_shader_compile');
+                const deadline = performance.now() + 120000;
+                while (parallel && !gl.getProgramParameter(program, parallel.COMPLETION_STATUS_KHR)) {
+                    if (performance.now() > deadline) throw new Error('Reference compile timeout');
+                    await new Promise(resolve => setTimeout(resolve, 16));
+                }
+                if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+                const setters = {};
+                for (let i = 0; i < gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS); i++) {
+                    const { name, type } = gl.getActiveUniform(program, i), loc = gl.getUniformLocation(program, name);
+                    setters[name.replace(/\[0\]$/, '')] = {
+                        [gl.FLOAT]: v => typeof v === 'number' ? gl.uniform1f(loc, v) : gl.uniform1fv(loc, v),
+                        [gl.FLOAT_VEC2]: v => gl.uniform2fv(loc, v), [gl.FLOAT_VEC3]: v => gl.uniform3fv(loc, v), [gl.FLOAT_VEC4]: v => gl.uniform4fv(loc, v),
+                        [gl.FLOAT_MAT3]: v => gl.uniformMatrix3fv(loc, false, v), [gl.FLOAT_MAT4]: v => gl.uniformMatrix4fv(loc, false, v),
+                        [gl.INT]: v => gl.uniform1i(loc, v), [gl.INT_VEC4]: v => gl.uniform4iv(loc, v), [gl.SAMPLER_2D]: v => gl.uniform1i(loc, v)
+                    }[type];
+                }
+                const reference = { program, setUniforms: values => { for (const key in values) setters[key]?.(values[key]); } };
+                const draw = flipped => { r.time = 5; r.introTime = 10; r.intro = 1; r.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped, animate: false, reduced: true, delta: 1 / 60 }); };
+                const results = [];
+                for (const flipped of [false, true]) {
+                    const samples = { reference: [], candidate: [] }, hashes = {}, batches = [];
+                    for (let batch = 0; batch < 6; batch++) {
+                        for (const name of batch % 2 ? ['candidate', 'reference'] : ['reference', 'candidate']) {
+                            r.cards.full = name === 'reference' ? reference : candidate;
+                            for (let i = 0; i < 8; i++) draw(flipped);
+                            if (!(name in hashes)) {
+                                const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+                                gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+                                hashes[name] = [...new Uint8Array(await crypto.subtle.digest('SHA-256', pixels))].map(b => b.toString(16).padStart(2, '0')).join('');
+                            }
+                            const queries = [], original = r.drawCard;
+                            r.drawCard = function (bloom, focus, card) {
+                                if (bloom) return original.call(this, bloom, focus, card);
+                                const q = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, q); original.call(this, bloom, focus, card); gl.endQuery(ext.TIME_ELAPSED_EXT); queries.push(q);
+                            };
+                            for (let i = 0; i < 12; i++) draw(flipped);
+                            r.drawCard = original; gl.flush();
+                            const deadline = performance.now() + 10000;
+                            while (queries.some(q => !gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE))) {
+                                if (performance.now() > deadline) throw new Error('Query timeout');
+                                await new Promise(resolve => setTimeout(resolve, 5));
+                            }
+                            if (gl.getParameter(ext.GPU_DISJOINT_EXT)) throw new Error('Disjoint paired GPU samples');
+                            const ms = queries.map(q => gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6);
+                            queries.forEach(q => gl.deleteQuery(q)); samples[name].push(...ms); batches.push({ batch, name, ms });
+                        }
+                    }
+                    const stats = Object.fromEntries(Object.entries(samples).map(([name, ms]) => { const sorted = [...ms].sort((a, b) => a - b); return [name, { median: sorted[sorted.length >> 1], min: sorted[0], samples: ms }]; }));
+                    results.push({ flipped, hashes, equal: hashes.reference === hashes.candidate, stats, batches });
+                }
+                r.cards.full = candidate; gl.deleteProgram(program);
+                return { referenceShader: referenceSource.length, results };
+            }, referenceSource);
+        }
         for (const shader of result.shaders) {
             fs.writeFileSync(path.join(output, `shader-${shader.id}.glsl`), shader.source || '');
             fs.writeFileSync(path.join(output, `shader-${shader.id}.hlsl`), shader.translated || '');
