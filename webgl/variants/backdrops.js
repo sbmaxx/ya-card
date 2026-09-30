@@ -14,8 +14,8 @@ export const BACKDROPS = {
     // The light theme's, velvet's mirror: an even warm paper, a little lighter
     // than the silver card. The metal sees a bright room (roomBase); the loader
     // is a dark line on it.
-    paper: { title: 'Светлый', wall: [.80053, .77672, .73037], floor: [.80053, .77672, .73037], pool: [0, 0, 0], vignette: 0,
-        grain: .010, shadow: .4, roomBase: .20, bounce: 1.9, css: '#e2dfd9', edge: '#e2dfd9', loader: '#4a4239', glint: '#1d1a17',
+    paper: { title: 'Светлый', wall: [.72669, .69673, .64606], floor: [.72669, .69673, .64606], pool: [0, 0, 0], vignette: 0,
+        grain: .010, shadow: .4, roomBase: .20, bounce: 1.9, css: '#d8d4cd', edge: '#d8d4cd', loader: '#4a4239', glint: '#1d1a17',
         chip: '255 255 255 / .4' }
 };
 // The lab and old links open on the dark one.
