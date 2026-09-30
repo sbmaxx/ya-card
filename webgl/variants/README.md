@@ -16,7 +16,9 @@ saves it as a standalone production file. The production homepage
   redirects to the lab.
 - Slow GPUs get light 3D (flat print on a shaded plate, no studio lighting, relief,
   glow or shadow), chosen by a quick probe and remembered per GPU and screen
-  (`renderer.js`: `assessDevice`, `probe`). On any page, the homepage included:
+  (`renderer.js`: `assessDevice`, `probe`). Its shader is `lite.js`, not in the
+  pages: the build writes it beside them as `card-lite-<hash>.js`, fetched only
+  by a device that draws light 3D. On any page, the homepage included:
   `?render=full` / `?render=lite` force a mode for that load; `?stats=1` shows GPU,
   mode and frame time and stays on in that browser until `?stats=0`.
 

@@ -917,14 +917,6 @@ void main() {
             float raisedRegion = ${[[logoShape, 'logoRegion'], [nameShape, 'titleRegion'], [bodyShape, 'textRegion']]
                 .filter(([shape]) => shape === 'raised').map(([, region]) => region).join(' + ') || '0.0'};
             letterRough = max(letterRough, .45 * smoothstep(.1, .6, slope) * (1.0 - coloured) * raisedRegion);
-            ${letteringCode('logo', look.logo)}
-            ${occlusion(logoShape) ? `
-            // Recessed logo: the floor sees less of the room than the plate.
-            logoColor *= mix(1.0, ${occlusion(logoShape)}, depth);` : ''}
-            ${letteringCode('name', nameLook)}
-            ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
-            ${letteringCode('text', bodyLook, bodyShape === 'edition')}
-            ${bodyShape !== 'edition' && occlusion(bodyShape) ? `textColor *= mix(1.0, ${occlusion(bodyShape)}, depth);` : ''}
             // Colour: enamel fills the flat faces and leaves polished bevels;
             // anodising colours the metal itself, bevels included.
             float letterEdge = smoothstep(.12, .45, slope) * resolved;
@@ -937,13 +929,36 @@ void main() {
                 plateLetter = fresnel(letterF0, fv) * brushed(facet, v, across, plateRough, plateAniso, 1.0) * (1.0 + grooves * .05);
                 ${plate.coat ? `plateLetter += ${f(plate.coat)} * roomFor(reflect(-v, facet), .10, 1.0);` : ''}
             }
-            logoColor = mix(tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.y),
-                            tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.x), firstLetter);
-            nameColor = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
-            textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter, uTintAmount.w);
-            // Role and contacts sit back: a shallower mark, closer to the plate.
-            textColor = mix(textColor, plate, uTextMute);
-            vec3 lettering = logoColor * logoRegion + nameColor * titleRegion + textColor * textRegion;
+            // Each pixel lies in one region (wordmark, name, or role and
+            // contacts) and is lit with that region's process only: working out
+            // all three and keeping one cost two thirds of the letters' light.
+            // Links are drawn with the body text's process, so it is also
+            // worked out wherever an underline or a focus ring falls.
+            float linkMark = max(underline, focusStroke);
+            vec3 textColor = vec3(0.0);
+            if (textRegion > .5 || linkMark > 0.0) {
+                ${letteringCode('text', bodyLook, bodyShape === 'edition', false)}
+                ${bodyShape !== 'edition' && occlusion(bodyShape) ? `textColor *= mix(1.0, ${occlusion(bodyShape)}, depth);` : ''}
+                textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter, uTintAmount.w);
+                // Role and contacts sit back: a shallower mark, closer to the plate.
+                textColor = mix(textColor, plate, uTextMute);
+            }
+            vec3 lettering = textColor;
+            if (logoRegion > .5) {
+                ${letteringCode('logo', look.logo)}
+                ${occlusion(logoShape) ? `
+                // Recessed logo: the floor sees less of the room than the plate.
+                logoColor *= mix(1.0, ${occlusion(logoShape)}, depth);` : ''}
+                // The first letter's own colour only where it is, the wordmark's
+                // elsewhere; both only across the first letter's edge.
+                vec3 wordmark = firstLetter < 1.0 ? tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.y) : logoColor;
+                vec3 first = firstLetter > 0.0 ? tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.x) : logoColor;
+                lettering = mix(wordmark, first, firstLetter);
+            } else if (titleRegion > .5) {
+                ${letteringCode('name', nameLook)}
+                ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
+                lettering = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
+            }
             ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
             // Raised letters have diamond-turned shoulders: the cut goes through
             // the colour to bare, polished steel, as on a machined badge. The
@@ -957,12 +972,10 @@ void main() {
             // Only through a colour: letters in bare metal are that metal through
             // and through, and a mirror rim on them drew a chrome outline.
             float cut = smoothstep(.3, .65, slope) * .6 * resolved * cutRegion * letterCover * coloured;
-            lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
+            if (cut > 0.0) lettering = mix(lettering, metal(plateF0, facet, v, max(.05, letterRough)), cut);` : ''}
             // The wordmark and the name sit back towards the plate as a whole,
             // bevels included: muted letters with bright edges read as outlines.
             lettering = mix(lettering, plate, uMute.x * logoRegion + uMute.y * titleRegion);
-            // Links are always drawn with the body-text process.
-            float linkMark = max(underline, focusStroke);
             lettering = mix(lettering, textColor, linkMark);
             shaded += mix(plate, lettering, coverage);
         }
@@ -992,8 +1005,10 @@ void main() {
 }`;
 
 // GLSL for one lettering process. Produces `<name>Color`.
-function letteringCode(name, m, flat = false) {
-    const out = `${name}Color`;
+// `declare: false` assigns to a colour declared outside (the body text, which
+// links use in any region).
+function letteringCode(name, m, flat = false, declare = true) {
+    const out = `${name}Color`, type = declare ? 'vec3 ' : '';
     // Gloss from the lab (1 — as finished, 0 — matte): blends the roughness
     // towards a satin-matte .55. Component: x logo, y name, z role and contacts.
     const g = `uGloss.${{ logo: 'x', name: 'y', text: 'z' }[name]}`;
@@ -1001,20 +1016,20 @@ function letteringCode(name, m, flat = false) {
     if (m.process === 'vcut') return `
             // Diamond V-cut: both walls are polished; the lower groove is occluded.
             float ${name}Wall = smoothstep(.02, .20, slope);
-            vec3 ${out} = metal(${name.toUpperCase()}_F0, facet, v, ${shine(`max(${f(m.rough)}, letterRough)`)}) * mix(1.0, .9, ${name}Wall);`;
+            ${type}${out} = metal(${name.toUpperCase()}_F0, facet, v, ${shine(`max(${f(m.rough)}, letterRough)`)}) * mix(1.0, .9, ${name}Wall);`;
     if (m.process === 'enamel') return `
             // Cut-and-fill: gloss enamel sits a hair below a polished lip.
             float ${name}Lip = smoothstep(.25, .55, slope) * resolved;
-            vec3 ${out} = mix(gloss(${v3(m.albedo)}, n, v, ${shine('.12')}),
+            ${type}${out} = mix(gloss(${v3(m.albedo)}, n, v, ${shine('.12')}),
                 metal(${v3(m.lip)}, facet, v, ${shine('max(.04, letterRough)')}), ${name}Lip * .55);`;
     if (m.process === 'ablate') return `
             // Laser ablation: coating removed, bare frosted steel below. The frost
             // scatters a little of the room evenly; more read as white print.
-            vec3 ${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${shine(flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`)});
+            ${type}${out} = metal(${name.toUpperCase()}_F0, ${flat ? 'n' : 'facet'}, v, ${shine(flat ? f(m.rough) : `max(${f(m.rough)}, letterRough)`)});
             ${out} += ${name.toUpperCase()}_F0 * room(n, 1.0) * .18;`;
     return `
             // Laser annealing: dark oxide with a faint, rough sheen.
-            vec3 ${out} = ${v3(m.albedo)} * room(n, 1.0) * 2.0 + .008 * room(reflect(-v, n), .55);`;
+            ${type}${out} = ${v3(m.albedo)} * room(n, 1.0) * 2.0 + .008 * room(reflect(-v, n), .55);`;
 }
 
 // Compile every program at once. With KHR_parallel_shader_compile the driver
@@ -1166,91 +1181,6 @@ void main() {
     // The page around the canvas is sRGB: on a P3 buffer the backdrop is the
     // same colour exactly, so its edges still meet the page and Safari's bars.
     outColor = vec4(displayFromSRGB(display), 1.0);
-}`;
-
-// Light 3D for GPUs too slow for the studio (see probe and assessDevice): the
-// same plate, turned, flipped and spun the same way, without the studio's
-// reflections, the raised letters, their supersampling, the glow or the shadow. Flat
-// print on a plate shaded softly from the key's side, so a turn still reads
-// as a solid. A millisecond or two where the studio took over a hundred.
-const liteFragment = `#version 300 es
-precision highp float;
-uniform sampler2D uTexture;
-uniform float uEdge;
-uniform float uExposure;
-uniform float uOpacity;
-uniform float uReveal;
-uniform vec3 uKeyDirection;
-uniform vec4 uLogoRect;
-uniform vec4 uTitleRect;
-uniform vec4 uHoverRect;
-uniform vec4 uFocusRect;
-uniform vec4 uLogoTint;
-uniform vec4 uLogoFirstTint;
-uniform vec4 uNameTint;
-uniform vec4 uBodyTint;
-uniform float uTextMute;
-in vec3 vPosition;
-in vec3 vNormal;
-in vec2 vUV;
-in vec3 vTangent;
-in vec3 vBitangent;
-in float vFacet;
-out vec4 outColor;
-${toneCode}
-${hashCode}
-
-float inRect(vec4 r) {
-    return step(r.x, vUV.x) * step(r.y, vUV.y) * step(vUV.x, r.z) * step(vUV.y, r.w);
-}
-
-// A letter's colour from its tint (alpha as in the studio): bare metal, a
-// colour, or the plate's own material, a shade lighter so it still reads.
-vec3 letterColor(vec4 tint, vec3 metal, vec3 plate) {
-    return tint.a < .5 ? metal : tint.a < 1.5 ? tint.rgb * .8 : plate * 2.5;
-}
-
-void main() {
-    vec3 n = normalize(vNormal);
-    float shade = .6 + .4 * max(dot(n, normalize(uKeyDirection)), 0.0);
-    // Lighter towards the top, as the studio's plate is: a sheet, not a fill.
-    // (Before the tone curve's toe, which takes most of a value this dark.)
-    vec3 plate = vec3(.040, .0405, .043) * shade * mix(1.35, .9, vUV.y);
-    vec3 color;
-    if (uEdge > .5) {
-        // The chamfers take a little more light than the side wall.
-        float facet = abs(vFacet);
-        float chamfer = smoothstep(.25, .45, facet) * (1.0 - smoothstep(.95, .99, facet));
-        color = mix(vec3(.06), vec3(.16), chamfer) * shade;
-    } else {
-        vec4 ink = texture(uTexture, vUV);
-        vec3 inkColor = ink.rgb / max(ink.a, .001);
-        // The wordmark's first letter is drawn red-only in the mask.
-        float firstLetter = smoothstep(.6, .3, inkColor.g);
-        float logo = inRect(uLogoRect);
-        float title = inRect(uTitleRect) * (1.0 - logo);
-        float text = 1.0 - logo - title;
-        vec3 metal = vec3(.5) * shade;
-        vec3 body = mix(letterColor(uBodyTint, metal, plate), plate, uTextMute);
-        vec3 lettering = mix(letterColor(uLogoTint, metal, plate), letterColor(uLogoFirstTint, metal, plate), firstLetter) * logo
-            + letterColor(uNameTint, metal, plate) * title + body * text;
-        // Links: underline and keyboard focus, in the body text's colour.
-        vec2 aa = max(fwidth(vUV) * .7, vec2(1e-5));
-        vec2 enter = smoothstep(uHoverRect.xy - aa, uHoverRect.xy + aa, vUV);
-        vec2 leave = 1.0 - smoothstep(uHoverRect.zw - aa, uHoverRect.zw + aa, vUV);
-        float underline = enter.x * enter.y * leave.x * leave.y;
-        vec2 focusInside = step(uFocusRect.xy, vUV) * step(vUV, uFocusRect.zw);
-        vec2 focusThickness = max(fwidth(vUV) * 2.4, vec2(.0014));
-        vec2 focusEdge = min(vUV - uFocusRect.xy, uFocusRect.zw - vUV);
-        float focusStroke = min(1.0, focusInside.x * focusInside.y
-            * ((1.0 - step(focusThickness.x, focusEdge.x)) + (1.0 - step(focusThickness.y, focusEdge.y))));
-        float linkMark = max(underline, focusStroke);
-        lettering = mix(lettering, body, linkMark);
-        color = mix(plate, lettering, max(ink.a, linkMark));
-    }
-    vec3 display = toDisplay(uOutput.z * neutralTonemap(color * uExposure / uOutput.z));
-    display += (hash(gl_FragCoord.xy + 31.0) - .5) / 255.0;
-    outColor = vec4(display * uReveal * uOpacity, uOpacity);
 }`;
 
 const screenVertex = `#version 300 es
@@ -1649,16 +1579,26 @@ const SPIN = { gain: .75, max: 17, drag: 1.1, bearing: 3, spring: 7, damping: .7
 // How far a spin at `speed` coasts before drag and friction stop it.
 const coastDistance = speed => (speed - SPIN.bearing / SPIN.drag * Math.log(1 + SPIN.drag * speed / SPIN.bearing)) / SPIN.drag;
 
-// Which card a device gets: the studio, or light 3D (liteFragment) where the
-// GPU cannot draw the studio at a usable rate. A browser drawing in software
-// (a blocklisted GPU on Linux, often) gets light 3D at once; otherwise a
-// short probe decides (probe). The decision is remembered per GPU, screen
-// and build, so the next visit starts on it. `?render=full` / `?render=lite`
-// force one for that load (not remembered).
+// Which card a device gets: the studio, or light 3D (lite.js) where the GPU
+// cannot draw the studio at a usable rate. A browser drawing in software (a
+// blocklisted GPU on Linux, often) gets light 3D at once; otherwise a short
+// probe decides (probe). The decision is remembered per GPU, screen and build,
+// so the next visit starts on it. `?render=full` / `?render=lite` force one for
+// that load (not remembered).
 const PERFORMANCE_KEY = 'card-performance';
+// Light 3D is a module of its own, fetched only by a device that draws it: the
+// page itself carries the studio alone. Built pages name it in __CARD_LITE__
+// (a content-hashed file beside the page); unbuilt, it lies beside this file.
+const LITE_URL = typeof __CARD_LITE__ !== 'undefined' ? __CARD_LITE__ : new URL('./lite.js', import.meta.url).href;
+async function cardFragment(mode) {
+    if (mode !== 'lite') return fragmentSource;
+    const { liteFragment } = await import(LITE_URL);
+    return liteFragment({ toneCode, hashCode });
+}
 const shaderVersion = (() => {
     let hash = 5381;
-    for (const source of [fragmentSource, liteFragment]) for (let i = 0; i < source.length; i++) hash = (hash * 33 ^ source.charCodeAt(i)) >>> 0;
+    const source = fragmentSource + LITE_URL;
+    for (let i = 0; i < source.length; i++) hash = (hash * 33 ^ source.charCodeAt(i)) >>> 0;
     return hash.toString(36);
 })();
 function assessDevice(gl, caveat) {
@@ -1702,17 +1642,17 @@ export class CardRenderer {
         if (!gl) gl = canvas.getContext('webgl2', attributes);
         if (!gl) throw new Error('WebGL 2 unavailable');
         const perf = assessDevice(gl, caveat);
+        // Light 3D already known: its module is fetched from the start.
+        const card = cardFragment(perf.mode);
         // Let the loader reach the screen before compilation and warm-up start.
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         performance.mark('card:create');
-        // The light card's program always (a slow start can still end there);
-        // the studio's only where it may be used.
-        const pairs = [[vertexSource, liteFragment], [screenVertex, blurFragment], [screenVertex, compositeFragment],
-            [shadowVertex, shadowFragment], [screenVertex, backdropFragment]];
-        if (perf.mode !== 'lite') pairs.push([vertexSource, fragmentSource]);
+        // Only the card's own program: light 3D's is compiled if it comes to that.
         const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
-            compilePrograms(gl, pairs).then(result => { performance.mark('card:compiled'); return result; }),
+            card.then(fragment => compilePrograms(gl, [[screenVertex, blurFragment], [screenVertex, compositeFragment],
+                [shadowVertex, shadowFragment], [screenVertex, backdropFragment], [vertexSource, fragment]]))
+                .then(result => { performance.mark('card:compiled'); return result; }),
             loadCardFont().catch(() => {})
         ]);
         return new CardRenderer(canvas, gl, images, programs, perf).start();
@@ -1723,7 +1663,7 @@ export class CardRenderer {
         if (this.lite) this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
         this.resize();
         await this.layoutReady;
-        if (this.perf.mode === null) this.probe();
+        if (this.perf.mode === null) await this.probe();
         await this.warmUp();
         // Light 3D is cheap everywhere: a short settle; the studio's is capped too.
         if (this.lite) await this.settle(300, 1000);
@@ -1791,13 +1731,14 @@ export class CardRenderer {
 
     setupGraphics(programs) {
         const gl = this.gl;
-        // The studio's program is compiled only where it may be used.
-        [this.liteProgram, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram, this.program = null] = programs;
-        this.setLiteUniforms = uniformSetter(gl, this.liteProgram);
-        this.setCardUniforms = this.program ? uniformSetter(gl, this.program) : this.setLiteUniforms;
+        let program;
+        [this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram, program] = programs;
+        // Card programs, the studio's and light 3D's, as far as compiled (cardProgram).
+        this.cards = { [this.lite ? 'lite' : 'full']: { program, setUniforms: uniformSetter(gl, program) } };
         this.setBackdropUniforms = uniformSetter(gl, this.backdropProgram);
         this.shadowUniforms = Object.fromEntries(['uModel', 'uProjection', 'uLight'].map(name => [name, gl.getUniformLocation(this.shadowProgram, name)]));
-        this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.liteProgram, name)]));
+        // Fixed in the vertex shader (layout), the same for every card program.
+        this.attributes = { aPosition: 0, aNormal: 1, aUV: 2 };
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
             wide: gl.getUniformLocation(this.compositeProgram, 'uWide'), strength: gl.getUniformLocation(this.compositeProgram, 'uStrength'),
@@ -1824,7 +1765,8 @@ export class CardRenderer {
     // untimed, then up to six are timed one by one and the fastest counts. The
     // band's cost scaled to the plate's height estimates the whole card. Well
     // under a tenth of a second on a fast GPU or a slow one (which stops early).
-    probe() {
+    // Over budget, light 3D is fetched and compiled.
+    async probe() {
         const gl = this.gl, cap = this.pixelRatioCap;
         this.pixelRatioCap = Math.min(cap, 2);
         this.resize();
@@ -1841,59 +1783,74 @@ export class CardRenderer {
         const line = screenY(0, (.5 - (title[1] + title[3]) / 2) * this.height);
         const band = Math.max(8, Math.min(top - bottom, Math.round(height / 8)));
         const from = Math.round(Math.max(bottom, Math.min(top - band, line - band / 2)));
-        const drawBand = (y, h) => {
+        const scale = (top - bottom) / band;
+        const drawBand = card => {
             gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.viewport(0, 0, width, height);
             gl.enable(gl.SCISSOR_TEST);
-            gl.scissor(0, y, width, h);
+            gl.scissor(0, from, width, band);
             gl.clearColor(0, 0, 0, 0);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            gl.useProgram(this.program);
-            this.setCardUniforms(this.cardParams);
+            gl.useProgram(card.program);
+            card.setUniforms(this.cardParams);
             gl.enable(gl.DEPTH_TEST);
             gl.enable(gl.BLEND);
             gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-            this.drawCard(0, null);
+            this.drawCard(0, null, card);
             gl.disable(gl.BLEND);
             gl.disable(gl.SCISSOR_TEST);
         };
-        for (let i = 0; i < 2; i++) {
-            drawBand(from, band);
-            this.finish();
-        }
-        const scale = (top - bottom) / band;
-        let bandMs = Infinity;
-        for (let i = 0; i < 6; i++) {
-            const start = performance.now();
-            drawBand(from, band);
-            this.finish();
-            bandMs = Math.min(bandMs, performance.now() - start);
-            // Far over the budget: nothing to wait for.
-            if (i >= 1 && bandMs * scale > STUDIO_BUDGET * 3) break;
-        }
-        const estimate = bandMs * scale;
-        this.perf.probe = { bandMs: Math.round(bandMs * 100) / 100, estimate: Math.round(estimate * 10) / 10 };
+        const estimate = card => {
+            for (let i = 0; i < 2; i++) {
+                drawBand(card);
+                this.finish();
+            }
+            let bandMs = Infinity;
+            for (let i = 0; i < 6; i++) {
+                const start = performance.now();
+                drawBand(card);
+                this.finish();
+                bandMs = Math.min(bandMs, performance.now() - start);
+                // Far over the budget: nothing to wait for.
+                if (i >= 1 && bandMs * scale > STUDIO_BUDGET * 3) break;
+            }
+            return Math.round(bandMs * scale * 10) / 10;
+        };
+        this.perf.probe = { estimate: estimate(this.cards.full) };
         this.pixelRatioCap = cap;
-        if (estimate > STUDIO_BUDGET) this.useLite('probe');
-        else {
-            this.perf.mode = 'full';
-            this.perf.reason = 'probe';
-            rememberMode(this.perf);
-            this.resize();
-        }
+        await this.useMode(this.perf.probe.estimate > STUDIO_BUDGET ? 'lite' : 'full', 'probe');
     }
 
-    // Light 3D from now on: after the probe, or when a warm phone slows the
-    // studio down while it runs (app.js). There is no way back until reload,
-    // and `?render=full` keeps the studio whatever the frames do.
-    useLite(reason) {
-        if (this.lite || this.perf.reason === 'forced') return;
-        this.lite = true;
-        this.perf.mode = 'lite';
+    // A card's program (see cardFragment), fetched and compiled once.
+    cardProgram(mode) {
+        this.cards[mode] ??= cardFragment(mode)
+            .then(fragment => compilePrograms(this.gl, [[vertexSource, fragment]]))
+            .then(([program]) => ({ program, setUniforms: uniformSetter(this.gl, program) }))
+            .catch(error => { delete this.cards[mode]; throw error; });
+        return Promise.resolve(this.cards[mode]);
+    }
+
+    // The card from now on: after the probe, or light 3D when a warm phone
+    // slows the studio down while it runs (useLite). Its program is ready
+    // (cardProgram); a module that failed to load leaves the card as it was.
+    async useMode(mode, reason) {
+        const card = await this.cardProgram(mode).catch(() => null);
+        if (!card) return;
+        this.cards[mode] = card;
+        this.lite = mode === 'lite';
+        this.perf.mode = mode;
         this.perf.reason = reason;
         rememberMode(this.perf);
-        this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
+        if (this.lite) this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
         this.resize();
+    }
+
+    // Light 3D from now on, when a warm phone slows the studio down while it
+    // runs (app.js): once its module is in. There is no way back until reload,
+    // and `?render=full` keeps the studio whatever the frames do.
+    useLite(reason) {
+        if (this.lite || this.perf.reason === 'forced' || this.switching) return;
+        this.switching = this.useMode('lite', reason).finally(() => { this.switching = null; });
     }
 
     // Drivers finish shader and pipeline work lazily, on first use. Draw the full
@@ -2514,10 +2471,11 @@ export class CardRenderer {
             gl.uniform2f(this.blurUniforms.step, x / source.width, y / source.height);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         };
-        // Light 3D has no glow: straight to the shadow and the backdrop.
+        const card = this.cards[this.lite ? 'lite' : 'full'];
+        // Light 3D has no glow: straight to the backdrop.
         if (!this.lite) {
-            gl.useProgram(this.program);
-            this.setCardUniforms(this.cardParams);
+            gl.useProgram(card.program);
+            card.setUniforms(this.cardParams);
 
             // 1. Highlights above white at quarter resolution.
             gl.bindFramebuffer(gl.FRAMEBUFFER, bright.framebuffer);
@@ -2576,8 +2534,8 @@ export class CardRenderer {
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         gl.enable(gl.DEPTH_TEST);
-        gl.useProgram(this.lite ? this.liteProgram : this.program);
-        if (this.lite) this.setLiteUniforms(this.cardParams);
+        gl.useProgram(card.program);
+        if (this.lite) card.setUniforms(this.cardParams);
         // Over the backdrop, premultiplied: the plate's opacity (the intro's
         // fade) blends it into the studio. Written unblended, a fading plate
         // punched a hole in the scene down to the page colour — a dark
@@ -2611,8 +2569,8 @@ export class CardRenderer {
         gl.activeTexture(gl.TEXTURE0);
     }
 
-    drawCard(bloomPass, focusLink) {
-        const gl = this.gl, setUniforms = this.lite ? this.setLiteUniforms : this.setCardUniforms;
+    drawCard(bloomPass, focusLink, card = this.cards[this.lite ? 'lite' : 'full']) {
+        const gl = this.gl, setUniforms = card.setUniforms;
         setUniforms({ uBloomPass: bloomPass });
         for (let i = 0; i < 3; i++) {
             gl.bindVertexArray(this.arrays[i]);
@@ -2754,8 +2712,8 @@ export class CardRenderer {
         this.engravingTextures.forEach(texture => gl.deleteTexture(texture));
         this.deleteTargets();
         gl.deleteVertexArray(this.screenArray);
-        gl.deleteProgram(this.program);
-        gl.deleteProgram(this.blurProgram);
-        gl.deleteProgram(this.compositeProgram);
+        // Card programs still compiling (cardProgram) are promises: nothing to delete yet.
+        for (const card of Object.values(this.cards)) if (card.program) gl.deleteProgram(card.program);
+        for (const program of [this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram]) gl.deleteProgram(program);
     }
 }

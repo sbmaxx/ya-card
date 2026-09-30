@@ -134,13 +134,38 @@ function stripShaderNotes(source) {
     return source;
 }
 
+// Light 3D (lite.js) is not in the pages: only a device that draws it fetches
+// it (cardFragment in renderer.js), from a content-hashed file beside the page,
+// so a new build is never mixed with an old cached one.
+const lite = await (async () => {
+    const out = await build({
+        entryPoints: [resolve(here, 'lite.js')], bundle: true, minify: true, write: false,
+        format: 'esm', platform: 'browser', target: 'es2020', legalComments: 'none', charset: 'utf8',
+        plugins: [{ name: 'lite-shader', setup(bundler) {
+            bundler.onLoad({ filter: /\/variants\/lite\.js$/ }, async args => ({ loader: 'js',
+                contents: stripShaderNotes(await readFile(args.path, 'utf8')) }));
+        } }]
+    });
+    const text = out.outputFiles[0].text;
+    return { text, name: `card-lite-${createHash('sha256').update(text).digest('hex').slice(0, 8)}.js` };
+})();
+const writeLite = async directory => {
+    await mkdir(directory, { recursive: true });
+    await writeFile(resolve(directory, lite.name), lite.text);
+    console.log(`${lite.name}: ${Buffer.byteLength(lite.text)} bytes → ${directory}`);
+};
+
 // A studio page: the WebGL card with the loader, a watchdog that opens the
-// plain card if the scene never starts, and everything inlined.
-async function studioPage({ entry, define, direction, lightSetup, fallback, head, source = template, fonts = FONTS, card = false }) {
+// plain card if the scene never starts, and everything else inlined. `liteBase`
+// is where lite.js's file lies from the page.
+async function studioPage({ entry, define, direction, lightSetup, fallback, head, source = template, fonts = FONTS, card = false, liteBase = './' }) {
     const js = await build({
         stdin: { contents: entry, resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
-        format: 'iife', platform: 'browser', target: 'es2020', legalComments: 'none', charset: 'utf8', define,
+        format: 'iife', platform: 'browser', target: 'es2020', legalComments: 'none', charset: 'utf8',
+        define: { ...define, __CARD_LITE__: JSON.stringify(liteBase + lite.name) },
+        // import.meta only names lite.js on the unbuilt page, a branch the define drops.
+        logOverride: { 'empty-import-meta': 'silent' },
         plugins: [{ name: 'studio-renderer', setup(bundler) {
             bundler.onLoad({ filter: /\/variants\/renderer\.js$/ }, async args => ({ loader: 'js',
                 contents: stripShaderNotes(await readFile(args.path, 'utf8')) }));
@@ -198,6 +223,7 @@ await page('lab', await studioPage({
     fallback: '../plain/',
     head: themeColor + '<meta name="robots" content="noindex">'
 }));
+await writeLite(resolve(variantsOut, 'lab'));
 
 // The homepage: one look from the lab, without the panel and other editions.
 // Russian at `/`, English at `/en/`: the same page with its own head, so each
@@ -265,12 +291,15 @@ function homeSource(lang) {
             // Indexed, unlike the lab.
             head: themeColor,
             source: homeSource(lang),
-            fonts: [homeFont], card: true
+            fonts: [homeFont], card: true,
+            // `/en/` is a directory down from the file at the root.
+            liteBase: lang === 'ru' ? './' : '../'
         }), homeOut);
     }
+    await writeLite(homeOut);
     // Share images: generated covers (see og/PROMPT.md), 1200×630.
     for (const lang of ['ru', 'en']) await copyFile(resolve(here, `og/og-${lang}.jpg`), resolve(homeOut, `og-${lang}.jpg`)).catch(() => console.warn(`og-${lang}.jpg missing`));
-    await writeFile(resolve(homeOut, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /variants/\nDisallow: /plain/\n\nSitemap: ${SITE}/sitemap.xml\n`);
+    await writeFile(resolve(homeOut, 'robots.txt'), `User-agent: *\nAllow: /\nDisallow: /plain/\n\nSitemap: ${SITE}/sitemap.xml\n`);
     const alternates = Object.entries(HOME).map(([code, { path }]) => `    <xhtml:link rel="alternate" hreflang="${code}" href="${SITE}${path}"/>`).join('\n');
     await writeFile(resolve(homeOut, 'sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
