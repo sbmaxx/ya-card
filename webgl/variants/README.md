@@ -9,13 +9,17 @@ saves it as a standalone production file. The production homepage
 - Editions (`?edition=`): `steel` — linear brushed steel, diamond V-cut logo, black
   enamel name; `noir` — black PVD, laser ablation to bare steel; `gold` — brushed
   champagne gold; `aurora` — anodised titanium, thin-film interference.
-- Backdrop (`backdrops.js`): `velvet` — a dark room with one warm spotlight (the
-  homepage's); `paper` — a warm light sweep in soft daylight, for a light theme
-  (`?backdrop=paper`). The build bakes the page colours, Safari's bar colour and
-  the loader's light into the page, so the first paint already matches.
-- `/lab/light/`: a draft light theme, the homepage's look turned over for the
-  paper room — bead-blasted silver steel, raised black enamel letters, the red Я
-  anodised (`LIGHT_LOOK` in `build.mjs`).
+- Backdrop (`backdrops.js`): an even fill per theme — `velvet`, warm graphite,
+  and `paper`, warm light paper (`?backdrop=paper`). The build bakes the page
+  colours, Safari's bar colour and the loader's light into the page, so the
+  first paint already matches.
+- Themes on the homepage: dark (`HOME_LOOK`, Noir) and light (`LIGHT_LOOK` in
+  `build.mjs`: bead-blasted silver steel, raised black enamel letters, the red Я
+  anodised, on paper). The page's head picks one before the first paint — the
+  visitor's choice, or the system's — and a control in the top right corner
+  (`theme.js`) switches light / dark / auto, kept in localStorage `card-theme`.
+  Each theme's look is built into the shaders, so a switch fades the scene out
+  and reloads in the new theme.
 - The old `/variants/` section (gallery, edition pages, the lab's old address) was
   removed on 2026-09-30; the lab lives at `/lab/`.
 - Slow GPUs get light 3D (flat print on a shaded plate, no studio lighting, relief,

@@ -15,7 +15,23 @@ import { LIGHT_SETUPS } from './lights.js';
 
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
+// It is the dark theme's.
 const HOME_LOOK = 'ABCCCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAJAFAVB4A8AAAC_D8dAeAQAQAKAAAAAAAAAMAAAEABABAOAUAGAGABAAAUAAACAUAA';
+// The light theme's: the dark look turned over for a light room. The black PVD
+// plate with letters lasered to bare steel becomes bead-blasted silver steel
+// with raised letters in black enamel (bright diamond-cut shoulders); the red
+// Я is anodised into the metal, where enamel's gloss would mirror the bright
+// room and turn it coral; the room is the paper backdrop.
+const LIGHT_LOOK = { edition: 'steel', backdrop: 'paper', logoTint: '141518', nameTint: '141518', bodyTint: '141518',
+    logoFinish: 'enamel', nameFinish: 'enamel', bodyFinish: 'enamel', logoFirstFinish: 'anod',
+    logoMute: '0', textMute: '0.18', exposure: '0.8', sparkle: '0.15' };
+// A theme's look as the preset the page is built with (no lab panel).
+const themeLook = theme => {
+    const look = decodePreset(HOME_LOOK);
+    look.delete('panel');
+    if (theme === 'light') for (const [key, value] of Object.entries(LIGHT_LOOK)) look.set(key, value);
+    return look;
+};
 const page = async (id, html, out) => {
     const bytes = Buffer.from(html), directory = resolve(out, id);
     await mkdir(directory, { recursive: true });
@@ -56,11 +72,27 @@ const pageCss = async (fonts, card, extra = '') => (await fontFaces(fonts, card)
 const homeFont = fontOf(Number(decodePreset(HOME_LOOK).get('font') ?? 0));
 // The weights the homepage's text is drawn in (settings.js: name 500, the rest 400 by default).
 const homeWeights = (look => [...new Set([Number(look.get('nameWeight') ?? 500), Number(look.get('bodyWeight') ?? 400)])])(decodePreset(HOME_LOOK));
-// The homepage's backdrop (the lab opens on it too): its colours are baked into
-// the page, so the first paint, Safari's bars and the loader already match the
-// scene that follows.
-const homeBackdrop = (look => BACKDROPS[look.get('backdrop')] || BACKDROPS[directions[look.get('edition')]?.backdrop] || BACKDROPS.velvet)(decodePreset(HOME_LOOK));
+// Each theme's backdrop (the lab opens on the dark one): its colours are baked
+// into the page, so the first paint, Safari's bars and the loader already match
+// the scene that follows.
+const backdropOf = look => BACKDROPS[look.get('backdrop')] || BACKDROPS[directions[look.get('edition')]?.backdrop] || BACKDROPS.velvet;
+const homeBackdrop = backdropOf(themeLook('dark'));
+const THEMES = { dark: homeBackdrop, light: backdropOf(themeLook('light')) };
 const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
+// The homepage's theme, picked in its head before the first paint: the choice
+// kept by the theme control (theme.js), or the system's. It shows in
+// `data-theme`, which switches the page's colours (loaderCss), and Safari's
+// bars follow.
+const themeScript = `<script>(() => {
+    const root = document.documentElement;
+    let choice = 'auto';
+    try { choice = localStorage.getItem('card-theme') || 'auto'; } catch {}
+    if (!['light', 'dark', 'auto'].includes(choice)) choice = 'auto';
+    const theme = choice === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : choice;
+    root.dataset.theme = theme;
+    root.dataset.themeChoice = choice;
+    if (theme === 'light') document.querySelector('meta[name="theme-color"]').content = '${THEMES.light.edge}';
+})();</script>`;
 // Minimal loader: a hairline with a travelling glint, a real element so it can
 // fade out while the card fades in. Transform and opacity animate on the
 // compositor, so it keeps moving while warm-up keeps the main thread busy.
@@ -70,14 +102,16 @@ const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // The page is the backdrop's colour from the first paint; on touch screens it
 // is the flat edge colour Safari tints its bars with (the scene fades into it
 // inside the visible viewport, so the transition completes before the bars).
-const loaderCss = backdrop => `:root{${Object.entries(pageColours(backdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}
+// With a light theme, its colours apply under `data-theme="light"`.
+const loaderCss = themes => `${Object.entries(themes).map(([theme, backdrop]) => `${theme === 'dark' ? ':root' : `:root[data-theme=${theme}]`}{${
+    Object.entries(pageColours(backdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}`).join('\n')}
 :root{background-color:var(--page)}
 @media (hover:none) and (pointer:coarse){:root,body{background-color:var(--edge)}}
 .card-loader{position:fixed;left:50%;top:50%;width:176px;height:1px;margin-left:-88px;z-index:20;pointer-events:none;
 opacity:0;transition:opacity .8s ease;background:linear-gradient(90deg,transparent,rgb(var(--loader)/.6) 22%,rgb(var(--loader)/.6) 78%,transparent)}
 .webgl-loading .card-loader{opacity:1;transition-duration:.35s}
 .card-loader::after{content:'';position:absolute;left:0;top:-6px;width:80px;height:13px;
-background:linear-gradient(90deg,transparent,rgb(var(--loader)) 25%,${backdrop.glint || '#fff'} 50%,rgb(var(--loader)) 75%,transparent) center/100% 1px no-repeat,
+background:linear-gradient(90deg,transparent,rgb(var(--loader)) 25%,var(--glint) 50%,rgb(var(--loader)) 75%,transparent) center/100% 1px no-repeat,
 radial-gradient(closest-side,rgb(var(--loader)/.55),transparent);
 will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite alternate}
 @keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(96px);opacity:0}}
@@ -92,7 +126,23 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 // Corners stay clean on the WebGL card: language flips with the card itself.
 // The HTML fallback keeps both controls.
 const cornersCss = '.webgl-ready .languages,.webgl-ready .links-overlay,.webgl-loading .languages,.webgl-loading .links-overlay{display:none}';
-const pageExtraCss = (backdrop = homeBackdrop) => cornersCss + loaderCss(backdrop);
+// The theme control (theme.js): a quiet pill in the top right corner, in the
+// loader's light, that comes with the card. A new theme fades the scene out
+// into the new page colour before the page reloads in it.
+const themeCss = `.theme-switch{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));z-index:12;
+display:flex;gap:2px;padding:3px;border-radius:999px;border:1px solid rgb(var(--loader)/.16);background:rgb(var(--chip));
+-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);opacity:0;pointer-events:none;transition:opacity .8s ease}
+.webgl-ready .theme-switch{opacity:1;pointer-events:auto}
+.theme-switch button{appearance:none;-webkit-appearance:none;margin:0;padding:0;border:0;width:30px;height:30px;border-radius:50%;
+display:grid;place-items:center;background:transparent;color:rgb(var(--loader)/.5);cursor:pointer;transition:color .2s,background-color .2s}
+.theme-switch button:hover{color:rgb(var(--loader)/.85)}
+.theme-switch button[aria-checked=true]{color:rgb(var(--loader));background:rgb(var(--loader)/.13)}
+.theme-switch button:focus-visible{outline:1px solid rgb(var(--loader)/.8);outline-offset:1px}
+.theme-switch svg{width:16px;height:16px}
+.theme-leaving #card-canvas{opacity:0;transition:opacity .45s ease}
+.theme-leaving,.theme-leaving body{transition:background-color .45s ease}
+@media(prefers-reduced-motion:reduce){.theme-switch,.theme-switch button,.theme-leaving #card-canvas{transition:none}}`;
+const pageExtraCss = (themes = { dark: homeBackdrop }) => cornersCss + loaderCss(themes) + (themes.light ? themeCss : '');
 
 // Shader sources live in template literals, with the notes that explain them.
 // Pages need the code only: comment lines and indentation are dropped from
@@ -158,7 +208,9 @@ const writeLite = async directory => {
 // A studio page: the WebGL card with the loader, a watchdog that opens the
 // plain card if the scene never starts, and everything else inlined. `liteBase`
 // is where lite.js's file lies from the page.
-async function studioPage({ entry, define, direction, lightSetup, fallback, head, source = template, fonts = FONTS, card = false, liteBase = './', backdrop }) {
+// `editions` and `lightSetups` trim the bundle to what the page's looks use;
+// `themes` are the page's backdrops by theme (see loaderCss).
+async function studioPage({ entry, define, editions, lightSetups, fallback, head, source = template, fonts = FONTS, card = false, liteBase = './', themes }) {
     const js = await build({
         stdin: { contents: entry, resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
@@ -170,19 +222,21 @@ async function studioPage({ entry, define, direction, lightSetup, fallback, head
             bundler.onLoad({ filter: /\/variants\/renderer\.js$/ }, async args => ({ loader: 'js',
                 contents: stripShaderNotes(await readFile(args.path, 'utf8')) }));
             bundler.onResolve({ filter: /(^|\/)renderer\.js$/ }, () => ({ path: resolve(here, 'renderer.js') }));
-            // A single-edition page carries only its own direction.
-            if (direction) {
-                const { css: _css, ...runtime } = direction;
+            // A page of its own looks carries only their editions, the one
+            // its preset names chosen as directions.js does…
+            if (editions) {
+                const runtime = Object.fromEntries(editions.map(({ css: _css, ...edition }) => [edition.id, edition]));
                 bundler.onLoad({ filter: /\/directions\.js$/ }, () => ({ loader: 'js',
-                    contents: `export const direction = ${JSON.stringify(runtime)};\nexport const directions = { [direction.id]: direction };` }));
-                // …and only the light it is lit with; the lab's other setups stay in the lab.
-                const light = lightSetup || direction.lightSetup;
+                    contents: `export const directions = ${JSON.stringify(runtime)};\n`
+                        + `const requested = new URLSearchParams(globalThis.__cardPreset ?? location.search).get('edition');\n`
+                        + `export const direction = directions[requested] || directions[${JSON.stringify(editions[0].id)}];` }));
+                // …and only the lights they are lit with; the lab's other setups stay in the lab.
                 bundler.onLoad({ filter: /\/lights\.js$/ }, () => ({ loader: 'js',
-                    contents: `export const LIGHT_SETUPS = ${JSON.stringify({ [light]: LIGHT_SETUPS[light] })};` }));
+                    contents: `export const LIGHT_SETUPS = ${JSON.stringify(Object.fromEntries(lightSetups.map(id => [id, LIGHT_SETUPS[id]])))};` }));
             }
         } }]
     });
-    const css = await transform(await pageCss(fonts, card, pageExtraCss(backdrop)), { loader: 'css', minify: true, target: 'es2020' });
+    const css = await transform(await pageCss(fonts, card, pageExtraCss(themes)), { loader: 'css', minify: true, target: 'es2020' });
     let html = source
         // The backdrop is rendered in WebGL: no CSS ambient layer or SVG shadow.
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '<div class="card-loader" aria-hidden="true"></div>')
@@ -279,17 +333,18 @@ function homeSource(lang) {
     return replaced;
 }
 {
-    const look = decodePreset(HOME_LOOK);
-    look.delete('panel');
-    const direction = directions[look.get('edition')];
+    // Both themes, each its own look (home.js picks the one the head chose).
+    const looks = { dark: themeLook('dark'), light: themeLook('light') };
     for (const lang of ['ru', 'en']) {
         await page(lang === 'ru' ? '' : 'en', await studioPage({
-            entry: "import './home.js';\nimport './settings.js';\nimport '../app.js';",
-            define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
-            direction, lightSetup: look.get('lightSetup'),
+            entry: "import './home.js';\nimport './settings.js';\nimport './theme.js';\nimport '../app.js';",
+            define: { __CARD_PRESETS__: JSON.stringify(Object.fromEntries(Object.entries(looks).map(([theme, look]) => [theme, look.toString()]))) },
+            editions: [...new Set(Object.values(looks).map(look => directions[look.get('edition')]))],
+            lightSetups: [...new Set(Object.values(looks).map(look => look.get('lightSetup') || 'studio'))],
+            themes: THEMES,
             fallback: '/plain/',
             // Indexed, unlike the lab.
-            head: themeColor,
+            head: themeColor + themeScript,
             source: homeSource(lang),
             fonts: [homeFont], card: true,
             // `/en/` is a directory down from the file at the root.
@@ -306,33 +361,6 @@ function homeSource(lang) {
 ${Object.values(HOME).map(({ path }) => `  <url>\n    <loc>${SITE}${path}</loc>\n${alternates}\n  </url>`).join('\n')}
 </urlset>
 `);
-}
-
-// A draft light theme, if the homepage is the dark one: its look turned over
-// for a light room. Velvet's dark room becomes the paper backdrop; the black
-// PVD plate with letters lasered to bare steel becomes bead-blasted silver
-// steel with raised letters in black enamel (bright diamond-cut shoulders),
-// and the red Я anodised into the metal, where enamel's gloss would mirror
-// the bright room and turn it coral. A page of its own, `/lab/light/`, until
-// it is decided on.
-const LIGHT_LOOK = { edition: 'steel', backdrop: 'paper', logoTint: '141518', nameTint: '141518', bodyTint: '141518',
-    logoFinish: 'enamel', nameFinish: 'enamel', bodyFinish: 'enamel', logoFirstFinish: 'anod',
-    logoMute: '0', textMute: '0.18', exposure: '0.8', sparkle: '0.15' };
-{
-    const look = decodePreset(HOME_LOOK);
-    look.delete('panel');
-    for (const [key, value] of Object.entries(LIGHT_LOOK)) look.set(key, value);
-    const direction = directions[look.get('edition')], backdrop = BACKDROPS[look.get('backdrop')];
-    const lightOut = resolve(labOut, 'light');
-    await page('', await studioPage({
-        entry: "import './home.js';\nimport './settings.js';\nimport '../app.js';",
-        define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
-        direction, lightSetup: look.get('lightSetup'),
-        fallback: '/plain/',
-        head: `<meta name="theme-color" content="${backdrop.edge}"><meta name="robots" content="noindex">`,
-        fonts: [homeFont], card: true, backdrop
-    }), lightOut);
-    await writeLite(lightOut);
 }
 
 // Plain card for browsers without WebGL 2: the same accessible HTML faces, no scripts.
