@@ -370,6 +370,9 @@ uniform int uLightCount;
 // compiled once. Nothing inside a loop may take a derivative (texture(),
 // dFdx, fwidth): that would force the unrolling again.
 uniform ivec4 uLoopCounts;
+// Body, wordmark, first letter, name: share one tint shader across the four
+// possible jobs. A uniform bound keeps FXC from cloning it at every call site.
+uniform int uTintPasses;
 uniform vec3 uLightCenter[${MAX_LIGHTS}];
 uniform vec3 uLightRight[${MAX_LIGHTS}];
 uniform vec3 uLightUp[${MAX_LIGHTS}];
@@ -954,26 +957,49 @@ void main() {
             if (textRegion > .5 || linkMark > 0.0) {
                 ${letteringCode('text', bodyLook, bodyShape === 'edition', false)}
                 ${bodyShape !== 'edition' && occlusion(bodyShape) ? `textColor *= mix(1.0, ${occlusion(bodyShape)}, depth);` : ''}
-                textColor = tinted(textColor, uBodyTint, uTintFinish.w, n, facet, v, letterRough, letterEdge, uGloss.z, plateLetter, uTintAmount.w);
-                // Role and contacts sit back: a shallower mark, closer to the plate.
-                textColor = mix(textColor, plate, uTextMute);
             }
-            vec3 lettering = textColor;
+            vec3 logoColor = vec3(0.0), nameColor = vec3(0.0);
             if (logoRegion > .5) {
-                ${letteringCode('logo', look.logo)}
+                ${letteringCode('logo', look.logo, false, false)}
                 ${occlusion(logoShape) ? `
                 // Recessed logo: the floor sees less of the room than the plate.
                 logoColor *= mix(1.0, ${occlusion(logoShape)}, depth);` : ''}
-                // The first letter's own colour only where it is, the wordmark's
-                // elsewhere; both only across the first letter's edge.
-                vec3 wordmark = firstLetter < 1.0 ? tinted(logoColor, uLogoTint, uTintFinish.y, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.y) : logoColor;
-                vec3 first = firstLetter > 0.0 ? tinted(logoColor, uLogoFirstTint, uTintFinish.x, n, facet, v, letterRough, letterEdge, uGloss.x, plateLetter, uTintAmount.x) : logoColor;
-                lettering = mix(wordmark, first, firstLetter);
             } else if (titleRegion > .5) {
-                ${letteringCode('name', nameLook)}
+                ${letteringCode('name', nameLook, false, false)}
                 ${nameShape !== 'edition' && occlusion(nameShape) ? `nameColor *= mix(1.0, ${occlusion(nameShape)}, depth);` : ''}
-                lettering = tinted(nameColor, uNameTint, uTintFinish.z, n, facet, v, letterRough, letterEdge, uGloss.y, plateLetter, uTintAmount.z);
             }
+            // Keep the exact per-region arithmetic, but emit tinted() just once.
+            // FXC inlines the whole studio into each static call; a small dynamic
+            // job loop avoids four copies without changing samples or finishes.
+            vec3 wordmark = logoColor, first = logoColor;
+            for (int tintIndex = 0; tintIndex < uTintPasses; tintIndex++) {
+                vec3 base;
+                vec4 tint;
+                float finish, shine, amount;
+                if (tintIndex == 0) {
+                    if (!(textRegion > .5 || linkMark > 0.0)) continue;
+                    base = textColor; tint = uBodyTint; finish = uTintFinish.w;
+                    shine = uGloss.z; amount = uTintAmount.w;
+                } else if (tintIndex == 1) {
+                    if (!(logoRegion > .5 && firstLetter < 1.0)) continue;
+                    base = logoColor; tint = uLogoTint; finish = uTintFinish.y;
+                    shine = uGloss.x; amount = uTintAmount.y;
+                } else if (tintIndex == 2) {
+                    if (!(logoRegion > .5 && firstLetter > 0.0)) continue;
+                    base = logoColor; tint = uLogoFirstTint; finish = uTintFinish.x;
+                    shine = uGloss.x; amount = uTintAmount.x;
+                } else {
+                    if (!(titleRegion > .5 && logoRegion <= .5)) continue;
+                    base = nameColor; tint = uNameTint; finish = uTintFinish.z;
+                    shine = uGloss.y; amount = uTintAmount.z;
+                }
+                vec3 result = tinted(base, tint, finish, n, facet, v, letterRough, letterEdge, shine, plateLetter, amount);
+                if (tintIndex == 0) textColor = mix(result, plate, uTextMute);
+                else if (tintIndex == 1) wordmark = result;
+                else if (tintIndex == 2) first = result;
+                else nameColor = result;
+            }
+            vec3 lettering = logoRegion > .5 ? mix(wordmark, first, firstLetter) : titleRegion > .5 ? nameColor : textColor;
             ${logoShape === 'raised' || nameShape === 'raised' || bodyShape === 'raised' ? `
             // Raised letters have diamond-turned shoulders: the cut goes through
             // the colour to bare, polished steel, as on a machined badge. The
@@ -2115,6 +2141,7 @@ export class CardRenderer {
         const pack = read => new Float32Array(setup.lights.slice(0, count).flatMap(read));
         c.uLightCount = count;
         c.uLoopCounts = LOOP_COUNTS;
+        c.uTintPasses = 4;
         c.uLightCenter = pack((_, i) => setup.lamps[i].c);
         c.uLightRight = pack((_, i) => setup.lamps[i].right);
         c.uLightUp = pack((_, i) => setup.lamps[i].up);
