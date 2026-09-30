@@ -126,22 +126,25 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 // Corners stay clean on the WebGL card: language flips with the card itself.
 // The HTML fallback keeps both controls.
 const cornersCss = '.webgl-ready .languages,.webgl-ready .links-overlay,.webgl-loading .languages,.webgl-loading .links-overlay{display:none}';
-// The theme control (theme.js): a quiet pill in the top right corner, in the
-// loader's light, that comes with the card. A new theme fades the scene out
-// into the new page colour before the page reloads in it.
-const themeCss = `.theme-switch{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));z-index:12;
-display:flex;gap:2px;padding:3px;border-radius:999px;border:1px solid rgb(var(--loader)/.16);background:rgb(var(--chip));
--webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);opacity:0;pointer-events:none;transition:opacity .8s ease}
-.webgl-ready .theme-switch{opacity:1;pointer-events:auto}
-.theme-switch button{appearance:none;-webkit-appearance:none;margin:0;padding:0;border:0;width:30px;height:30px;border-radius:50%;
+// The corner controls (theme.js): quiet pills in the top right corner — the
+// theme, and the graphics where light 3D is on — in the loader's light, that
+// come with the card. A change fades the scene out into the new page colour
+// before the page reloads.
+const themeCss = `.corner-controls{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));z-index:12;
+display:flex;gap:8px;opacity:0;pointer-events:none;transition:opacity .8s ease}
+.webgl-ready .corner-controls{opacity:1;pointer-events:auto}
+.theme-switch,.render-switch{display:flex;gap:2px;padding:3px;border-radius:999px;border:1px solid rgb(var(--loader)/.16);background:rgb(var(--chip));
+-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.render-switch[hidden]{display:none}
+.corner-controls button{appearance:none;-webkit-appearance:none;margin:0;padding:0;border:0;width:30px;height:30px;border-radius:50%;
 display:grid;place-items:center;background:transparent;color:rgb(var(--loader)/.5);cursor:pointer;transition:color .2s,background-color .2s}
-.theme-switch button:hover{color:rgb(var(--loader)/.85)}
-.theme-switch button[aria-checked=true]{color:rgb(var(--loader));background:rgb(var(--loader)/.13)}
-.theme-switch button:focus-visible{outline:1px solid rgb(var(--loader)/.8);outline-offset:1px}
-.theme-switch svg{width:16px;height:16px}
+.corner-controls button:hover{color:rgb(var(--loader)/.85)}
+.corner-controls button[aria-checked=true]{color:rgb(var(--loader));background:rgb(var(--loader)/.13)}
+.corner-controls button:focus-visible{outline:1px solid rgb(var(--loader)/.8);outline-offset:1px}
+.corner-controls svg{width:16px;height:16px}
 .theme-leaving #card-canvas{opacity:0;transition:opacity .45s ease}
 .theme-leaving,.theme-leaving body{transition:background-color .45s ease}
-@media(prefers-reduced-motion:reduce){.theme-switch,.theme-switch button,.theme-leaving #card-canvas{transition:none}}`;
+@media(prefers-reduced-motion:reduce){.corner-controls,.corner-controls button,.theme-leaving #card-canvas{transition:none}}`;
 const pageExtraCss = (themes = { dark: homeBackdrop }) => cornersCss + loaderCss(themes) + (themes.light ? themeCss : '');
 
 // Shader sources live in template literals, with the notes that explain them.

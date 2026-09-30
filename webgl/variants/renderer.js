@@ -1611,6 +1611,10 @@ function assessDevice(gl, caveat) {
     const key = `${gpu}|${screen.width}x${screen.height}@${devicePixelRatio}|${shaderVersion}|p2`;
     const forced = new URLSearchParams(location.search).get('render');
     if (forced === 'full' || forced === 'lite') return { gpu, key, mode: forced, reason: 'forced' };
+    // The visitor's own choice (the graphics control, theme.js).
+    let chosen = null;
+    try { chosen = localStorage.getItem(RENDER_CHOICE_KEY); } catch {}
+    if (chosen === 'full' || chosen === 'lite') return { gpu, key, mode: chosen, reason: 'chosen' };
     if (caveat || /swiftshader|llvmpipe|softpipe|basic render/i.test(gpu)) return { gpu, key, mode: 'lite', reason: 'software' };
     try {
         const saved = JSON.parse(localStorage.getItem(PERFORMANCE_KEY) || 'null');
@@ -1618,8 +1622,12 @@ function assessDevice(gl, caveat) {
     } catch {}
     return { gpu, key, mode: null, reason: null };
 }
+// A mode set by `?render=` or chosen by the visitor: kept whatever the probe,
+// the compile time or the frames say.
+const pinned = perf => perf.reason === 'forced' || perf.reason === 'chosen';
+const RENDER_CHOICE_KEY = 'card-render';
 function rememberMode(perf) {
-    if (perf.reason === 'forced') return;
+    if (pinned(perf)) return;
     // A probe near the budget is not kept: a GPU busy with another window
     // for a moment must not leave a fast device on light 3D for good. Only a
     // device far over it (a mid-range phone: ten times) starts on light 3D
@@ -1672,7 +1680,7 @@ export class CardRenderer {
         // tens of seconds on the fastest GPU, and the page gave up and opened
         // the plain card. The driver finishes the studio's in the background and
         // caches it, and nothing is remembered: the next visit tries the studio.
-        if (perf.mode !== 'lite' && perf.reason !== 'forced') {
+        if (perf.mode !== 'lite' && !pinned(perf)) {
             const late = new Promise(resolve => setTimeout(resolve, COMPILE_LIMIT, null));
             cardProgram = Promise.race([cardProgram, late]).then(async programs => {
                 if (programs) return programs;
@@ -1877,13 +1885,15 @@ export class CardRenderer {
         rememberMode(this.perf);
         if (this.lite) this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
         this.resize();
+        // The graphics control (theme.js) shows once the card is on light 3D.
+        window.dispatchEvent(new CustomEvent('card-mode', { detail: mode }));
     }
 
     // Light 3D from now on, when a warm phone slows the studio down while it
     // runs (app.js): once its module is in. There is no way back until reload,
     // and `?render=full` keeps the studio whatever the frames do.
     useLite(reason) {
-        if (this.lite || this.perf.reason === 'forced' || this.switching) return;
+        if (this.lite || pinned(this.perf) || this.switching) return;
         this.switching = this.useMode('lite', reason).finally(() => { this.switching = null; });
     }
 

@@ -20,6 +20,10 @@ saves it as a standalone production file. The production homepage
   (`theme.js`) switches light / dark / auto, kept in localStorage `card-theme`.
   Each theme's look is built into the shaders, so a switch fades the scene out
   and reloads in the new theme.
+- Graphics control: on a device that got light 3D (probe, slow compile, slow
+  frames), a full / light pill appears beside the theme's; the choice is kept
+  in localStorage `card-render` and wins over the probe and the guards (not
+  over `?render=`). Once chosen, the pill stays.
 - The old `/variants/` section (gallery, edition pages, the lab's old address) was
   removed on 2026-09-30; the lab lives at `/lab/`.
 - Slow GPUs get light 3D (flat print on a shaded plate, no studio lighting, relief,
