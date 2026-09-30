@@ -14,6 +14,11 @@ saves it as a standalone production file. The production homepage
   the page, so the first paint already matches.
 - The old gallery (`/variants/`) and edition pages (`/variants/steel/` …) are HTML
   redirects to the lab.
+- Slow GPUs get light 3D (flat print on a shaded plate, no studio lighting, relief,
+  glow or shadow), chosen by a quick probe and remembered per GPU and screen
+  (`renderer.js`: `assessDevice`, `probe`). On any page, the homepage included:
+  `?render=full` / `?render=lite` force a mode for that load; `?stats=1` shows GPU,
+  mode and frame time and stays on in that browser until `?stats=0`.
 
 ## Rendering
 

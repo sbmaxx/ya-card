@@ -43,8 +43,18 @@ import { CardRenderer } from './renderer.js';
     // slower than 50 ms (median of the last 40) hand over to light 3D.
     const frameGaps = [], statGaps = [];
     let watchFrom = Infinity;
-    // `?stats=1`: what draws the card and how fast, for reports from other devices.
-    const statsNote = new URLSearchParams(location.search).has('stats') ? document.createElement('div') : null;
+    // `?stats=1`: what draws the card and how fast, for reports from other
+    // devices. Remembered in this browser until `?stats=0`.
+    const statsNote = (() => {
+        const asked = new URLSearchParams(location.search).get('stats');
+        try {
+            if (asked === '1') localStorage.setItem('card-stats', '1');
+            else if (asked === '0') localStorage.removeItem('card-stats');
+            return localStorage.getItem('card-stats') === '1';
+        } catch {
+            return asked === '1';
+        }
+    })() ? document.createElement('div') : null;
     let statsShown = 0;
     const sceneLabels = {
         ru: 'Визитная карточка. Enter — переворот, стрелки — наклон, плюс и минус — масштаб, Escape — сброс.',

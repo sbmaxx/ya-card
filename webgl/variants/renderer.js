@@ -1653,7 +1653,8 @@ const coastDistance = speed => (speed - SPIN.bearing / SPIN.drag * Math.log(1 + 
 // GPU cannot draw the studio at a usable rate. A browser drawing in software
 // (a blocklisted GPU on Linux, often) gets light 3D at once; otherwise a
 // short probe decides (probe). The decision is remembered per GPU, screen
-// and build, so the next visit starts on it. `?lite=1` / `?lite=0` force it.
+// and build, so the next visit starts on it. `?render=full` / `?render=lite`
+// force one for that load (not remembered).
 const PERFORMANCE_KEY = 'card-performance';
 const shaderVersion = (() => {
     let hash = 5381;
@@ -1664,8 +1665,8 @@ function assessDevice(gl, caveat) {
     const debug = gl.getExtension('WEBGL_debug_renderer_info');
     const gpu = String(debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
     const key = `${gpu}|${screen.width}x${screen.height}@${devicePixelRatio}|${shaderVersion}`;
-    const forced = new URLSearchParams(location.search).get('lite');
-    if (forced === '1' || forced === '0') return { gpu, key, mode: forced === '1' ? 'lite' : 'full', reason: 'forced' };
+    const forced = new URLSearchParams(location.search).get('render');
+    if (forced === 'full' || forced === 'lite') return { gpu, key, mode: forced, reason: 'forced' };
     if (caveat || /swiftshader|llvmpipe|softpipe|basic render/i.test(gpu)) return { gpu, key, mode: 'lite', reason: 'software' };
     try {
         const saved = JSON.parse(localStorage.getItem(PERFORMANCE_KEY) || 'null');
@@ -1884,7 +1885,7 @@ export class CardRenderer {
 
     // Light 3D from now on: after the probe, or when a warm phone slows the
     // studio down while it runs (app.js). There is no way back until reload,
-    // and `?lite=0` keeps the studio whatever the frames do.
+    // and `?render=full` keeps the studio whatever the frames do.
     useLite(reason) {
         if (this.lite || this.perf.reason === 'forced') return;
         this.lite = true;
