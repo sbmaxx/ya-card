@@ -2233,7 +2233,7 @@ export class CardRenderer {
         // under a card that had hung ungrounded (see the shadow's light below).
         const shadowFade = introFade;
 
-        // Demo stand overrides (only present on /variants/lab/).
+        // Demo stand overrides (only present on /lab/).
         const lab = globalThis.__cardLab;
         this.wantsHighFrameRate = Boolean(lab && !lab.exported) || (this.intro < 1 && !reduced);
 

@@ -16,16 +16,16 @@ import { LIGHT_SETUPS } from './lights.js';
 const here = dirname(fileURLToPath(import.meta.url)), root = resolve(here, '..');
 // The homepage look: a short code from the lab («Короткая ссылка», `?c=`).
 const HOME_LOOK = 'ABCCCDDBAAAAAAAAA8AeAHATAJAJAUAUAUAUAJAFAVB4A8AAAC_D8dAeAQAQAKAAAAAAAAAMAAAEABABAOAUAGAGABAAAUAAACAUAA';
-const page = async (id, html, out = variantsOut) => {
+const page = async (id, html, out) => {
     const bytes = Buffer.from(html), directory = resolve(out, id);
     await mkdir(directory, { recursive: true });
     await writeFile(resolve(directory, 'index.html'), bytes);
     await writeFile(resolve(directory, 'index.html.gz'), gzipSync(bytes, { level: 9 }));
     await writeFile(resolve(directory, 'index.html.br'), brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }));
-    console.log(`${id || '/'}: ${bytes.length} bytes → ${directory}`);
+    console.log(`${bytes.length} bytes → ${directory}`);
 };
-const variantsOut = resolve(root, 'dist/variants'), homeOut = resolve(root, 'dist/home');
-await rm(variantsOut, { recursive: true, force: true });
+const labOut = resolve(root, 'dist/lab'), homeOut = resolve(root, 'dist/home');
+await rm(labOut, { recursive: true, force: true });
 await rm(homeOut, { recursive: true, force: true });
 const template = await readFile(resolve(root, 'index.html'), 'utf8');
 const baseCss = await readFile(resolve(root, 'styles.css'), 'utf8');
@@ -215,15 +215,15 @@ window.cardFallbackUrl = '${fallback}';`)
     return html.replace('</head>', () => `${licenses}</head>`);
 }
 
-// /variants/lab/: every edition behind the demo panel.
-await page('lab', await studioPage({
+// /lab/: every edition behind the demo panel.
+await page('', await studioPage({
     entry: "import './preset.js';\nimport './lab.js';\nimport '../app.js';",
     // The lab opens on the homepage's look (see preset.js).
     define: { __CARD_VARIANT__: JSON.stringify('lab'), __LAB_DEFAULT__: JSON.stringify(HOME_LOOK) },
-    fallback: '../plain/',
+    fallback: '/plain/',
     head: themeColor + '<meta name="robots" content="noindex">'
-}));
-await writeLite(resolve(variantsOut, 'lab'));
+}), labOut);
+await writeLite(labOut);
 
 // The homepage: one look from the lab, without the panel and other editions.
 // Russian at `/`, English at `/en/`: the same page with its own head, so each
@@ -308,15 +308,6 @@ ${Object.values(HOME).map(({ path }) => `  <url>\n    <loc>${SITE}${path}</loc>\
 `);
 }
 
-// The gallery and the old edition pages now open the lab (nginx is untouched,
-// so these are HTML redirects; .gz/.br siblings replace any stale ones).
-for (const [id, target] of [['', 'lab/'], ...['steel', 'noir', 'gold', 'aurora'].map(id => [id, `../lab/?edition=${id}`]),
-    ...['ivory', 'obsidian', 'prism'].map(id => [id, '../lab/'])]) {
-    await page(id, `<!doctype html><html lang="ru"><meta charset="utf-8"><meta name="robots" content="noindex"><title>LAB</title>`
-        + `<meta http-equiv="refresh" content="0;url=${target}"><script>location.replace(${JSON.stringify(target)} + location.hash)</script>`
-        + `<a href="${target}">LAB</a></html>`);
-}
-
 // Plain card for browsers without WebGL 2: the same accessible HTML faces, no scripts.
 {
     const css = await transform(await pageCss([homeFont], true), { loader: 'css', minify: true, target: 'es2020' });
@@ -327,12 +318,10 @@ for (const [id, target] of [['', 'lab/'], ...['steel', 'noir', 'gold', 'aurora']
         .replace('<script type="module" src="./app.js"></script>', '')
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '');
     plain = await minify(plain, { collapseWhitespace: true, removeComments: true, removeRedundantAttributes: true, minifyJS: true });
-    for (const out of [variantsOut, homeOut]) {
-        await mkdir(resolve(out, 'plain'), { recursive: true });
-        await writeFile(resolve(out, 'plain/index.html'), plain);
-    }
+    await mkdir(resolve(homeOut, 'plain'), { recursive: true });
+    await writeFile(resolve(homeOut, 'plain/index.html'), plain);
     const text = ['ru', 'en'].map(lang => [cards[lang].name, cards[lang].position, lang === 'ru' ? 'Яндекс' : 'Yandex', '',
         'sbmaxx@yandex-team.ru', 'https://t.me/sbmaxx'].join('\n')).join('\n\n—\n\n') + '\n';
     // BOM: nginx sends .txt without a charset; browsers then still read UTF-8.
-    for (const out of [variantsOut, homeOut]) await writeFile(resolve(out, 'card.txt'), '\ufeff' + text);
+    await writeFile(resolve(homeOut, 'card.txt'), '\ufeff' + text);
 }

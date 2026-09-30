@@ -1,6 +1,6 @@
 # Studio metal lab
 
-One page, `/variants/lab/`: four finishes on the production card's contour and
+One page, `/lab/`: four finishes on the production card's contour and
 layout, rendered by a separate studio renderer, with every setting in a demo panel.
 Settings are kept in the URL, so a look can be shared as a link, and «Скачать HTML»
 saves it as a standalone production file. The production homepage
@@ -12,8 +12,8 @@ saves it as a standalone production file. The production homepage
 - Backdrop (`backdrops.js`): `velvet` only — a dark room with one warm spotlight.
   The build bakes its page colours, Safari's bar colour and the loader's light into
   the page, so the first paint already matches.
-- The old gallery (`/variants/`) and edition pages (`/variants/steel/` …) are HTML
-  redirects to the lab.
+- The old `/variants/` section (gallery, edition pages, the lab's old address) was
+  removed on 2026-09-30; the lab lives at `/lab/`.
 - Slow GPUs get light 3D (flat print on a shaded plate, no studio lighting, relief,
   glow or shadow), chosen by a quick probe and remembered per GPU and screen
   (`renderer.js`: `assessDevice`, `probe`). Its shader is `lite.js`, not in the
@@ -67,10 +67,11 @@ stair-steps and broken creases of the 8-connected chamfer distance on diagonal s
 
 ## Build and publish
 
-Build: `node webgl/variants/build.mjs` from `webgl/`. Output: `webgl/dist/variants/`.
-The lab is a self-contained minified HTML (font, logos, favicons embedded) with
-`.gz`/`.br` siblings, plus the redirects, `plain/` (no WebGL 2) and `card.txt`.
+Build: `node variants/build.mjs` from `webgl/`. Output: `dist/lab/` (the lab) and
+`dist/home/` (the homepage). The lab is a self-contained minified HTML (font, logos,
+favicons embedded) with `.gz`/`.br` siblings and its `card-lite-<hash>.js`; without
+WebGL 2 it opens the homepage's `/plain/`.
 
-Published static directory: `/var/www/rozhdestvenskiy.ru/variants`. Each release lives
-in `/home/sbmaxx/ya-card-variants-<date>-NN` with `previous/` and `rollback.sh`.
+Published static directory: `/var/www/rozhdestvenskiy.ru/lab`. Each release lives
+in `/home/sbmaxx/ya-card-lab-<date>-NN` with the previous files and `rollback.sh`.
 Nginx configuration and the homepage are not modified by variant releases.
