@@ -56,6 +56,11 @@ import { CardRenderer } from './renderer.js';
         }
     })() ? document.createElement('div') : null;
     let statsShown = 0;
+    // How long the card's shaders took to compile (renderer.js marks).
+    const compileNote = () => {
+        const [from] = performance.getEntriesByName('card:create'), [to] = performance.getEntriesByName('card:compiled');
+        return from && to ? `compile ${Math.round(to.startTime - from.startTime)} ms` : '';
+    };
     const sceneLabels = {
         ru: 'Визитная карточка. Enter — переворот, стрелки — наклон, плюс и минус — масштаб, Escape — сброс.',
         en: 'Business card. Enter to flip, arrows to tilt, plus and minus to zoom, Escape to reset.'
@@ -164,7 +169,7 @@ import { CardRenderer } from './renderer.js';
             const median = statGaps.length ? [...statGaps].sort((a, b) => a - b)[statGaps.length >> 1] : 0;
             statsNote.textContent = [perf.gpu, `${perf.mode || 'full'}${perf.reason ? ` (${perf.reason})` : ''}`,
                 `${canvas.width}×${canvas.height}`, `${median.toFixed(1)} ms`,
-                perf.probe ? `probe ${perf.probe.estimate} ms` : ''].filter(Boolean).join(' · ');
+                perf.probe ? `probe ${perf.probe.estimate} ms` : '', compileNote()].filter(Boolean).join(' · ');
         }
         if (!renderer.useLite || renderer.lite || now < watchFrom) return;
         frameGaps.push(gap);

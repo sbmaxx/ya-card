@@ -481,8 +481,13 @@ vec3 roomFor(vec3 world, float rough, float face) {
     // on a polished one it stays a band. It only adds light, so it cannot open
     // a darker gap between lamps.
     if (uStrip.g > 0.0) col += uStrip * stripLight(world, blur);
-    for (int i = 0; i < ${MAX_LIGHTS}; i++) {
-        if (i >= uLightCount) break;
+    // Loops here run to a count known only at run time (the setup's lamps, the
+    // pixel's samples, the march's layers), never to a constant with a break:
+    // Windows compiles WebGL through Direct3D, whose compiler unrolls a
+    // constant loop and inlines every function into each copy. This one sits
+    // in every material's light, dozens of times over, and the studio's shader
+    // took 42 s to compile on an RTX 5080.
+    for (int i = 0; i < uLightCount; i++) {
         vec3 shape = uLightShape[i];
         float seen = mix(1.0, uLightFace[i], face);
         if (seen <= 0.0) continue;
@@ -665,8 +670,8 @@ void main() {
             vec2 uv = vUV;
             float depth = 0.0;
             float below = 1.0 - bevelHeight(reliefT(textureLod(uEngraving, uv, 0.0).b));
-            for (int i = 0; i < 40; i++) {
-                if (float(i) >= layers || depth >= below) break;
+            for (int i = 0; i < int(layers); i++) {
+                if (depth >= below) break;
                 uv += stepUV;
                 depth += stepDepth;
                 below = 1.0 - bevelHeight(reliefT(textureLod(uEngraving, uv, 0.0).b));
@@ -873,8 +878,7 @@ void main() {
                                     vec2(-.3125, .3125), vec2(-.4375, -.0625), vec2(.1875, .4375), vec2(.4375, -.4375));
         vec3 plate = color, shaded = vec3(0.0);
         float letterSum = 0.0;
-        for (int sampleIndex = 0; sampleIndex < 8; sampleIndex++) {
-            if (sampleIndex >= samples) break;
+        for (int sampleIndex = 0; sampleIndex < samples; sampleIndex++) {
             vec2 offset = samples == 8 ? SS8[sampleIndex] : samples == 4 ? SS4[sampleIndex] : vec2(0.0);
             vec2 uvS = texUV + uvDx * offset.x + uvDy * offset.y;
             // Each sample reads the relief as finely as its share of the pixel.
