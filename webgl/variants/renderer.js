@@ -1168,6 +1168,91 @@ void main() {
     outColor = vec4(displayFromSRGB(display), 1.0);
 }`;
 
+// Light 3D for GPUs too slow for the studio (see probe and assessDevice): the
+// same plate, turned, flipped and spun the same way, without the studio's
+// reflections, the raised letters, their supersampling, the glow or the shadow. Flat
+// print on a plate shaded softly from the key's side, so a turn still reads
+// as a solid. A millisecond or two where the studio took over a hundred.
+const liteFragment = `#version 300 es
+precision highp float;
+uniform sampler2D uTexture;
+uniform float uEdge;
+uniform float uExposure;
+uniform float uOpacity;
+uniform float uReveal;
+uniform vec3 uKeyDirection;
+uniform vec4 uLogoRect;
+uniform vec4 uTitleRect;
+uniform vec4 uHoverRect;
+uniform vec4 uFocusRect;
+uniform vec4 uLogoTint;
+uniform vec4 uLogoFirstTint;
+uniform vec4 uNameTint;
+uniform vec4 uBodyTint;
+uniform float uTextMute;
+in vec3 vPosition;
+in vec3 vNormal;
+in vec2 vUV;
+in vec3 vTangent;
+in vec3 vBitangent;
+in float vFacet;
+out vec4 outColor;
+${toneCode}
+${hashCode}
+
+float inRect(vec4 r) {
+    return step(r.x, vUV.x) * step(r.y, vUV.y) * step(vUV.x, r.z) * step(vUV.y, r.w);
+}
+
+// A letter's colour from its tint (alpha as in the studio): bare metal, a
+// colour, or the plate's own material, a shade lighter so it still reads.
+vec3 letterColor(vec4 tint, vec3 metal, vec3 plate) {
+    return tint.a < .5 ? metal : tint.a < 1.5 ? tint.rgb * .8 : plate * 2.5;
+}
+
+void main() {
+    vec3 n = normalize(vNormal);
+    float shade = .6 + .4 * max(dot(n, normalize(uKeyDirection)), 0.0);
+    // Lighter towards the top, as the studio's plate is: a sheet, not a fill.
+    // (Before the tone curve's toe, which takes most of a value this dark.)
+    vec3 plate = vec3(.040, .0405, .043) * shade * mix(1.35, .9, vUV.y);
+    vec3 color;
+    if (uEdge > .5) {
+        // The chamfers take a little more light than the side wall.
+        float facet = abs(vFacet);
+        float chamfer = smoothstep(.25, .45, facet) * (1.0 - smoothstep(.95, .99, facet));
+        color = mix(vec3(.06), vec3(.16), chamfer) * shade;
+    } else {
+        vec4 ink = texture(uTexture, vUV);
+        vec3 inkColor = ink.rgb / max(ink.a, .001);
+        // The wordmark's first letter is drawn red-only in the mask.
+        float firstLetter = smoothstep(.6, .3, inkColor.g);
+        float logo = inRect(uLogoRect);
+        float title = inRect(uTitleRect) * (1.0 - logo);
+        float text = 1.0 - logo - title;
+        vec3 metal = vec3(.5) * shade;
+        vec3 body = mix(letterColor(uBodyTint, metal, plate), plate, uTextMute);
+        vec3 lettering = mix(letterColor(uLogoTint, metal, plate), letterColor(uLogoFirstTint, metal, plate), firstLetter) * logo
+            + letterColor(uNameTint, metal, plate) * title + body * text;
+        // Links: underline and keyboard focus, in the body text's colour.
+        vec2 aa = max(fwidth(vUV) * .7, vec2(1e-5));
+        vec2 enter = smoothstep(uHoverRect.xy - aa, uHoverRect.xy + aa, vUV);
+        vec2 leave = 1.0 - smoothstep(uHoverRect.zw - aa, uHoverRect.zw + aa, vUV);
+        float underline = enter.x * enter.y * leave.x * leave.y;
+        vec2 focusInside = step(uFocusRect.xy, vUV) * step(vUV, uFocusRect.zw);
+        vec2 focusThickness = max(fwidth(vUV) * 2.4, vec2(.0014));
+        vec2 focusEdge = min(vUV - uFocusRect.xy, uFocusRect.zw - vUV);
+        float focusStroke = min(1.0, focusInside.x * focusInside.y
+            * ((1.0 - step(focusThickness.x, focusEdge.x)) + (1.0 - step(focusThickness.y, focusEdge.y))));
+        float linkMark = max(underline, focusStroke);
+        lettering = mix(lettering, body, linkMark);
+        color = mix(plate, lettering, max(ink.a, linkMark));
+    }
+    vec3 display = toDisplay(uOutput.z * neutralTonemap(color * uExposure / uOutput.z));
+    display += (hash(gl_FragCoord.xy + 31.0) - .5) / 255.0;
+    outColor = vec4(display * uReveal * uOpacity, uOpacity);
+}`;
+
 const screenVertex = `#version 300 es
 out vec2 vUV;
 void main() {
@@ -1564,6 +1649,38 @@ const SPIN = { gain: .75, max: 17, drag: 1.1, bearing: 3, spring: 7, damping: .7
 // How far a spin at `speed` coasts before drag and friction stop it.
 const coastDistance = speed => (speed - SPIN.bearing / SPIN.drag * Math.log(1 + SPIN.drag * speed / SPIN.bearing)) / SPIN.drag;
 
+// Which card a device gets: the studio, or light 3D (liteFragment) where the
+// GPU cannot draw the studio at a usable rate. A browser drawing in software
+// (a blocklisted GPU on Linux, often) gets light 3D at once; otherwise a
+// short probe decides (probe). The decision is remembered per GPU, screen
+// and build, so the next visit starts on it. `?lite=1` / `?lite=0` force it.
+const PERFORMANCE_KEY = 'card-performance';
+const shaderVersion = (() => {
+    let hash = 5381;
+    for (const source of [fragmentSource, liteFragment]) for (let i = 0; i < source.length; i++) hash = (hash * 33 ^ source.charCodeAt(i)) >>> 0;
+    return hash.toString(36);
+})();
+function assessDevice(gl, caveat) {
+    const debug = gl.getExtension('WEBGL_debug_renderer_info');
+    const gpu = String(debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    const key = `${gpu}|${screen.width}x${screen.height}@${devicePixelRatio}|${shaderVersion}`;
+    const forced = new URLSearchParams(location.search).get('lite');
+    if (forced === '1' || forced === '0') return { gpu, key, mode: forced === '1' ? 'lite' : 'full', reason: 'forced' };
+    if (caveat || /swiftshader|llvmpipe|softpipe|basic render/i.test(gpu)) return { gpu, key, mode: 'lite', reason: 'software' };
+    try {
+        const saved = JSON.parse(localStorage.getItem(PERFORMANCE_KEY) || 'null');
+        if (saved && saved.key === key) return { gpu, key, mode: saved.mode, reason: 'remembered' };
+    } catch {}
+    return { gpu, key, mode: null, reason: null };
+}
+function rememberMode(perf) {
+    if (perf.reason === 'forced') return;
+    try { localStorage.setItem(PERFORMANCE_KEY, JSON.stringify({ key: perf.key, mode: perf.mode })); } catch {}
+}
+// The studio's card, estimated for a full frame at 2×, above which a device
+// gets light 3D: with the backdrop and shadow, about 25 ms, 40 fps.
+const STUDIO_BUDGET = 18;
+
 const ease = t => t * t * (3 - 2 * t);
 const easeOutCubic = t => 1 - (1 - t) ** 3;
 const easeInOutCubic = t => t < .5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
@@ -1577,27 +1694,39 @@ function flipCurve(t) {
 
 export class CardRenderer {
     static async create(canvas) {
-        const gl = canvas.getContext('webgl2', { alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'high-performance' });
+        const attributes = { alpha: true, antialias: true, premultipliedAlpha: true, powerPreference: 'high-performance' };
+        // Refused with a major performance caveat: the browser draws in software.
+        let gl = canvas.getContext('webgl2', { ...attributes, failIfMajorPerformanceCaveat: true });
+        const caveat = !gl;
+        if (!gl) gl = canvas.getContext('webgl2', attributes);
         if (!gl) throw new Error('WebGL 2 unavailable');
+        const perf = assessDevice(gl, caveat);
         // Let the loader reach the screen before compilation and warm-up start.
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         performance.mark('card:create');
+        // The light card's program always (a slow start can still end there);
+        // the studio's only where it may be used.
+        const pairs = [[vertexSource, liteFragment], [screenVertex, blurFragment], [screenVertex, compositeFragment],
+            [shadowVertex, shadowFragment], [screenVertex, backdropFragment]];
+        if (perf.mode !== 'lite') pairs.push([vertexSource, fragmentSource]);
         const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
-            compilePrograms(gl, [[vertexSource, fragmentSource], [screenVertex, blurFragment], [screenVertex, compositeFragment],
-                [shadowVertex, shadowFragment], [screenVertex, backdropFragment]])
-                .then(result => { performance.mark('card:compiled'); return result; }),
+            compilePrograms(gl, pairs).then(result => { performance.mark('card:compiled'); return result; }),
             loadCardFont().catch(() => {})
         ]);
-        return new CardRenderer(canvas, gl, images, programs).start();
+        return new CardRenderer(canvas, gl, images, programs, perf).start();
     }
 
-    // Shared by both backends once the renderer exists: warm up, settle, hold.
+    // Shared by both backends once the renderer exists: probe, warm up, settle, hold.
     async start() {
+        if (this.lite) this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
         this.resize();
         await this.layoutReady;
+        if (this.perf.mode === null) this.probe();
         await this.warmUp();
-        await this.settle();
+        // Light 3D is cheap everywhere: a short settle; the studio's is capped too.
+        if (this.lite) await this.settle(300, 1000);
+        else await this.settle(1000, 2500);
         // A deliberate pause: the loader holds for a moment even on fast devices,
         // then hands over to the intro.
         const hold = 1400 - performance.now();
@@ -1606,11 +1735,14 @@ export class CardRenderer {
         return this;
     }
 
-    constructor(canvas, gl, images, programs) {
+    constructor(canvas, gl, images, programs, perf = { mode: 'full', reason: 'forced' }) {
         this.canvas = canvas;
         this.gl = gl;
         this.halfThickness = HALF_THICKNESS;
         this.images = images;
+        // The card drawn (see assessDevice): `lite` for light 3D.
+        this.perf = perf;
+        this.lite = perf.mode === 'lite';
         if (globalThis.__cardLab) globalThis.__cardRenderer = this;
         this.lightSignature = null;
         // The frame's shader inputs by uniform name, worked out in draw() and
@@ -1658,11 +1790,13 @@ export class CardRenderer {
 
     setupGraphics(programs) {
         const gl = this.gl;
-        [this.program, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram] = programs;
-        this.setCardUniforms = uniformSetter(gl, this.program);
+        // The studio's program is compiled only where it may be used.
+        [this.liteProgram, this.blurProgram, this.compositeProgram, this.shadowProgram, this.backdropProgram, this.program = null] = programs;
+        this.setLiteUniforms = uniformSetter(gl, this.liteProgram);
+        this.setCardUniforms = this.program ? uniformSetter(gl, this.program) : this.setLiteUniforms;
         this.setBackdropUniforms = uniformSetter(gl, this.backdropProgram);
         this.shadowUniforms = Object.fromEntries(['uModel', 'uProjection', 'uLight'].map(name => [name, gl.getUniformLocation(this.shadowProgram, name)]));
-        this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.program, name)]));
+        this.attributes = Object.fromEntries(['aPosition', 'aNormal', 'aUV'].map(name => [name, gl.getAttribLocation(this.liteProgram, name)]));
         this.blurUniforms = { source: gl.getUniformLocation(this.blurProgram, 'uSource'), step: gl.getUniformLocation(this.blurProgram, 'uStep') };
         this.compositeUniforms = { near: gl.getUniformLocation(this.compositeProgram, 'uNear'),
             wide: gl.getUniformLocation(this.compositeProgram, 'uWide'), strength: gl.getUniformLocation(this.compositeProgram, 'uStrength'),
@@ -1680,6 +1814,85 @@ export class CardRenderer {
     // Wait until the GPU has drawn what was sent.
     finish() {
         this.gl.readPixels(0, 0, 1, 1, this.gl.RGBA, this.gl.UNSIGNED_BYTE, new Uint8Array(4));
+    }
+
+    // Can this GPU draw the studio? Its card, at 2×, only in a band across the
+    // plate through the name (gl.scissor): letters are where it is costliest.
+    // The first draws carry the driver's one-off work (the program finished on
+    // first use, textures just uploaded) and a GPU still at idle clocks: two go
+    // untimed, then up to six are timed one by one and the fastest counts. The
+    // band's cost scaled to the plate's height estimates the whole card. Well
+    // under a tenth of a second on a fast GPU or a slow one (which stops early).
+    probe() {
+        const gl = this.gl, cap = this.pixelRatioCap;
+        this.pixelRatioCap = Math.min(cap, 2);
+        this.resize();
+        this.draw({ rx: 0, ry: 0, rz: 0, zoom: 1, flipped: false, animate: false, reduced: true, delta: 1 / 60, paint: false });
+        const { width, height } = this.canvas, m = this.model, focal = this.projection[5];
+        const screenY = (x, y) => {
+            const z = this.halfThickness;
+            const wy = m[1] * x + m[5] * y + m[9] * z + m[13], wz = m[2] * x + m[6] * y + m[10] * z + m[14] - 7;
+            return (focal * wy / -wz * .5 + .5) * height;
+        };
+        const ys = this.outline.map(([x, y]) => screenY(x, y));
+        const bottom = Math.max(0, Math.min(...ys)), top = Math.min(height, Math.max(...ys));
+        const title = this.surfaces[0].titleRelief;
+        const line = screenY(0, (.5 - (title[1] + title[3]) / 2) * this.height);
+        const band = Math.max(8, Math.min(top - bottom, Math.round(height / 8)));
+        const from = Math.round(Math.max(bottom, Math.min(top - band, line - band / 2)));
+        const drawBand = (y, h) => {
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.viewport(0, 0, width, height);
+            gl.enable(gl.SCISSOR_TEST);
+            gl.scissor(0, y, width, h);
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.useProgram(this.program);
+            this.setCardUniforms(this.cardParams);
+            gl.enable(gl.DEPTH_TEST);
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+            this.drawCard(0, null);
+            gl.disable(gl.BLEND);
+            gl.disable(gl.SCISSOR_TEST);
+        };
+        for (let i = 0; i < 2; i++) {
+            drawBand(from, band);
+            this.finish();
+        }
+        const scale = (top - bottom) / band;
+        let bandMs = Infinity;
+        for (let i = 0; i < 6; i++) {
+            const start = performance.now();
+            drawBand(from, band);
+            this.finish();
+            bandMs = Math.min(bandMs, performance.now() - start);
+            // Far over the budget: nothing to wait for.
+            if (i >= 1 && bandMs * scale > STUDIO_BUDGET * 3) break;
+        }
+        const estimate = bandMs * scale;
+        this.perf.probe = { bandMs: Math.round(bandMs * 100) / 100, estimate: Math.round(estimate * 10) / 10 };
+        this.pixelRatioCap = cap;
+        if (estimate > STUDIO_BUDGET) this.useLite('probe');
+        else {
+            this.perf.mode = 'full';
+            this.perf.reason = 'probe';
+            rememberMode(this.perf);
+            this.resize();
+        }
+    }
+
+    // Light 3D from now on: after the probe, or when a warm phone slows the
+    // studio down while it runs (app.js). There is no way back until reload,
+    // and `?lite=0` keeps the studio whatever the frames do.
+    useLite(reason) {
+        if (this.lite || this.perf.reason === 'forced') return;
+        this.lite = true;
+        this.perf.mode = 'lite';
+        this.perf.reason = reason;
+        rememberMode(this.perf);
+        this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
+        this.resize();
     }
 
     // Drivers finish shader and pipeline work lazily, on first use. Draw the full
@@ -2025,10 +2238,11 @@ export class CardRenderer {
         });
     }
 
-    // The surfaces' relief maps with the profiles as they are now.
+    // The surfaces' relief maps with the profiles as they are now. Light 3D
+    // draws no relief: none are made (the studio never comes back after it).
     async makeRelief(surfaces) {
         const profiles = reliefProfiles();
-        return { profiles, maps: await createReliefMaps(surfaces, profiles) };
+        return { profiles, maps: this.lite ? [] : await createReliefMaps(surfaces, profiles) };
     }
 
     applyRelief({ profiles, maps }) {
@@ -2046,7 +2260,8 @@ export class CardRenderer {
         this.engravingTextures = maps.map(relief => this.uploadTexture(relief.data, relief.width, relief.height));
     }
 
-    draw({ rx, ry, rz = 0, zoom, dragging = false, flipped, animate, idle = true, freezeTilt = false, freezeHover = false, focusLink = null, reduced, delta }) {
+    // `paint: false` works out the frame's inputs without drawing it (probe).
+    draw({ rx, ry, rz = 0, zoom, dragging = false, flipped, animate, idle = true, freezeTilt = false, freezeHover = false, focusLink = null, reduced, delta, paint = true }) {
         const dt = Math.min(delta, 0.05);
         if (animate) this.time += dt;
         if (animate && this.intro < 1) {
@@ -2249,10 +2464,11 @@ export class CardRenderer {
                 uWall: backdrop.wall, uFloor: backdrop.floor, uPoolColor: backdrop.pool, uPoolFalloff: backdrop.poolFalloff ?? 2.6,
                 uGrain: backdrop.grain, uShadowStrength: backdrop.shadow, uTime: reduced ? 0 : this.time,
                 uEdgeFade: edge.fade, uEdgeTop: edge.top, uEdgeBottom: edge.bottom,
-                uPool: [.5 + k[0] * .45, .5 + k[1] * .40], uShadowFade: shadowFade, uOutput: this.output
+                // Light 3D casts no shadow (render skips it).
+                uPool: [.5 + k[0] * .45, .5 + k[1] * .40], uShadowFade: this.lite ? 0 : shadowFade, uOutput: this.output
             });
         }
-        this.render(backdrop, focusLink);
+        if (paint) this.render(backdrop, focusLink);
 
         this.matchSafeAreas(backdrop);
         return this.intro < 1 || this.flipProgress < 1 || Boolean(this.spin) || Math.abs(targetX - this.rotationX) + Math.abs(targetY - this.rotationY)
@@ -2289,24 +2505,7 @@ export class CardRenderer {
     // The frame worked out in draw(), drawn with WebGL.
     render(backdrop, focusLink) {
         const gl = this.gl;
-        gl.useProgram(this.program);
-        this.setCardUniforms(this.cardParams);
-
-        // 1. Highlights above white at quarter resolution.
         const [bright, blurA, wideA, wideB, shadowA, shadowB] = this.targets;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, bright.framebuffer);
-        gl.viewport(0, 0, bright.width, bright.height);
-        gl.clearColor(0, 0, 0, 0);
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-        gl.disable(gl.BLEND);
-        gl.enable(gl.DEPTH_TEST);
-        this.drawCard(1, focusLink);
-        // 2. Separable blur at 1/4, then a wider one at 1/8.
-        gl.disable(gl.DEPTH_TEST);
-        gl.useProgram(this.blurProgram);
-        gl.bindVertexArray(this.screenArray);
-        gl.uniform1i(this.blurUniforms.source, 0);
-        gl.activeTexture(gl.TEXTURE0);
         const pass = (source, target, x, y) => {
             gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
             gl.viewport(0, 0, target.width, target.height);
@@ -2314,13 +2513,33 @@ export class CardRenderer {
             gl.uniform2f(this.blurUniforms.step, x / source.width, y / source.height);
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         };
-        pass(bright, blurA, 1, 0);
-        pass(blurA, bright, 0, 1);
-        pass(bright, wideA, 1.5, 0);
-        pass(wideA, wideB, 0, 1.5);
-        pass(wideB, wideA, 2.5, 0);
-        pass(wideA, wideB, 0, 2.5);
-        if (backdrop) {
+        // Light 3D has no glow: straight to the shadow and the backdrop.
+        if (!this.lite) {
+            gl.useProgram(this.program);
+            this.setCardUniforms(this.cardParams);
+
+            // 1. Highlights above white at quarter resolution.
+            gl.bindFramebuffer(gl.FRAMEBUFFER, bright.framebuffer);
+            gl.viewport(0, 0, bright.width, bright.height);
+            gl.clearColor(0, 0, 0, 0);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.disable(gl.BLEND);
+            gl.enable(gl.DEPTH_TEST);
+            this.drawCard(1, focusLink);
+            // 2. Separable blur at 1/4, then a wider one at 1/8.
+            gl.disable(gl.DEPTH_TEST);
+            gl.useProgram(this.blurProgram);
+            gl.bindVertexArray(this.screenArray);
+            gl.uniform1i(this.blurUniforms.source, 0);
+            gl.activeTexture(gl.TEXTURE0);
+            pass(bright, blurA, 1, 0);
+            pass(blurA, bright, 0, 1);
+            pass(bright, wideA, 1.5, 0);
+            pass(wideA, wideB, 0, 1.5);
+            pass(wideB, wideA, 2.5, 0);
+            pass(wideA, wideB, 0, 2.5);
+        } else gl.disable(gl.DEPTH_TEST);
+        if (backdrop && !this.lite) {
             // 2b. Card silhouette from the key light onto the backdrop, blurred wide.
             gl.bindFramebuffer(gl.FRAMEBUFFER, shadowA.framebuffer);
             gl.viewport(0, 0, shadowA.width, shadowA.height);
@@ -2356,7 +2575,8 @@ export class CardRenderer {
             gl.drawArrays(gl.TRIANGLES, 0, 3);
         }
         gl.enable(gl.DEPTH_TEST);
-        gl.useProgram(this.program);
+        gl.useProgram(this.lite ? this.liteProgram : this.program);
+        if (this.lite) this.setLiteUniforms(this.cardParams);
         // Over the backdrop, premultiplied: the plate's opacity (the intro's
         // fade) blends it into the studio. Written unblended, a fading plate
         // punched a hole in the scene down to the page colour — a dark
@@ -2365,8 +2585,13 @@ export class CardRenderer {
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         this.drawCard(0, focusLink);
         gl.disable(gl.BLEND);
-        // 4. Glow over the card and the page, screen-blended.
         gl.disable(gl.DEPTH_TEST);
+        if (this.lite) {
+            gl.bindVertexArray(null);
+            gl.activeTexture(gl.TEXTURE0);
+            return;
+        }
+        // 4. Glow over the card and the page, screen-blended.
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.useProgram(this.compositeProgram);
@@ -2386,8 +2611,8 @@ export class CardRenderer {
     }
 
     drawCard(bloomPass, focusLink) {
-        const gl = this.gl;
-        this.setCardUniforms({ uBloomPass: bloomPass });
+        const gl = this.gl, setUniforms = this.lite ? this.setLiteUniforms : this.setCardUniforms;
+        setUniforms({ uBloomPass: bloomPass });
         for (let i = 0; i < 3; i++) {
             gl.bindVertexArray(this.arrays[i]);
             const side = i === 1 ? 1 : 0;
@@ -2395,7 +2620,7 @@ export class CardRenderer {
             gl.bindTexture(gl.TEXTURE_2D, this.textures[side]);
             gl.activeTexture(gl.TEXTURE1);
             gl.bindTexture(gl.TEXTURE_2D, this.engravingTextures[side]);
-            this.setCardUniforms(this.faceParams(i, focusLink));
+            setUniforms(this.faceParams(i, focusLink));
             gl.drawArrays(gl.TRIANGLES, 0, this.counts[i]);
         }
         gl.activeTexture(gl.TEXTURE0);

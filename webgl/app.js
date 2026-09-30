@@ -39,6 +39,13 @@ import { CardRenderer } from './renderer.js';
     let flipLocked = false;
     let motionSettling = false;
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    // A warm phone can slow the studio down after the start: frames in motion
+    // slower than 50 ms (median of the last 40) hand over to light 3D.
+    const frameGaps = [], statGaps = [];
+    let watchFrom = Infinity;
+    // `?stats=1`: what draws the card and how fast, for reports from other devices.
+    const statsNote = new URLSearchParams(location.search).has('stats') ? document.createElement('div') : null;
+    let statsShown = 0;
     const sceneLabels = {
         ru: 'Визитная карточка. Enter — переворот, стрелки — наклон, плюс и минус — масштаб, Escape — сброс.',
         en: 'Business card. Enter to flip, arrows to tilt, plus and minus to zoom, Escape to reset.'
@@ -119,6 +126,7 @@ import { CardRenderer } from './renderer.js';
         // A hand spin whose gesture was dropped (window blur, a system gesture)
         // must not hang mid-turn: let go, and it settles on the nearest side.
         if (renderer.spinning && !gesture) renderer.spinRelease();
+        watchFrames(now - lastDraw, now);
         previousTime = now;
         lastDraw = now;
         // Hold a hovered link long enough to click, then let a parked mouse
@@ -135,6 +143,26 @@ import { CardRenderer } from './renderer.js';
             applyHover();
         }
         if (animate || settling) schedule();
+    }
+    function watchFrames(gap, now) {
+        if (gap > 400) { frameGaps.length = statGaps.length = 0; return; }
+        statGaps.push(gap);
+        if (statGaps.length > 40) statGaps.shift();
+        if (statsNote && now - statsShown > 500) {
+            statsShown = now;
+            const perf = renderer.perf || {};
+            const median = statGaps.length ? [...statGaps].sort((a, b) => a - b)[statGaps.length >> 1] : 0;
+            statsNote.textContent = [perf.gpu, `${perf.mode || 'full'}${perf.reason ? ` (${perf.reason})` : ''}`,
+                `${canvas.width}×${canvas.height}`, `${median.toFixed(1)} ms`,
+                perf.probe ? `probe ${perf.probe.estimate} ms` : ''].filter(Boolean).join(' · ');
+        }
+        if (!renderer.useLite || renderer.lite || now < watchFrom) return;
+        frameGaps.push(gap);
+        if (frameGaps.length > 40) frameGaps.shift();
+        if (frameGaps.length === 40 && [...frameGaps].sort((a, b) => a - b)[20] > 50) {
+            renderer.useLite('runtime');
+            frameGaps.length = 0;
+        }
     }
     function syncAmbient() {
         // Pages whose backdrop is rendered in WebGL have no CSS ambient layer.
@@ -463,6 +491,12 @@ import { CardRenderer } from './renderer.js';
 
             contextLost = false;
             previousTime = performance.now();
+            watchFrom = previousTime + 2000;
+            if (statsNote) {
+                statsNote.style.cssText = 'position:fixed;left:calc(10px + env(safe-area-inset-left,0px));top:calc(10px + env(safe-area-inset-top,0px));z-index:30;'
+                    + 'max-width:calc(100vw - 20px);font:11px/1.4 ui-monospace,Menlo,monospace;color:#ffffffb3;background:#0009;padding:4px 7px;border-radius:5px;pointer-events:none';
+                document.body.append(statsNote);
+            }
             schedule();
         } catch (error) {
             console.warn('WebGL card unavailable; showing HTML contacts.', error);
