@@ -23,6 +23,9 @@ uniform vec4 uLogoFirstTint;
 uniform vec4 uNameTint;
 uniform vec4 uBodyTint;
 uniform float uTextMute;
+// The plate's flat colour and the rim's (side wall, chamfer), from the edition.
+uniform vec3 uLitePlate;
+uniform vec2 uLiteRim;
 in vec3 vPosition;
 in vec3 vNormal;
 in vec2 vUV;
@@ -48,13 +51,13 @@ void main() {
     float shade = .6 + .4 * max(dot(n, normalize(uKeyDirection)), 0.0);
     // Lighter towards the top, as the studio's plate is: a sheet, not a fill.
     // (Before the tone curve's toe, which takes most of a value this dark.)
-    vec3 plate = vec3(.040, .0405, .043) * shade * mix(1.35, .9, vUV.y);
+    vec3 plate = uLitePlate * shade * mix(1.35, .9, vUV.y);
     vec3 color;
     if (uEdge > .5) {
         // The chamfers take a little more light than the side wall.
         float facet = abs(vFacet);
         float chamfer = smoothstep(.25, .45, facet) * (1.0 - smoothstep(.95, .99, facet));
-        color = mix(vec3(.06), vec3(.16), chamfer) * shade;
+        color = vec3(mix(uLiteRim.x, uLiteRim.y, chamfer)) * shade;
     } else {
         vec4 ink = texture(uTexture, vUV);
         vec3 inkColor = ink.rgb / max(ink.a, .001);

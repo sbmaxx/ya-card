@@ -555,7 +555,8 @@ vec3 tinted(vec3 base, vec4 tint, float finish, vec3 n, vec3 facet, vec3 v, floa
     // shine there is — without it a black letter showed no gloss at any «Блеск».
     // «Блеск» sets how sharp both reflections are.
     float anodRough = mix(.55, max(.06, rough), shine);
-    vec3 anod = metal(metalTint(tint.rgb), facet, v, anodRough) + clearCoat(.06, facet, v, anodRough);
+    // Enamel (finish 0) never shows the anodised metal: not worked out.
+    vec3 anod = finish > 0.0 ? metal(metalTint(tint.rgb), facet, v, anodRough) + clearCoat(.06, facet, v, anodRough) : vec3(0.0);
     vec3 full = mix(mix(gloss(tint.rgb * 1.9, n, v, mix(.55, .06, shine)), anod, finish), mix(base, anod, finish), edge);
     // A translucent colour: the plate's brushed steel shows through, tinted.
     if (amount > .999) return full;
@@ -1127,6 +1128,8 @@ uniform float uShadowStrength;
 uniform float uShadowFade;
 // How tight the key's pool of light on the wall is (2.6 — broad).
 uniform float uPoolFalloff;
+// How far the room darkens towards the screen's edges.
+uniform float uVignette;
 // Touch screens: the scene melts into flat edge colours that Safari extends
 // under its status bar and toolbar (fractions of height; 0 disables).
 uniform vec4 uEdgeFade;
@@ -1169,7 +1172,7 @@ void main() {
     vec3 wall = wallColor(vUV);
     // No floor on an upright phone: the dark frame is the same above and below.
     vec3 color = mix(wall, uFloor + (wall - uWall) * .6, smoothstep(-.12, -.62, p.y) * (1.0 - tall));
-    color *= 1.0 - .55 * smoothstep(.3, 1.15, length(p * vec2(.78, mix(1.0, .62, tall))));
+    color *= 1.0 - uVignette * smoothstep(.3, 1.15, length(p * vec2(.78, mix(1.0, .62, tall))));
     color *= 1.0 - texture(uShadow, vUV).r * uShadowStrength * uShadowFade;
     vec3 display = toSRGB(neutralTonemap(color));
     display += (hash(gl_FragCoord.xy + 17.0) - .5) * uGrain;
@@ -2346,6 +2349,10 @@ export class CardRenderer {
         this.applyOutput();
         c.uOutput = this.output;
         c.uKeyDirection = this.keyDirection;
+        // Light 3D's flat plate and rim (lite.js): the edition's own, or its
+        // metal's reflectance taken as a colour (about the studio's tone).
+        c.uLitePlate = plate.lite?.plate || plate.f0 || [.5, .5, .5];
+        c.uLiteRim = plate.lite?.rim || [.35, .9];
         // The plate is solid within a third of a second and lit over the
         // intro's fade: it comes out of the dark as a black shape the light
         // finds, not a translucent ghost of itself over the studio.
@@ -2419,7 +2426,7 @@ export class CardRenderer {
             const k = this.keyDirection;
             Object.assign(this.backdropParams, {
                 uShadow: 0, uResolution: [this.canvas.width, this.canvas.height],
-                uWall: backdrop.wall, uFloor: backdrop.floor, uPoolColor: backdrop.pool, uPoolFalloff: backdrop.poolFalloff ?? 2.6,
+                uWall: backdrop.wall, uFloor: backdrop.floor, uPoolColor: backdrop.pool, uPoolFalloff: backdrop.poolFalloff ?? 2.6, uVignette: backdrop.vignette ?? .55,
                 uGrain: backdrop.grain, uShadowStrength: backdrop.shadow, uTime: reduced ? 0 : this.time,
                 uEdgeFade: edge.fade, uEdgeTop: edge.top, uEdgeBottom: edge.bottom,
                 // Light 3D casts no shadow (render skips it).

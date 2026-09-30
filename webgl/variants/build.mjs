@@ -70,14 +70,14 @@ const themeColor = `<meta name="theme-color" content="${homeBackdrop.edge}">`;
 // The page is the backdrop's colour from the first paint; on touch screens it
 // is the flat edge colour Safari tints its bars with (the scene fades into it
 // inside the visible viewport, so the transition completes before the bars).
-const loaderCss = `:root{${Object.entries(pageColours(homeBackdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}
+const loaderCss = backdrop => `:root{${Object.entries(pageColours(backdrop)).map(([name, value]) => `${name}:${value}`).join(';')}}
 :root{background-color:var(--page)}
 @media (hover:none) and (pointer:coarse){:root,body{background-color:var(--edge)}}
 .card-loader{position:fixed;left:50%;top:50%;width:176px;height:1px;margin-left:-88px;z-index:20;pointer-events:none;
 opacity:0;transition:opacity .8s ease;background:linear-gradient(90deg,transparent,rgb(var(--loader)/.6) 22%,rgb(var(--loader)/.6) 78%,transparent)}
 .webgl-loading .card-loader{opacity:1;transition-duration:.35s}
 .card-loader::after{content:'';position:absolute;left:0;top:-6px;width:80px;height:13px;
-background:linear-gradient(90deg,transparent,rgb(var(--loader)) 25%,#fff 50%,rgb(var(--loader)) 75%,transparent) center/100% 1px no-repeat,
+background:linear-gradient(90deg,transparent,rgb(var(--loader)) 25%,${backdrop.glint || '#fff'} 50%,rgb(var(--loader)) 75%,transparent) center/100% 1px no-repeat,
 radial-gradient(closest-side,rgb(var(--loader)/.55),transparent);
 will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1) infinite alternate}
 @keyframes card-glint{0%{transform:translateX(0);opacity:0}20%{opacity:1}80%{opacity:1}100%{transform:translateX(96px);opacity:0}}
@@ -92,7 +92,7 @@ will-change:transform,opacity;animation:card-glint 1.2s cubic-bezier(.45,0,.2,1)
 // Corners stay clean on the WebGL card: language flips with the card itself.
 // The HTML fallback keeps both controls.
 const cornersCss = '.webgl-ready .languages,.webgl-ready .links-overlay,.webgl-loading .languages,.webgl-loading .links-overlay{display:none}';
-const labCss = cornersCss + loaderCss;
+const pageExtraCss = (backdrop = homeBackdrop) => cornersCss + loaderCss(backdrop);
 
 // Shader sources live in template literals, with the notes that explain them.
 // Pages need the code only: comment lines and indentation are dropped from
@@ -158,7 +158,7 @@ const writeLite = async directory => {
 // A studio page: the WebGL card with the loader, a watchdog that opens the
 // plain card if the scene never starts, and everything else inlined. `liteBase`
 // is where lite.js's file lies from the page.
-async function studioPage({ entry, define, direction, lightSetup, fallback, head, source = template, fonts = FONTS, card = false, liteBase = './' }) {
+async function studioPage({ entry, define, direction, lightSetup, fallback, head, source = template, fonts = FONTS, card = false, liteBase = './', backdrop }) {
     const js = await build({
         stdin: { contents: entry, resolveDir: here, loader: 'js' },
         bundle: true, minify: true, write: false,
@@ -182,7 +182,7 @@ async function studioPage({ entry, define, direction, lightSetup, fallback, head
             }
         } }]
     });
-    const css = await transform(await pageCss(fonts, card, labCss), { loader: 'css', minify: true, target: 'es2020' });
+    const css = await transform(await pageCss(fonts, card, pageExtraCss(backdrop)), { loader: 'css', minify: true, target: 'es2020' });
     let html = source
         // The backdrop is rendered in WebGL: no CSS ambient layer or SVG shadow.
         .replace(/<div class="ambient"[\s\S]*?<div class="ambient-grain"><\/div><\/div>/, '<div class="card-loader" aria-hidden="true"></div>')
@@ -306,6 +306,33 @@ function homeSource(lang) {
 ${Object.values(HOME).map(({ path }) => `  <url>\n    <loc>${SITE}${path}</loc>\n${alternates}\n  </url>`).join('\n')}
 </urlset>
 `);
+}
+
+// A draft light theme, if the homepage is the dark one: its look turned over
+// for a light room. Velvet's dark room becomes the paper backdrop; the black
+// PVD plate with letters lasered to bare steel becomes bead-blasted silver
+// steel with raised letters in black enamel (bright diamond-cut shoulders),
+// and the red Я anodised into the metal, where enamel's gloss would mirror
+// the bright room and turn it coral. A page of its own, `/lab/light/`, until
+// it is decided on.
+const LIGHT_LOOK = { edition: 'steel', backdrop: 'paper', logoTint: '141518', nameTint: '141518', bodyTint: '141518',
+    logoFinish: 'enamel', nameFinish: 'enamel', bodyFinish: 'enamel', logoFirstFinish: 'anod',
+    logoMute: '0', textMute: '0.18', exposure: '0.8', sparkle: '0.15' };
+{
+    const look = decodePreset(HOME_LOOK);
+    look.delete('panel');
+    for (const [key, value] of Object.entries(LIGHT_LOOK)) look.set(key, value);
+    const direction = directions[look.get('edition')], backdrop = BACKDROPS[look.get('backdrop')];
+    const lightOut = resolve(labOut, 'light');
+    await page('', await studioPage({
+        entry: "import './home.js';\nimport './settings.js';\nimport '../app.js';",
+        define: { __CARD_VARIANT__: JSON.stringify(direction.id), __CARD_PRESET__: JSON.stringify(look.toString()) },
+        direction, lightSetup: look.get('lightSetup'),
+        fallback: '/plain/',
+        head: `<meta name="theme-color" content="${backdrop.edge}"><meta name="robots" content="noindex">`,
+        fonts: [homeFont], card: true, backdrop
+    }), lightOut);
+    await writeLite(lightOut);
 }
 
 // Plain card for browsers without WebGL 2: the same accessible HTML faces, no scripts.

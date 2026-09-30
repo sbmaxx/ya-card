@@ -32,7 +32,9 @@ const directions = {
     noir: {
         id: 'noir', backdrop: 'velvet', title: 'Noir', caption: 'Чёрный PVD · лазер до голой стали · полированная фаска',
         look: {
-            plate: { f0: [.05, .051, .056], rough: .30, aniso: .22, brush: 'linear', coat: .012 },
+            plate: { f0: [.05, .051, .056], rough: .30, aniso: .22, brush: 'linear', coat: .012,
+                // Light 3D (lite.js): a black plate lifted above the tone curve's toe.
+                lite: { plate: [.040, .0405, .043], rim: [.06, .16] } },
             // The PVD coats the edge too: a polished black bevel that lights up
             // only where it catches a lamp, not a bright outline all round.
             chamfer: { f0: [.075, .075, .08], rough: .025 },
