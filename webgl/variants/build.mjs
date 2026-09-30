@@ -253,7 +253,10 @@ async function studioPage({ entry, define, editions, lightSetups, fallback, head
         if (document.visibilityState === 'visible') visible += Math.min(now - last, 1000);
         last = now;
         if (!document.documentElement.classList.contains('webgl-loading')) return;
-        if (visible > 20000) location.replace('${fallback}?why=timeout' + (location.hash || (document.documentElement.lang === 'en' ? '#en' : '')));
+        // The last start-up stage reached (renderer.js marks), for reports.
+        const marks = performance.getEntriesByType('mark').filter(mark => mark.name.startsWith('card:'));
+        const at = marks.length ? marks[marks.length - 1].name.slice(5) : 'start';
+        if (visible > 20000) location.replace('${fallback}?why=timeout&at=' + at + (location.hash || (document.documentElement.lang === 'en' ? '#en' : '')));
         else window.cardBootTimeout = setTimeout(tick, 500);
     };
     window.cardBootTimeout = setTimeout(tick, 500);

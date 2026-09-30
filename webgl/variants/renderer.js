@@ -1607,7 +1607,8 @@ const shaderVersion = (() => {
 function assessDevice(gl, caveat) {
     const debug = gl.getExtension('WEBGL_debug_renderer_info');
     const gpu = String(debug ? gl.getParameter(debug.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
-    const key = `${gpu}|${screen.width}x${screen.height}@${devicePixelRatio}|${shaderVersion}`;
+    // With the probe's rules (the `p` number): decisions under older rules are redone.
+    const key = `${gpu}|${screen.width}x${screen.height}@${devicePixelRatio}|${shaderVersion}|p2`;
     const forced = new URLSearchParams(location.search).get('render');
     if (forced === 'full' || forced === 'lite') return { gpu, key, mode: forced, reason: 'forced' };
     if (caveat || /swiftshader|llvmpipe|softpipe|basic render/i.test(gpu)) return { gpu, key, mode: 'lite', reason: 'software' };
@@ -1619,11 +1620,23 @@ function assessDevice(gl, caveat) {
 }
 function rememberMode(perf) {
     if (perf.reason === 'forced') return;
+    // A probe near the budget is not kept: a GPU busy with another window
+    // for a moment must not leave a fast device on light 3D for good. Only a
+    // device far over it (a mid-range phone: ten times) starts on light 3D
+    // next time; the others are probed again.
+    if (perf.reason === 'probe' && perf.mode === 'lite' && perf.probe?.estimate < STUDIO_BUDGET * 2) {
+        try { localStorage.removeItem(PERFORMANCE_KEY); } catch {}
+        return;
+    }
     try { localStorage.setItem(PERFORMANCE_KEY, JSON.stringify({ key: perf.key, mode: perf.mode })); } catch {}
 }
 // The studio's card, estimated for a full frame at 2×, above which a device
-// gets light 3D: with the backdrop and shadow, about 25 ms, 40 fps.
-const STUDIO_BUDGET = 18;
+// gets light 3D: with the backdrop and shadow, about 30 ms, 33 fps. A device
+// that turns out slower while it runs still steps down (useLite, app.js).
+const STUDIO_BUDGET = 24;
+// How long the studio's shader may take to compile before the card starts on
+// light 3D instead (create).
+const COMPILE_LIMIT = 8000;
 
 const ease = t => t * t * (3 - 2 * t);
 const easeOutCubic = t => 1 - (1 - t) ** 3;
@@ -1651,11 +1664,25 @@ export class CardRenderer {
         await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
         performance.mark('card:create');
         // Only the card's own program: light 3D's is compiled if it comes to that.
+        const passes = compilePrograms(gl, [[screenVertex, blurFragment], [screenVertex, compositeFragment],
+            [shadowVertex, shadowFragment], [screenVertex, backdropFragment]]);
+        let cardProgram = card.then(fragment => compilePrograms(gl, [[vertexSource, fragment]]));
+        // A studio shader still compiling after COMPILE_LIMIT: start on light 3D.
+        // Windows compiles WebGL through Direct3D, where a large shader can take
+        // tens of seconds on the fastest GPU, and the page gave up and opened
+        // the plain card. The driver finishes the studio's in the background and
+        // caches it, and nothing is remembered: the next visit tries the studio.
+        if (perf.mode !== 'lite' && perf.reason !== 'forced') {
+            const late = new Promise(resolve => setTimeout(resolve, COMPILE_LIMIT, null));
+            cardProgram = Promise.race([cardProgram, late]).then(async programs => {
+                if (programs) return programs;
+                Object.assign(perf, { mode: 'lite', reason: 'compile' });
+                return compilePrograms(gl, [[vertexSource, await cardFragment('lite')]]);
+            });
+        }
         const [images, programs] = await Promise.all([
             Promise.all([logoImage('ru'), logoImage('en')]),
-            card.then(fragment => compilePrograms(gl, [[screenVertex, blurFragment], [screenVertex, compositeFragment],
-                [shadowVertex, shadowFragment], [screenVertex, backdropFragment], [vertexSource, fragment]]))
-                .then(result => { performance.mark('card:compiled'); return result; }),
+            Promise.all([passes, cardProgram]).then(([shared, [program]]) => { performance.mark('card:compiled'); return [...shared, program]; }),
             loadCardFont().catch(() => {})
         ]);
         return new CardRenderer(canvas, gl, images, programs, perf).start();
@@ -1666,7 +1693,11 @@ export class CardRenderer {
         if (this.lite) this.pixelRatioCap = Math.min(this.pixelRatioCap, 2);
         this.resize();
         await this.layoutReady;
-        if (this.perf.mode === null) await this.probe();
+        performance.mark('card:relief');
+        if (this.perf.mode === null) {
+            await this.probe();
+            performance.mark('card:probed');
+        }
         await this.warmUp();
         // Light 3D is cheap everywhere: a short settle; the studio's is capped too.
         if (this.lite) await this.settle(300, 1000);
